@@ -4,6 +4,7 @@ import { AppProvider } from './context/AppContext';
 import { Sidebar } from './components/Sidebar';
 import { Home } from './pages/Home';
 import { Settings } from './pages/Settings';
+import { Logs } from './pages/Logs';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -14,7 +15,7 @@ const AppContent: React.FC = () => {
       <div className="main-content">
         {activeTab === 'home' && <Home />}
         {activeTab === 'settings' && <Settings />}
-        {activeTab === 'logs' && <div className="card"><h3>运行日志</h3><p>暂无日志记录。</p></div>}
+        {activeTab === 'logs' && <Logs />}
       </div>
     </div>
   );
