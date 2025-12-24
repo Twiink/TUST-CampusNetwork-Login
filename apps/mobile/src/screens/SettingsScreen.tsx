@@ -35,24 +35,23 @@ export const SettingsScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.title}>配置设置</Text>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>General</Text>
+        <Text style={styles.cardTitle}>常规设置</Text>
         <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Auto Reconnect</Text>
+            <Text style={styles.settingLabel}>断线自动重连</Text>
             <Switch 
-                trackColor={{ false: "#e2e8f0", true: "#bae6fd" }}
+                trackColor={{ false: "rgba(0,0,0,0.1)", true: "#bae6fd" }}
                 thumbColor={config.settings.autoReconnect ? theme.colors.primary : "#f4f3f4"}
-                ios_backgroundColor="#3e3e3e"
                 value={config.settings.autoReconnect} 
                 onValueChange={(v) => toggleSetting('autoReconnect', v)} 
             />
         </View>
         <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Auto Launch</Text>
+            <Text style={styles.settingLabel}>开机自动启动</Text>
             <Switch 
-                trackColor={{ false: "#e2e8f0", true: "#bae6fd" }}
+                trackColor={{ false: "rgba(0,0,0,0.1)", true: "#bae6fd" }}
                 thumbColor={config.settings.autoLaunch ? theme.colors.primary : "#f4f3f4"}
                 value={config.settings.autoLaunch} 
                 onValueChange={(v) => toggleSetting('autoLaunch', v)} 
@@ -61,50 +60,52 @@ export const SettingsScreen: React.FC = () => {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Accounts</Text>
+        <Text style={styles.cardTitle}>账号管理</Text>
         {config.accounts.map(acc => (
             <View key={acc.id} style={styles.accountItem}>
-                <View>
+                <View style={{ flex: 1 }}>
                     <Text style={styles.accountName}>{acc.username}</Text>
                     <Text style={styles.accountUrl}>{acc.serverUrl}</Text>
                 </View>
                 <TouchableOpacity 
-                    style={[styles.smallBtn, config.currentAccountId === acc.id ? styles.btnDisabled : styles.btnPrimary]}
+                    style={[styles.smallBtn, config.currentAccountId === acc.id ? styles.btnDisabled : styles.btnActive]}
                     onPress={() => setConfig({ ...config, currentAccountId: acc.id })}
                     disabled={config.currentAccountId === acc.id}
                 >
-                    <Text style={styles.smallBtnText}>{config.currentAccountId === acc.id ? 'Active' : 'Select'}</Text>
+                    <Text style={[styles.smallBtnText, config.currentAccountId === acc.id ? { color: '#94a3b8' } : { color: '#fff' }]}>
+                        {config.currentAccountId === acc.id ? '正在使用' : '使用'}
+                    </Text>
                 </TouchableOpacity>
             </View>
         ))}
 
-        <Text style={[styles.cardTitle, { marginTop: 24, fontSize: 15 }]}>Add Account</Text>
+        <Text style={[styles.cardTitle, { marginTop: 32, fontSize: 16 }]}>添加新账号</Text>
         
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.label}>用户名</Text>
             <TextInput 
                 style={styles.input} 
                 value={newAccount.username} 
                 onChangeText={t => setNewAccount({...newAccount, username: t})}
-                placeholder="Enter username"
+                placeholder="请输入学号/用户名"
                 placeholderTextColor="#94a3b8"
             />
         </View>
 
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>密码</Text>
             <TextInput 
                 style={styles.input} 
                 value={newAccount.password} 
                 onChangeText={t => setNewAccount({...newAccount, password: t})}
-                placeholder="Enter password"
+                placeholder="请输入密码"
                 placeholderTextColor="#94a3b8"
                 secureTextEntry
             />
         </View>
 
         <View style={styles.inputGroup}>
-            <Text style={styles.label}>Server URL</Text>
+            <Text style={styles.label}>服务器地址</Text>
             <TextInput 
                 style={styles.input} 
                 value={newAccount.serverUrl} 
@@ -115,8 +116,13 @@ export const SettingsScreen: React.FC = () => {
         </View>
 
         <TouchableOpacity style={styles.btnAdd} onPress={handleAddAccount}>
-            <Text style={styles.btnAddText}>Add Account</Text>
+            <Text style={styles.btnAddText}>保存并添加账号</Text>
         </TouchableOpacity>
+      </View>
+      
+      <View style={[styles.card, { marginBottom: 40 }]}>
+        <Text style={styles.cardTitle}>其他</Text>
+        <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>WiFi 自动连接功能即将推出...</Text>
       </View>
     </ScrollView>
   );
@@ -129,112 +135,113 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: theme.spacing.m,
+    paddingTop: theme.spacing.xl,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '800',
     marginBottom: theme.spacing.l,
-    color: '#0f172a',
-    marginTop: theme.spacing.s,
+    color: '#0c4a6e',
   },
   card: {
     backgroundColor: theme.colors.cardBg,
     padding: theme.spacing.l,
     borderRadius: theme.roundness.l,
     marginBottom: theme.spacing.m,
-    shadowColor: '#64748b',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    shadowColor: '#0ea5e9',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 15,
+    elevation: 4,
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     marginBottom: theme.spacing.m,
     color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
     paddingVertical: 4,
   },
   settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+    fontSize: 17,
+    fontWeight: '600',
     color: theme.colors.text,
   },
   accountItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   accountName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: theme.colors.text,
   },
   accountUrl: {
     fontSize: 13,
     color: theme.colors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
-    marginBottom: 8,
+    marginBottom: 10,
     color: theme.colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   input: {
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: 'rgba(0,0,0,0.08)',
     borderRadius: theme.roundness.m,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#f8fafc',
-    fontSize: 15,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    fontSize: 16,
     color: theme.colors.text,
   },
   btnAdd: {
     backgroundColor: theme.colors.primary,
-    padding: 16,
-    borderRadius: theme.roundness.pill,
+    padding: 18,
+    borderRadius: theme.roundness.m,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowRadius: 10,
+    elevation: 4,
   },
   btnAddText: { 
     color: '#fff', 
-    fontWeight: '700',
-    fontSize: 16 
+    fontWeight: '800',
+    fontSize: 17 
   },
   smallBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
     borderRadius: theme.roundness.pill,
   },
-  btnPrimary: {
-    backgroundColor: '#e0f2fe',
+  btnActive: {
+    backgroundColor: theme.colors.primary,
   },
   btnDisabled: {
-    backgroundColor: '#f1f5f9',
+    backgroundColor: 'rgba(0,0,0,0.05)',
   },
   smallBtnText: {
-    color: theme.colors.primary,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

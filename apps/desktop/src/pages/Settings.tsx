@@ -33,30 +33,32 @@ export const Settings: React.FC = () => {
 
   return (
     <div className="page-settings">
-      <h1 className="page-title">Settings</h1>
+      <h1 className="page-title">配置设置</h1>
 
       <div className="card">
-        <h3>General Settings</h3>
+        <h3>通用设置</h3>
         <div className="form-group">
-          <label>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <input 
               type="checkbox" 
+              style={{ marginRight: 10, width: 18, height: 18 }}
               checked={config.settings.autoLaunch} 
               onChange={(e) => handleSettingChange('autoLaunch', e.target.checked)}
-            /> Auto Launch on Startup
+            /> 开机自动启动
           </label>
         </div>
         <div className="form-group">
-          <label>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <input 
               type="checkbox" 
+              style={{ marginRight: 10, width: 18, height: 18 }}
               checked={config.settings.autoReconnect} 
               onChange={(e) => handleSettingChange('autoReconnect', e.target.checked)}
-            /> Auto Reconnect
+            /> 断线自动重连
           </label>
         </div>
         <div className="form-group">
-          <label>Polling Interval (seconds)</label>
+          <label>检测间隔 (秒)</label>
           <input 
             type="number" 
             className="form-control"
@@ -67,56 +69,63 @@ export const Settings: React.FC = () => {
       </div>
 
       <div className="card">
-        <h3>Accounts</h3>
-        <div style={{ marginBottom: 15 }}>
+        <h3>账号管理</h3>
+        <div style={{ marginBottom: 20 }}>
           {config.accounts.map(acc => (
-            <div key={acc.id} style={{ padding: 10, borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
-              <span>{acc.username} ({acc.serverUrl})</span>
+            <div key={acc.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontWeight: 600 }}>{acc.username}</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{acc.serverUrl}</div>
+              </div>
               <button 
+                className={`btn ${config.currentAccountId === acc.id ? 'btn-primary' : ''}`}
+                style={{ padding: '6px 16px', fontSize: '14px', height: 'auto' }}
                 onClick={() => setConfig({
                   ...config,
                   currentAccountId: acc.id
                 })}
                 disabled={config.currentAccountId === acc.id}
               >
-                {config.currentAccountId === acc.id ? 'Active' : 'Select'}
+                {config.currentAccountId === acc.id ? '使用中' : '使用此账号'}
               </button>
             </div>
           ))}
         </div>
         
-        <h4>Add Account</h4>
+        <h4 style={{ marginBottom: 16 }}>添加新账号</h4>
         <div className="form-group">
-          <label>Username</label>
+          <label>用户名</label>
           <input 
             className="form-control"
+            placeholder="请输入学号/用户名"
             value={newAccount.username}
             onChange={e => setNewAccount({...newAccount, username: e.target.value})}
           />
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label>密码</label>
           <input 
             type="password"
             className="form-control"
+            placeholder="请输入密码"
             value={newAccount.password}
             onChange={e => setNewAccount({...newAccount, password: e.target.value})}
           />
         </div>
         <div className="form-group">
-           <label>Server URL</label>
+           <label>登录服务器地址</label>
            <input 
              className="form-control"
              value={newAccount.serverUrl}
              onChange={e => setNewAccount({...newAccount, serverUrl: e.target.value})}
            />
         </div>
-        <button className="btn btn-primary" onClick={handleAddAccount}>Add Account</button>
+        <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleAddAccount}>保存并添加账号</button>
       </div>
 
        <div className="card">
-        <h3>WiFi Auto-Connect</h3>
-        <p style={{ color: '#888' }}>WiFi configuration feature coming soon...</p>
+        <h3>WiFi 自动连接</h3>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>WiFi 自动配置功能即将上线，敬请期待...</p>
       </div>
     </div>
   );

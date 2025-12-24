@@ -14,7 +14,7 @@ const AppContent: React.FC = () => {
       <div className="main-content">
         {activeTab === 'home' && <Home />}
         {activeTab === 'settings' && <Settings />}
-        {activeTab === 'logs' && <div className="card"><h3>Logs</h3><p>No logs yet.</p></div>}
+        {activeTab === 'logs' && <div className="card"><h3>运行日志</h3><p>暂无日志记录。</p></div>}
       </div>
     </div>
   );

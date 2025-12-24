@@ -9,25 +9,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        Campus Login
+        校园网登录
       </div>
       <div 
         className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}
         onClick={() => onTabChange('home')}
       >
-        Dashboard
+        运行状态
       </div>
       <div 
         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
         onClick={() => onTabChange('settings')}
       >
-        Settings
+        配置设置
       </div>
       <div 
         className={`nav-item ${activeTab === 'logs' ? 'active' : ''}`}
         onClick={() => onTabChange('logs')}
       >
-        Logs
+        运行日志
       </div>
     </div>
   );

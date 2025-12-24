@@ -16,7 +16,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
           onPress={() => onTabChange('home')}
         >
           <View style={[styles.iconPlaceholder, activeTab === 'home' && styles.activeIcon]} />
-          <Text style={[styles.tabText, activeTab === 'home' && styles.activeText]}>Dashboard</Text>
+          <Text style={[styles.tabText, activeTab === 'home' && styles.activeText]}>运行状态</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
@@ -24,7 +24,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
           onPress={() => onTabChange('settings')}
         >
           <View style={[styles.iconPlaceholder, activeTab === 'settings' && styles.activeIcon]} />
-          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeText]}>Settings</Text>
+          <Text style={[styles.tabText, activeTab === 'settings' && styles.activeText]}>配置设置</Text>
         </TouchableOpacity>
       </View>
       <SafeAreaView style={{ backgroundColor: theme.colors.sidebarBg }} />
@@ -36,18 +36,25 @@ const styles = StyleSheet.create({
   wrapper: {
     backgroundColor: theme.colors.sidebarBg,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: 'rgba(0,0,0,0.05)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 8,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 20,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   container: {
     flexDirection: 'row',
-    height: 60,
+    height: 70,
     alignItems: 'center',
     justifyContent: 'space-around',
+    paddingBottom: 5,
   },
   tabItem: {
     flex: 1,
@@ -56,22 +63,22 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   iconPlaceholder: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     backgroundColor: '#cbd5e1',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   activeIcon: {
     backgroundColor: theme.colors.primary,
   },
   tabText: {
     color: theme.colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
   },
   activeText: {
     color: theme.colors.primary,
-    fontWeight: '700',
+    fontWeight: '800',
   }
 });
