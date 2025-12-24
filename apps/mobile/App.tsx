@@ -1,38 +1,55 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
+import React, { useState } from 'react';
+import {
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { AppProvider } from './src/context/AppContext';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { BottomTab } from './src/components/BottomTab';
+import { theme } from './src/constants/theme';
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { helloShared } from '@repo/shared';
-console.log(helloShared('mobile'));
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+function AppContent(): React.JSX.Element {
+  const [activeTab, setActiveTab] = useState('home');
 
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <SafeAreaView style={styles.container}>
+      <StatusBar
+        barStyle={'light-content'}
+        backgroundColor={theme.colors.sidebarBg}
+      />
+      <View style={styles.header}>
+         {/* Simple Header */}
+      </View>
+      <View style={styles.content}>
+        {activeTab === 'home' && <HomeScreen />}
+        {activeTab === 'settings' && <SettingsScreen />}
+      </View>
+      <BottomTab activeTab={activeTab} onTabChange={setActiveTab} />
+    </SafeAreaView>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
+function App(): React.JSX.Element {
   return (
-    <View style={styles.container}>
-      <NewAppScreen templateFileName="App.tsx" safeAreaInsets={safeAreaInsets} />
-    </View>
+    <AppProvider>
+        <AppContent />
+    </AppProvider>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: theme.colors.bg,
+  },
+  header: {
+    backgroundColor: theme.colors.sidebarBg,
+    height: 0, // Using SafeAreaView to handle status bar area, but keeping this if we want a title bar
+  },
+  content: {
     flex: 1,
   },
 });

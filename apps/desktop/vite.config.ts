@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@repo/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+    },
+  },
   plugins: [
     react(),
     electron({

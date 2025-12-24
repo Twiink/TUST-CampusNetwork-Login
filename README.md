@@ -1,39 +1,169 @@
-# TUST-Campusnet-Login (Electron CLI)
+# TUST Campus Network Login
 
-一个用于校园网（Portal）自动登录的 **命令行工具**，基于 **Electron 主进程（不创建窗口）**实现。  
-目标：在 **Windows / macOS** 上都能使用，支持「连接指定 WiFi → 探测是否掉线/被 Portal 劫持 → 自动登录 → 定时轮询重登」。
+一个跨平台的校园网自动登录工具，支持 Windows、macOS 和 Android 平台。
 
-> 本仓库当前以 CLI 为主（cmd/Terminal 运行），后续如需托盘或 GUI，可在同一 Electron 体系内扩展。
+## 项目简介
 
----
+本项目旨在解决校园网需要频繁手动登录的问题。通过配置账号密码和 WiFi 信息，应用可以在连接指定 WiFi 后自动完成登录认证，并支持掉线自动重连。
 
-## 功能概览（规划/实现中）
+### 核心功能
 
-- [x] CLI 基础框架（Electron main-only，不弹窗）
-- [ ] 配置管理（账号/密码/登录 URL/SSID/轮询间隔）
-- [ ] 网络探测（判断是否需要登录：HTTP 探测/重定向识别）
-- [ ] 登录请求（复刻 shell 脚本逻辑：参数编码、请求、响应判定）
-- [ ] 定时守护（daemon 模式：掉线重试 + 指数退避）
-- [ ] WiFi 管理（Windows: netsh, macOS: networksetup）
-- [ ] 开机自启动（Windows 注册表/启动项；macOS LaunchAgent）
-- [ ] 安全存储（可选：keytar 存密码）
+- **账户配置**：配置校园网账号、密码及登录网址
+- **WiFi 管理**：配置可连接的 WiFi 名称和密码
+- **自动登录**：连接 WiFi 后自动完成认证
+- **开机自启**：支持系统开机自动启动
+- **轮询检测**：可配置检测间隔，定时检查网络状态
+- **掉线重连**：检测到掉线后自动重新连接和登录
 
----
+### 支持平台
 
-## 环境要求
+| 平台 | 技术栈 | 状态 |
+|------|--------|------|
+| Windows | Electron + React | 开发中 |
+| macOS | Electron + React | 开发中 |
+| Android | React Native | 开发中 |
 
-- Node.js >= 20
-- pnpm（推荐）或 npm
-- Windows：如使用 keytar 等原生模块，可能需要安装 Build Tools（后续再补）
-- macOS：如需打包分发、签名/公证，需要在 Mac 上执行（开发可在 Win 完成）
+## 技术架构
 
----
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        应用层 (Apps)                         │
+├───────────────────────────┬─────────────────────────────────┤
+│   Electron (Win/macOS)    │      React Native (Android)     │
+│   - 系统托盘              │      - 后台服务                  │
+│   - 开机自启              │      - WiFi 控制                 │
+│   - 通知推送              │      - 通知推送                  │
+└───────────────────────────┴─────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     核心业务层 (Shared)                       │
+├─────────────────────────────────────────────────────────────┤
+│  - 登录协议 (AuthService)                                    │
+│  - 联网探测 (NetworkDetector)                                │
+│  - 重试策略 (RetryPolicy)                                    │
+│  - 日志模型 (Logger)                                         │
+│  - 配置管理 (ConfigManager)                                  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 快速开始（从零初始化/安装依赖）
+## 项目结构
 
-### 1) 安装依赖
+```
+TUST-CampusNetwork-Login/
+├── apps/
+│   ├── desktop/          # Electron 桌面应用 (Win/macOS)
+│   └── mobile/           # React Native 移动应用 (Android)
+├── packages/
+│   └── shared/           # 共享核心业务包
+├── docs/                 # 项目文档
+└── shell/                # 参考脚本
+```
 
-在仓库根目录：
+详细的项目结构设计请参阅 [docs/architecture.md](./docs/architecture.md)
+
+## 快速开始
+
+### 环境要求
+
+- Node.js >= 18
+- pnpm >= 8
+- 桌面端：无额外要求
+- 移动端：Android Studio、JDK 17
+
+### 安装依赖
 
 ```bash
+# 安装所有依赖
 pnpm install
+```
+
+### 开发模式
+
+```bash
+# 启动桌面端开发
+pnpm dev:desktop
+
+# 启动移动端开发
+pnpm dev:mobile
+
+# 构建共享包
+pnpm build:shared
+```
+
+### 构建发布
+
+```bash
+# 构建桌面端应用
+pnpm build:desktop
+
+# 构建 Android 应用
+pnpm android
+```
+
+## 配置说明
+
+应用启动后，需要配置以下信息：
+
+1. **账户信息**
+   - 用户名：校园网账号
+   - 密码：校园网密码
+   - 登录地址：认证服务器地址（默认为学校配置）
+
+2. **WiFi 设置**
+   - WiFi 名称：需要自动连接的 WiFi SSID
+   - WiFi 密码：WiFi 连接密码
+
+3. **自动化设置**
+   - 开机自启：是否开机自动运行
+   - 轮询间隔：网络状态检测间隔（秒）
+   - 自动重连：掉线后是否自动重连
+
+## 登录协议
+
+本项目基于学校认证系统的 HTTP 接口实现登录：
+
+```
+POST http://{auth_server}/eportal/portal/login
+```
+
+主要参数：
+- `user_account`: 用户账号
+- `user_password`: 用户密码
+- `wlan_user_ip`: 用户 IPv4 地址
+- `wlan_user_ipv6`: 用户 IPv6 地址（URL 编码）
+- `wlan_user_mac`: MAC 地址
+- `wlan_ac_ip`: AC 控制器 IP
+
+## 开发指南
+
+### 代码规范
+
+```bash
+# 代码格式化
+pnpm format
+
+# 代码检查
+pnpm lint
+
+# 类型检查
+pnpm type-check
+```
+
+### 目录约定
+
+- `packages/shared/src/services/` - 核心服务
+- `packages/shared/src/utils/` - 工具函数
+- `packages/shared/src/types/` - 类型定义
+- `apps/desktop/electron/` - Electron 主进程
+- `apps/desktop/src/` - 桌面端 UI
+- `apps/mobile/src/` - 移动端 UI
+
+## 许可证
+
+ISC License
+
+## 相关链接
+
+- [项目仓库](https://github.com/Twiink/TUST-Campusnet-Login)
+- [问题反馈](https://github.com/Twiink/TUST-Campusnet-Login/issues)
