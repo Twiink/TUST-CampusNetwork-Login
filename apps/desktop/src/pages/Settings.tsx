@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { AccountConfig, WifiConfig } from '@repo/shared';
+import { AccountConfig, WifiConfig, ISP } from '@repo/shared';
+
+const ISP_OPTIONS: { value: ISP; label: string }[] = [
+  { value: 'campus', label: '校园网' },
+  { value: 'cmcc', label: '中国移动' },
+  { value: 'cucc', label: '中国联通' },
+  { value: 'ctcc', label: '中国电信' },
+];
 
 export const Settings: React.FC = () => {
   const { config, setConfig } = useApp();
-  const [newAccount, setNewAccount] = useState({ username: '', password: '', serverUrl: 'http://10.10.102.50:801' });
+  const [newAccount, setNewAccount] = useState<{
+    username: string;
+    password: string;
+    serverUrl: string;
+    isp: ISP;
+  }>({ 
+    username: '', 
+    password: '', 
+    serverUrl: 'http://10.10.102.50:801',
+    isp: 'campus'
+  });
 
   const handleAddAccount = () => {
     if (!newAccount.username || !newAccount.password) return;
@@ -13,7 +30,8 @@ export const Settings: React.FC = () => {
       name: newAccount.username,
       username: newAccount.username,
       password: newAccount.password,
-      serverUrl: newAccount.serverUrl
+      serverUrl: newAccount.serverUrl,
+      isp: newAccount.isp
     };
     
     setConfig({
@@ -21,7 +39,7 @@ export const Settings: React.FC = () => {
       accounts: [...config.accounts, account],
       currentAccountId: config.currentAccountId || account.id
     });
-    setNewAccount({ username: '', password: '', serverUrl: 'http://10.10.102.50:801' });
+    setNewAccount({ username: '', password: '', serverUrl: 'http://10.10.102.50:801', isp: 'campus' });
   };
 
   const handleSettingChange = (key: string, value: any) => {
@@ -29,6 +47,10 @@ export const Settings: React.FC = () => {
       ...config,
       settings: { ...config.settings, [key]: value }
     });
+  };
+
+  const getISPLabel = (isp: ISP) => {
+    return ISP_OPTIONS.find(opt => opt.value === isp)?.label || isp;
   };
 
   return (
@@ -74,7 +96,7 @@ export const Settings: React.FC = () => {
           {config.accounts.map(acc => (
             <div key={acc.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: 600 }}>{acc.username}</div>
+                <div style={{ fontWeight: 600 }}>{acc.username} <span style={{fontSize: '0.8rem', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '12px', marginLeft: '8px'}}>{getISPLabel(acc.isp)}</span></div>
                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{acc.serverUrl}</div>
               </div>
               <button 
@@ -111,6 +133,31 @@ export const Settings: React.FC = () => {
             value={newAccount.password}
             onChange={e => setNewAccount({...newAccount, password: e.target.value})}
           />
+        </div>
+        <div className="form-group">
+          <label>服务商</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
+            {ISP_OPTIONS.map(opt => (
+              <div 
+                key={opt.value}
+                onClick={() => setNewAccount({...newAccount, isp: opt.value})}
+                style={{
+                  padding: '12px',
+                  textAlign: 'center',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid',
+                  borderColor: newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--border-color)',
+                  background: newAccount.isp === opt.value ? 'rgba(14, 165, 233, 0.1)' : 'rgba(255, 255, 255, 0.4)',
+                  color: newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--text-color)',
+                  cursor: 'pointer',
+                  fontWeight: newAccount.isp === opt.value ? '600' : '500',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                {opt.label}
+              </div>
+            ))}
+          </div>
         </div>
         <div className="form-group">
            <label>登录服务器地址</label>

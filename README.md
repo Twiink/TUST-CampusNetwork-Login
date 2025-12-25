@@ -84,12 +84,30 @@ pnpm install
 # 启动桌面端开发
 pnpm dev:desktop
 
-# 启动移动端开发
+# 启动移动端开发服务 (Metro Bundler)
 pnpm dev:mobile
-
-# 构建共享包
-pnpm build:shared
 ```
+
+### 移动端 Android 启动指南
+
+在 Windows 环境下运行 Android 应用，请确保已安装 JDK 17+ 和 Android Studio（含 SDK Platform-Tools）。
+
+1. **启动模拟器或连接真机**
+   - 模拟器：通过 Android Studio AVD Manager 启动。
+   - 真机：通过 USB 连接并开启"USB 调试"模式。
+
+2. **启动应用**
+   在新的终端窗口中运行：
+   ```bash
+   pnpm android
+   ```
+   *注意：请确保 `pnpm dev:mobile` 已经在另一个窗口中运行。*
+
+3. **常用命令**
+   ```bash
+   # 清理构建缓存 (如果构建失败)
+   cd apps/mobile/android && ./gradlew clean
+   ```
 
 ### 构建发布
 

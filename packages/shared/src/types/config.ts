@@ -1,9 +1,12 @@
+export type ISP = 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 校园网, 中国移动, 中国联通, 中国电信
+
 export interface AccountConfig {
   id: string;
   name: string; // Display name
   username: string;
   password: string; // Encrypted in storage, plain here for logic? Or keep opaque?
   serverUrl: string;
+  isp: ISP;
 }
 
 export interface WifiConfig {

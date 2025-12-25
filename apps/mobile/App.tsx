@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   View,
+  Platform
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppProvider } from './src/context/AppContext';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
@@ -15,14 +16,12 @@ function AppContent(): React.JSX.Element {
   const [activeTab, setActiveTab] = useState('home');
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar
-        barStyle={'light-content'}
-        backgroundColor={theme.colors.sidebarBg}
+        barStyle={'dark-content'}
+        backgroundColor="transparent"
+        translucent
       />
-      <View style={styles.header}>
-         {/* Simple Header */}
-      </View>
       <View style={styles.content}>
         {activeTab === 'home' && <HomeScreen />}
         {activeTab === 'settings' && <SettingsScreen />}
@@ -34,9 +33,11 @@ function AppContent(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   return (
-    <AppProvider>
+    <SafeAreaProvider style={{ backgroundColor: theme.colors.bg }}>
+      <AppProvider>
         <AppContent />
-    </AppProvider>
+      </AppProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -45,12 +46,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.bg,
   },
-  header: {
-    backgroundColor: theme.colors.sidebarBg,
-    height: 0, // Using SafeAreaView to handle status bar area, but keeping this if we want a title bar
-  },
   content: {
     flex: 1,
+    // paddingBottom handled in screens' contentContainerStyle
   },
 });
 

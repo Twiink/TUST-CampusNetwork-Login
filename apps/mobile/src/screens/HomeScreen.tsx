@@ -18,31 +18,33 @@ export const HomeScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Text style={styles.title}>运行状态</Text>
+      <Text style={styles.pageTitle}>运行状态</Text>
 
+      {/* Network Status Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>网络状态</Text>
+        <Text style={styles.cardHeader}>网络状态</Text>
+
         <View style={styles.statusContainer}>
             <View style={[
-                styles.badge, 
-                networkStatus === 'connected' ? styles.bgSuccess : 
-                networkStatus === 'disconnected' ? styles.bgDanger : styles.bgWarning
+                styles.badge,
+                networkStatus === 'connected' ? styles.borderSuccess :
+                networkStatus === 'disconnected' ? styles.borderDanger : styles.borderWarning
             ]}>
                 <Text style={[
                   styles.badgeText,
-                  networkStatus === 'connected' ? { color: '#166534' } : 
+                  networkStatus === 'connected' ? { color: '#166534' } :
                   networkStatus === 'disconnected' ? { color: '#991b1b' } : { color: '#854d0e' }
                 ]}>{getStatusText(networkStatus)}</Text>
             </View>
         </View>
-        
+
         {networkStatus === 'connected' && (
              <Text style={styles.ipText}>IP: {ipAddress}</Text>
         )}
 
-        <TouchableOpacity 
+        <TouchableOpacity
             style={[
-                styles.btn, 
+                styles.btn,
                 networkStatus === 'connected' ? styles.btnDanger : styles.btnPrimary,
             ]}
             onPress={networkStatus === 'connected' ? logout : login}
@@ -54,10 +56,12 @@ export const HomeScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Current Account Card */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>当前账号</Text>
+        <Text style={styles.cardHeader}>当前账号</Text>
+        
         {currentAccount ? (
-            <View style={styles.accountInfo}>
+            <View style={styles.accountInfoContainer}>
                 <View style={styles.infoRow}>
                   <Text style={styles.label}>用户名</Text>
                   <Text style={styles.value}>{currentAccount.username}</Text>
@@ -81,88 +85,104 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg,
   },
   contentContainer: {
-    padding: theme.spacing.m,
-    paddingTop: theme.spacing.xl,
+    padding: 24,
+    paddingTop: 32,
+    paddingBottom: 100,
   },
-  title: {
-    fontSize: 32,
+  pageTitle: {
+    fontSize: 28, // Desktop: 2.2rem (~35px)
     fontWeight: '800',
-    marginBottom: theme.spacing.l,
+    marginBottom: 32,
     color: '#0c4a6e',
-    textShadowColor: 'rgba(255, 255, 255, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    marginTop: 0,
   },
   card: {
-    backgroundColor: theme.colors.cardBg,
-    padding: theme.spacing.l,
-    borderRadius: theme.roundness.l,
-    marginBottom: theme.spacing.m,
+    backgroundColor: theme.colors.cardBg, // Use consistent opaque theme color
+    borderRadius: theme.roundness.l, // 24px
+    padding: 24, // Desktop: 32px
+    marginBottom: 24,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    // Softer shadow for light mode
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 8 },
+    borderColor: theme.colors.border, // Solid white border
+    // Shadow Glass Effect
+    shadowColor: '#0ea5e9', 
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1,
-    shadowRadius: 15,
-    elevation: 4,
+    shadowRadius: 24,
+    elevation: 5,
   },
-  cardTitle: {
-    fontSize: 15,
+  cardHeader: {
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: theme.spacing.m,
-    color: theme.colors.textSecondary,
-    letterSpacing: 1,
+    color: '#0c4a6e',
+    marginBottom: 20,
+    paddingBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)', // 确保无背景
   },
   statusContainer: {
     alignItems: 'flex-start',
-    marginBottom: theme.spacing.m,
+    marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)', // 确保无背景
   },
   ipText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '800',
-    marginBottom: theme.spacing.l,
+    marginBottom: 24,
     color: theme.colors.text,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
   },
   badge: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: theme.roundness.pill,
+    borderWidth: 1.5,
+    backgroundColor: 'transparent', // 彻底透明，直接透出卡片的玻璃背景
   },
   badgeText: {
-    fontWeight: '800',
+    fontWeight: '700',
     fontSize: 14,
   },
-  bgSuccess: { backgroundColor: '#dcfce7' },
-  bgDanger: { backgroundColor: '#fee2e2' },
-  bgWarning: { backgroundColor: '#fef9c3' },
+  borderSuccess: { borderColor: 'rgba(34, 197, 94, 0.4)' },
+  borderDanger: { borderColor: 'rgba(239, 68, 68, 0.4)' },
+  borderWarning: { borderColor: 'rgba(245, 158, 11, 0.4)' },
   
   btn: {
-    paddingVertical: 18,
+    paddingVertical: 14,
     borderRadius: theme.roundness.m,
     alignItems: 'center',
-    marginTop: theme.spacing.s,
+    justifyContent: 'center',
+  },
+  btnPrimary: { 
+    backgroundColor: theme.colors.primary,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
     elevation: 4,
   },
-  btnPrimary: { backgroundColor: theme.colors.primary },
-  btnDanger: { backgroundColor: '#fee2e2', borderWidth: 1, borderColor: '#fecaca' },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
+  btnDanger: { 
+    backgroundColor: '#ef4444',
+    shadowColor: '#ef4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  btnText: { 
+    color: '#fff', 
+    fontWeight: '600',
+    fontSize: 16 
+  },
   
-  accountInfo: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: theme.roundness.m,
-    padding: theme.spacing.m,
+  accountInfoContainer: {
+    backgroundColor: 'transparent',
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: 'transparent',
   },
   label: {
     color: theme.colors.textSecondary,
@@ -172,12 +192,13 @@ const styles = StyleSheet.create({
   value: {
     color: theme.colors.text,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   emptyText: {
     color: theme.colors.textSecondary,
     fontStyle: 'italic',
     textAlign: 'center',
     padding: 20,
+    backgroundColor: 'transparent',
   }
 });

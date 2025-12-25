@@ -8,6 +8,7 @@
 |--------|------|
 | 认证服务器地址 | 可配置，提供默认值 |
 | 多账户支持 | 支持，可切换账户 |
+| 服务商选择 | 支持（校园网/移动/联通/电信） |
 | 多 WiFi 支持 | 支持，可配置多个 WiFi |
 | iOS 支持 | 暂不开发，等 Win/macOS/Android 稳定后再考虑 |
 | UI 设计 | 三端统一风格，由外部提供，本项目只关注业务逻辑 |
@@ -386,6 +387,7 @@ interface AccountConfig {
   username: string;         // 校园网账号
   password: string;         // 校园网密码（加密存储）
   serverUrl: string;        // 认证服务器地址（可自定义，有默认值）
+  isp: 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 服务商选择
 }
 
 interface WifiConfig {

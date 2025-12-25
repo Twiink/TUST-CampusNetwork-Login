@@ -39,19 +39,19 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 240px;
+  width: 170px;
   background: var(--sidebar-bg);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
-  padding: 32px 20px;
+  padding: 32px 12px;
   border-right: 1px solid var(--border-color);
 }
 
 .sidebar-header {
-  padding: 0 16px 32px;
-  font-size: 1.6rem;
+  padding: 0 8px 32px;
+  font-size: 1.4rem;
   font-weight: 800;
   color: #0369a1;
   text-shadow: 0 1px 2px rgba(255,255,255,0.5);
@@ -59,7 +59,7 @@ body {
 }
 
 .nav-item {
-  padding: 14px 20px;
+  padding: 12px 12px;
   cursor: pointer;
   border-radius: var(--radius-md);
   margin-bottom: 8px;
@@ -148,6 +148,21 @@ body {
   background: rgba(255, 255, 255, 0.5);
   color: var(--text-color);
   transition: all 0.3s;
+}
+
+select.form-control {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  background-size: 18px;
+  padding-right: 48px;
+  cursor: pointer;
+}
+
+select.form-control:hover {
+  background-color: rgba(255, 255, 255, 0.7);
+  border-color: var(--primary-color);
 }
 
 .form-control:focus {
