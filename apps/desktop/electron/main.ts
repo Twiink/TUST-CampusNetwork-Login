@@ -1,9 +1,19 @@
 import { app, BrowserWindow } from 'electron';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const require = createRequire(import.meta.url);
+import {
+  createAuthService,
+  createConfigManager,
+  createAccountManager,
+  createWifiManager,
+  createNetworkDetector,
+  createLogger,
+} from '@repo/shared';
+
+import { createElectronStorage } from './services/store';
+import { registerAllIPC, startBackgroundServices, stopBackgroundServices, AppServices } from './ipc';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The built directory structure
@@ -27,12 +37,51 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST;
 
 let win: BrowserWindow | null;
+let services: AppServices | null = null;
+
+/**
+ * 初始化服务
+ */
+async function initServices(): Promise<AppServices> {
+  // 创建日志服务
+  const logger = createLogger(500);
+  logger.info('应用启动');
+
+  // 创建存储适配器
+  const storage = createElectronStorage();
+
+  // 创建配置管理器
+  const configManager = createConfigManager(storage);
+  await configManager.load();
+  logger.info('配置加载完成');
+
+  // 创建其他服务
+  const authService = createAuthService();
+  const accountManager = createAccountManager(configManager);
+  const wifiManager = createWifiManager(configManager);
+  const networkDetector = createNetworkDetector();
+
+  return {
+    authService,
+    configManager,
+    accountManager,
+    wifiManager,
+    networkDetector,
+    logger,
+  };
+}
 
 function createWindow() {
   win = new BrowserWindow({
+    width: 900,
+    height: 670,
+    minWidth: 800,
+    minHeight: 600,
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
@@ -54,6 +103,9 @@ function createWindow() {
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    if (services) {
+      stopBackgroundServices(services);
+    }
     app.quit();
     win = null;
   }
@@ -67,4 +119,29 @@ app.on('activate', () => {
   }
 });
 
-app.whenReady().then(createWindow);
+app.on('before-quit', () => {
+  if (services) {
+    stopBackgroundServices(services);
+    services.logger.info('应用退出');
+  }
+});
+
+app.whenReady().then(async () => {
+  try {
+    // 初始化服务
+    services = await initServices();
+
+    // 注册 IPC 处理器
+    registerAllIPC(services);
+
+    // 启动后台服务
+    const pollingInterval = services.configManager.getSettings().pollingInterval * 1000;
+    startBackgroundServices(services, pollingInterval);
+
+    // 创建窗口
+    createWindow();
+  } catch (error) {
+    console.error('Failed to initialize app:', error);
+    app.quit();
+  }
+});

@@ -1,6 +1,6 @@
 # 项目架构设计
 
-本文档详细描述 TUST Campus Network Login 项目的目录结构和架构设计。
+本文档详细描述 NetMate 项目的目录结构和架构设计。
 
 ## 整体架构
 
@@ -35,7 +35,7 @@
 ## 详细目录结构
 
 ```
-TUST-CampusNetwork-Login/
+NetMate/
 ├── .github/                          # GitHub 配置
 │   └── workflows/                    # CI/CD 工作流
 │       ├── desktop-build.yml         # 桌面端构建
@@ -437,29 +437,107 @@ interface NotificationOptions {
 ```typescript
 // 完整的应用配置
 interface AppConfig {
-  // 账户配置
-  account: {
-    username: string;       // 校园网账号
-    password: string;       // 校园网密码 (加密存储)
-    serverUrl: string;      // 认证服务器地址
-  };
+  // 账户配置（支持多账户）
+  accounts: AccountConfig[];
+  currentAccountId: string | null;  // 当前使用的账户 ID
 
-  // WiFi 配置
-  wifi: {
-    ssid: string;           // WiFi 名称
-    password: string;       // WiFi 密码 (加密存储)
-    autoConnect: boolean;   // 是否自动连接
-  };
+  // WiFi 配置（支持多个）
+  wifiList: WifiConfig[];
 
   // 应用设置
-  settings: {
-    autoLaunch: boolean;    // 开机自启
-    pollingInterval: number; // 轮询间隔（秒）
-    autoReconnect: boolean; // 自动重连
-    maxRetries: number;     // 最大重试次数
-    showNotification: boolean; // 显示通知
-  };
+  settings: AppSettings;
 }
+
+interface AccountConfig {
+  id: string;               // 账户唯一标识
+  name: string;             // 账户名称（显示用）
+  username: string;         // 校园网账号
+  password: string;         // 校园网密码（加密存储）
+  serverUrl: string;        // 认证服务器地址（可自定义，有默认值）
+  isp: 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 服务商选择
+}
+
+interface WifiConfig {
+  id: string;               // WiFi 配置唯一标识
+  ssid: string;             // WiFi 名称
+  password: string;         // WiFi 密码（加密存储）
+  autoConnect: boolean;     // 是否自动连接
+  requiresAuth: boolean;    // 是否需要校园网认证登录
+  linkedAccountId?: string; // 关联的账号ID（仅当 requiresAuth 为 true）
+  priority: number;         // 优先级（数字越小优先级越高）
+}
+
+interface AppSettings {
+  autoLaunch: boolean;      // 开机自启
+  enableHeartbeat: boolean; // 是否启用心跳检测
+  pollingInterval: number;  // 轮询间隔（秒）
+  autoReconnect: boolean;   // 自动重连
+  maxRetries: number;       // 最大重试次数
+  showNotification: boolean; // 显示通知
+  autoUpdate: boolean;      // 自动检查更新
+}
+```
+
+### WiFi 认证配置说明
+
+WiFi 配置支持两种类型：
+
+1. **需要校园网认证的 WiFi** (`requiresAuth: true`)
+   - 连接后需要向认证服务器发送登录请求
+   - 必须通过 `linkedAccountId` 关联一个已配置的账号
+   - 使用关联账号的服务器地址和服务商信息
+
+2. **无需认证的 WiFi** (`requiresAuth: false`)
+   - 家庭 WiFi、手机热点等
+   - 仅连接即可使用，无需发送登录请求
+
+### 心跳检测与 WiFi 切换流程
+
+```
+┌─────────────────┐
+│  启用心跳检测    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  定时轮询检测    │ ◄──────────────────┐
+└────────┬────────┘                     │
+         │                              │
+         ▼                              │
+    ┌────────┐     是                  │
+    │ 网络正常? ├───────────────────────┘
+    └────┬───┘
+         │ 否
+         ▼
+┌─────────────────┐
+│  尝试重新登录    │
+│ (最多 N 次重试)  │
+└────────┬────────┘
+         │
+         ▼
+    ┌────────┐     是
+    │ 重连成功? ├───────────────────────┐
+    └────┬───┘                          │
+         │ 否                           │
+         ▼                              │
+┌─────────────────┐                     │
+│ 按优先级切换WiFi  │                    │
+└────────┬────────┘                     │
+         │                              │
+         ▼                              │
+    ┌────────────┐                      │
+    │requiresAuth?│                     │
+    └─────┬──────┘                      │
+     是 │    │ 否                       │
+        ▼    ▼                          │
+┌─────────┐ ┌────────┐                  │
+│发送登录  │ │仅连接   │                  │
+│请求     │ │WiFi    │                  │
+└────┬────┘ └────┬───┘                  │
+     │           │                      │
+     └─────┬─────┘                      │
+           │                            │
+           └────────────────────────────┘
 ```
 
 ## 安全考虑

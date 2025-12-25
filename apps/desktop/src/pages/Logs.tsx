@@ -1,75 +1,174 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import {
+  FileText,
+  Trash2,
+  Filter,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Bug,
+} from 'lucide-react';
+
+type LogLevel = 'all' | 'info' | 'success' | 'warn' | 'error' | 'debug';
+
+const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string; icon: React.ReactNode; color: string }[] = [
+  { value: 'all', label: '全部', icon: <Filter size={14} />, color: '#64748b' },
+  { value: 'info', label: '信息', icon: <Info size={14} />, color: '#60a5fa' },
+  { value: 'success', label: '成功', icon: <CheckCircle2 size={14} />, color: '#4ade80' },
+  { value: 'warn', label: '警告', icon: <AlertTriangle size={14} />, color: '#fbbf24' },
+  { value: 'error', label: '错误', icon: <XCircle size={14} />, color: '#f87171' },
+  { value: 'debug', label: '调试', icon: <Bug size={14} />, color: '#a78bfa' },
+];
 
 export const Logs: React.FC = () => {
   const { logs, clearLogs } = useApp();
+  const [filterLevel, setFilterLevel] = useState<LogLevel>('all');
+
+  const filteredLogs = useMemo(() => {
+    if (filterLevel === 'all') return logs;
+    return logs.filter(log => log.level === filterLevel);
+  }, [logs, filterLevel]);
+
+  const getLogIcon = (level: string) => {
+    switch (level) {
+      case 'info': return <Info size={14} />;
+      case 'success': return <CheckCircle2 size={14} />;
+      case 'warn': return <AlertTriangle size={14} />;
+      case 'error': return <XCircle size={14} />;
+      case 'debug': return <Bug size={14} />;
+      default: return <Info size={14} />;
+    }
+  };
+
+  const getLogColor = (level: string) => {
+    switch (level) {
+      case 'error': return '#f87171';
+      case 'warn': return '#fbbf24';
+      case 'success': return '#4ade80';
+      case 'debug': return '#a78bfa';
+      default: return '#60a5fa';
+    }
+  };
 
   return (
-    <div className="logs-page-container" style={{ 
-      height: 'calc(100vh - 96px)', // 100vh minus parent padding (48px * 2)
-      display: 'flex', 
+    <div className="logs-page-container" style={{
+      height: 'calc(100vh - 96px)',
+      display: 'flex',
       flexDirection: 'column',
       overflow: 'hidden'
     }}>
-      <h2 className="page-title" style={{ marginBottom: '24px' }}>运行日志</h2>
-      <div className="card logs-card" style={{ 
-        flex: 1, 
-        display: 'flex', 
+      <h2 className="page-title" style={{ marginBottom: '24px', display: 'flex', alignItems: 'center' }}>
+        <FileText size={24} style={{ marginRight: 8 }} />
+        运行日志
+      </h2>
+      <div className="card logs-card" style={{
+        flex: 1,
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        padding: 0, // Remove card padding to handle it in internal sections
+        padding: 0,
         margin: 0
       }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          padding: '24px 32px',
-          borderBottom: '1px solid rgba(14, 165, 233, 0.1)'
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '16px 24px',
+          borderBottom: '1px solid rgba(14, 165, 233, 0.1)',
+          flexWrap: 'wrap',
+          gap: 12
         }}>
-          <h3 style={{ margin: 0, border: 'none', padding: 0 }}>系统实时日志</h3>
-          <button 
-            onClick={clearLogs}
-            className="btn btn-danger" 
-            style={{ padding: '8px 16px', fontSize: '0.85rem' }}
-          >
-            清除日志
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Filter size={16} style={{ color: 'var(--text-secondary)' }} />
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>筛选级别:</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {LOG_LEVEL_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => setFilterLevel(opt.value)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 10px',
+                    border: '1px solid',
+                    borderColor: filterLevel === opt.value ? opt.color : 'var(--border-color)',
+                    borderRadius: '16px',
+                    backgroundColor: filterLevel === opt.value ? `${opt.color}20` : 'transparent',
+                    color: filterLevel === opt.value ? opt.color : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: filterLevel === opt.value ? 600 : 400,
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  {opt.icon}
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              共 {filteredLogs.length} 条
+              {filterLevel !== 'all' && ` (筛选自 ${logs.length} 条)`}
+            </span>
+            <button
+              onClick={clearLogs}
+              className="btn btn-danger"
+              style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              <Trash2 size={14} />
+              清除日志
+            </button>
+          </div>
         </div>
-        <div className="logs-content" style={{ 
-          flex: 1, 
-          overflowY: 'auto', 
-          padding: '24px 32px',
+        <div className="logs-content" style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '16px 24px',
           backgroundColor: 'rgba(0, 0, 0, 0.02)',
           fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace'
         }}>
-          {logs.length > 0 ? (
+          {filteredLogs.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {logs.map((log) => (
-                <div key={log.id} className="log-entry" style={{ 
-                  marginBottom: '10px', 
-                  fontSize: '0.9rem',
+              {filteredLogs.map((log) => (
+                <div key={log.id} className="log-entry" style={{
+                  marginBottom: '8px',
+                  fontSize: '0.85rem',
                   lineHeight: '1.4',
                   display: 'flex',
-                  gap: '12px'
+                  alignItems: 'flex-start',
+                  gap: '10px',
+                  padding: '8px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                  border: '1px solid rgba(0, 0, 0, 0.05)'
                 }}>
-                  <span className="log-timestamp" style={{ color: '#64748b', whiteSpace: 'nowrap' }}>[{log.timestamp}]</span>
-                  <span className={`log-level`} style={{ 
-                    fontWeight: 'bold',
-                    minWidth: '70px',
-                    color: log.level === 'error' ? '#f87171' : 
-                           log.level === 'warn' ? '#fbbf24' : 
-                           log.level === 'success' ? '#4ade80' : '#60a5fa'
-                  }}>
-                    [{log.level.toUpperCase()}]
+                  <span className="log-timestamp" style={{ color: '#64748b', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                    [{log.timestamp}]
                   </span>
-                  <span className="log-message" style={{ color: '#334155' }}>{log.message}</span>
+                  <span style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    minWidth: '70px',
+                    color: getLogColor(log.level)
+                  }}>
+                    {getLogIcon(log.level)}
+                    <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>
+                      {log.level.toUpperCase()}
+                    </span>
+                  </span>
+                  <span className="log-message" style={{ color: '#334155', flex: 1 }}>{log.message}</span>
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ color: '#94a3b8', textAlign: 'center', padding: '4rem' }}>
-              暂无日志记录
+              {filterLevel === 'all' ? '暂无日志记录' : `暂无 ${LOG_LEVEL_OPTIONS.find(o => o.value === filterLevel)?.label} 级别的日志`}
             </div>
           )}
         </div>

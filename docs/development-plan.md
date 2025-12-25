@@ -1,6 +1,6 @@
 # 开发计划
 
-本文档描述 TUST Campus Network Login 项目的开发计划，按阶段划分，供审核和后续开发参考。
+本文档描述 NetMate 项目的开发计划，按阶段划分，供审核和后续开发参考。
 
 ## 需求确认
 
@@ -9,9 +9,11 @@
 | 认证服务器地址 | 可配置，提供默认值 |
 | 多账户支持 | 支持，可切换账户 |
 | 服务商选择 | 支持（校园网/移动/联通/电信） |
-| 多 WiFi 支持 | 支持，可配置多个 WiFi |
+| 多 WiFi 支持 | 支持，可配置多个 WiFi，支持优先级切换 |
+| WiFi 认证配置 | 每个 WiFi 可独立配置是否需要校园网认证 |
+| 心跳检测开关 | 支持手动开启/关闭心跳检测功能 |
 | iOS 支持 | 暂不开发，等 Win/macOS/Android 稳定后再考虑 |
-| UI 设计 | 三端统一风格，由外部提供，本项目只关注业务逻辑 |
+| UI 设计 | 三端统一风格，使用 lucide-react 图标库 |
 | 国际化 | 不需要，仅支持中文 |
 | 自动更新 | 支持（桌面端 + Android） |
 | 数据同步 | 暂不支持，后续有需要再加 |
@@ -372,7 +374,7 @@
 interface AppConfig {
   // 账户配置（支持多账户）
   accounts: AccountConfig[];
-  currentAccountId: string;  // 当前使用的账户 ID
+  currentAccountId: string | null;  // 当前使用的账户 ID
 
   // WiFi 配置（支持多个）
   wifiList: WifiConfig[];
@@ -395,10 +397,14 @@ interface WifiConfig {
   ssid: string;             // WiFi 名称
   password: string;         // WiFi 密码（加密存储）
   autoConnect: boolean;     // 是否自动连接
+  requiresAuth: boolean;    // 是否需要校园网认证登录
+  linkedAccountId?: string; // 关联的账号ID（仅当 requiresAuth 为 true 时使用）
+  priority: number;         // 优先级（数字越小优先级越高）
 }
 
 interface AppSettings {
   autoLaunch: boolean;      // 开机自启
+  enableHeartbeat: boolean; // 是否启用心跳检测（用户可手动开关）
   pollingInterval: number;  // 轮询间隔（秒），默认 30
   autoReconnect: boolean;   // 自动重连
   maxRetries: number;       // 最大重试次数，默认 3
@@ -406,6 +412,26 @@ interface AppSettings {
   autoUpdate: boolean;      // 自动检查更新
 }
 ```
+
+### WiFi 配置说明
+
+- **requiresAuth**: 标识此 WiFi 是否需要校园网认证
+  - `true`: 校园网 WiFi，连接后需要向认证服务器发送登录请求
+  - `false`: 家庭 WiFi / 热点，无需校园网认证
+- **linkedAccountId**: 关联的账号ID，WiFi 使用该账号的服务器地址和服务商信息进行认证
+  - 仅当 `requiresAuth` 为 `true` 时需要配置
+  - 账号删除时，关联的 WiFi 配置会自动解除关联
+- **priority**: WiFi 优先级，当心跳检测发现断线且重连失败时，会按优先级顺序尝试切换到其他 WiFi
+
+### 心跳检测流程
+
+1. 用户在设置中开启「心跳检测」开关（enableHeartbeat = true）
+2. 系统按 pollingInterval 间隔轮询检测网络连通性
+3. 若检测到断线：
+   - 首先尝试重新登录当前网络（最多 maxRetries 次）
+   - 若仍失败，按 WiFi 优先级切换到其他配置的校园网 WiFi
+   - 若目标 WiFi 的 requiresAuth 为 true，则发送登录请求
+   - 若目标 WiFi 的 requiresAuth 为 false，则仅连接 WiFi 无需登录
 
 ---
 

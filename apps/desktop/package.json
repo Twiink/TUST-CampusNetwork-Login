@@ -1,5 +1,5 @@
 {
-  "name": "desktop",
+  "name": "netmate-desktop",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -14,8 +14,8 @@
     "type-check": "tsc --noEmit"
   },
   "build": {
-    "appId": "com.yourorg.campusnetlogin",
-    "productName": "CampusnetLogin",
+    "appId": "com.netmate.app",
+    "productName": "NetMate",
     "files": [
       "dist/**",
       "package.json"
@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
+    "lucide-react": "^0.562.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

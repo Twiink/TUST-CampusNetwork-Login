@@ -1,7 +1,7 @@
 {
-  "name": "tust-campusnet-login",
+  "name": "netmate",
   "version": "1.0.0",
-  "description": "",
+  "description": "NetMate - 校园网自动登录助手",
   "main": "index.js",
   "scripts": {
     "dev:desktop": "pnpm -C apps/desktop dev",
