@@ -208,6 +208,7 @@ export const Settings: React.FC = () => {
                   className="form-control"
                   value={config.settings.pollingInterval}
                   min={5}
+                  onWheel={(e) => e.currentTarget.blur()}
                   onChange={(e) => handleSettingChange('pollingInterval', parseInt(e.target.value) || 30)}
                 />
               </div>
@@ -220,6 +221,7 @@ export const Settings: React.FC = () => {
                 value={config.settings.maxRetries}
                 min={0}
                 max={10}
+                onWheel={(e) => e.currentTarget.blur()}
                 onChange={(e) => handleSettingChange('maxRetries', parseInt(e.target.value) || 3)}
               />
             </div>
