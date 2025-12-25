@@ -15,11 +15,11 @@ type LogLevel = 'all' | 'info' | 'success' | 'warn' | 'error' | 'debug';
 
 const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string; icon: React.ReactNode; color: string }[] = [
   { value: 'all', label: '全部', icon: <Filter size={14} />, color: '#64748b' },
-  { value: 'info', label: '信息', icon: <Info size={14} />, color: '#60a5fa' },
-  { value: 'success', label: '成功', icon: <CheckCircle2 size={14} />, color: '#4ade80' },
-  { value: 'warn', label: '警告', icon: <AlertTriangle size={14} />, color: '#fbbf24' },
-  { value: 'error', label: '错误', icon: <XCircle size={14} />, color: '#f87171' },
-  { value: 'debug', label: '调试', icon: <Bug size={14} />, color: '#a78bfa' },
+  { value: 'info', label: '信息', icon: <Info size={14} />, color: '#3b82f6' }, // Blue
+  { value: 'success', label: '成功', icon: <CheckCircle2 size={14} />, color: '#22c55e' }, // Green
+  { value: 'warn', label: '警告', icon: <AlertTriangle size={14} />, color: '#f59e0b' }, // Yellow
+  { value: 'error', label: '错误', icon: <XCircle size={14} />, color: '#ef4444' }, // Red
+  { value: 'debug', label: '调试', icon: <Bug size={14} />, color: '#a855f7' }, // Purple
 ];
 
 export const Logs: React.FC = () => {
@@ -43,13 +43,8 @@ export const Logs: React.FC = () => {
   };
 
   const getLogColor = (level: string) => {
-    switch (level) {
-      case 'error': return '#f87171';
-      case 'warn': return '#fbbf24';
-      case 'success': return '#4ade80';
-      case 'debug': return '#a78bfa';
-      default: return '#60a5fa';
-    }
+    const option = LOG_LEVEL_OPTIONS.find(opt => opt.value === level);
+    return option ? option.color : '#3b82f6';
   };
 
   return (
@@ -76,7 +71,7 @@ export const Logs: React.FC = () => {
           justifyContent: 'space-between',
           alignItems: 'center',
           padding: '16px 24px',
-          borderBottom: '1px solid rgba(14, 165, 233, 0.1)',
+          borderBottom: '1px solid var(--border-color)',
           flexWrap: 'wrap',
           gap: 12
         }}>
@@ -94,14 +89,17 @@ export const Logs: React.FC = () => {
                     gap: 4,
                     padding: '4px 10px',
                     border: '1px solid',
-                    borderColor: filterLevel === opt.value ? opt.color : 'var(--border-color)',
+                    borderColor: filterLevel === opt.value ? opt.color : `${opt.color}40`,
                     borderRadius: '16px',
-                    backgroundColor: filterLevel === opt.value ? `${opt.color}20` : 'transparent',
+                    backgroundColor: filterLevel === opt.value ? `${opt.color}20` : 'rgba(255, 255, 255, 0.1)',
                     color: filterLevel === opt.value ? opt.color : 'var(--text-secondary)',
                     cursor: 'pointer',
                     fontSize: '0.8rem',
                     fontWeight: filterLevel === opt.value ? 600 : 400,
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    backdropFilter: 'blur(4px)',
+                    outline: 'none',
+                    boxShadow: filterLevel === opt.value ? `0 0 0 2px ${opt.color}30` : 'none'
                   }}
                 >
                   {opt.icon}
@@ -129,7 +127,7 @@ export const Logs: React.FC = () => {
           flex: 1,
           overflowY: 'auto',
           padding: '16px 24px',
-          backgroundColor: 'rgba(0, 0, 0, 0.02)',
+          backgroundColor: 'var(--log-container-bg)',
           fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace'
         }}>
           {filteredLogs.length > 0 ? (
@@ -144,10 +142,10 @@ export const Logs: React.FC = () => {
                   gap: '10px',
                   padding: '8px 12px',
                   borderRadius: '6px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                  border: '1px solid rgba(0, 0, 0, 0.05)'
+                  backgroundColor: 'var(--log-bg)',
+                  border: `1px solid ${getLogColor(log.level)}30` // Use level color for log entry border
                 }}>
-                  <span className="log-timestamp" style={{ color: '#64748b', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                  <span className="log-timestamp" style={{ color: 'var(--log-timestamp)', whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
                     [{log.timestamp}]
                   </span>
                   <span style={{
@@ -162,12 +160,12 @@ export const Logs: React.FC = () => {
                       {log.level.toUpperCase()}
                     </span>
                   </span>
-                  <span className="log-message" style={{ color: '#334155', flex: 1 }}>{log.message}</span>
+                  <span className="log-message" style={{ color: 'var(--log-message)', flex: 1 }}>{log.message}</span>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={{ color: '#94a3b8', textAlign: 'center', padding: '4rem' }}>
+            <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '4rem' }}>
               {filterLevel === 'all' ? '暂无日志记录' : `暂无 ${LOG_LEVEL_OPTIONS.find(o => o.value === filterLevel)?.label} 级别的日志`}
             </div>
           )}
