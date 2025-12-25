@@ -177,6 +177,93 @@ pnpm type-check
 - `apps/desktop/src/` - 桌面端 UI
 - `apps/mobile/src/` - 移动端 UI
 
+## 故障排除
+
+### Electron 安装失败
+
+**问题表现：**
+
+运行 `pnpm run dev:desktop` 时报错：
+```
+Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
+```
+
+**问题原因：**
+
+Electron 在安装时需要下载平台特定的二进制文件（Windows 上是 electron.exe 及相关资源）。这个下载过程可能因以下原因失败：
+
+1. 网络问题导致下载中断
+2. 防火墙或代理拦截下载请求
+3. 安装过程被意外中断
+4. pnpm 缓存损坏
+
+当 Electron 的 `dist` 文件夹和 `path.txt` 文件缺失时，应用无法找到 Electron 可执行文件路径，就会抛出该错误。
+
+**解决方案：**
+
+方法一：手动运行 Electron 安装脚本（推荐）
+
+```bash
+# 直接运行 Electron 的安装脚本
+node node_modules/electron/install.js
+```
+
+方法二：删除并重新安装 Electron
+
+```bash
+# Windows PowerShell
+rm -rf node_modules/electron
+pnpm install
+
+# Windows CMD
+rmdir /s /q node_modules\electron
+pnpm install
+```
+
+方法三：完全重新安装依赖
+
+```bash
+# 删除所有依赖并重新安装
+rm -rf node_modules
+pnpm install
+```
+
+**验证修复：**
+
+成功修复后，`node_modules/electron` 目录下应包含：
+- `dist/` 文件夹（包含 Electron 可执行文件）
+- `path.txt` 文件（记录可执行文件相对路径）
+
+再次运行 `pnpm run dev:desktop` 应能正常启动应用。
+
+### 桌面端启动后出现乱码警告
+
+**问题表现：**
+
+启动后终端显示乱码：
+```
+[stderr] ����: û���ҵ����� "31500"��
+```
+
+**问题原因：**
+
+这是 Windows 控制台编码问题导致的中文乱码，原文是"错误: 没有找到进程 31500"。这是 `vite-plugin-electron` 在开发模式下管理进程时的正常警告信息，表示在尝试清理旧的 Electron 进程时，进程已经退出。
+
+**影响范围：**
+
+这只是一个无害的警告信息，不影响应用正常运行和开发。可以安全忽略。
+
+**消除乱码（可选）：**
+
+如果希望正确显示中文，可以在终端中设置 UTF-8 编码：
+
+```powershell
+# PowerShell
+chcp 65001
+```
+
+然后重新运行 `pnpm run dev:desktop`。
+
 ## 许可证
 
 ISC License
