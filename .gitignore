@@ -36,7 +36,7 @@ coverage/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-.idea/
+.idea
 *.sublime-project
 *.sublime-workspace
 
