@@ -9,6 +9,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { AppProvider } from './src/context/AppContext';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { LogsScreen } from './src/screens/LogsScreen';
 import { BottomTab } from './src/components/BottomTab';
 import { theme } from './src/constants/theme';
 
@@ -25,6 +26,7 @@ function AppContent(): React.JSX.Element {
       <View style={styles.content}>
         {activeTab === 'home' && <HomeScreen />}
         {activeTab === 'settings' && <SettingsScreen />}
+        {activeTab === 'logs' && <LogsScreen />}
       </View>
       <BottomTab activeTab={activeTab} onTabChange={setActiveTab} />
     </SafeAreaView>

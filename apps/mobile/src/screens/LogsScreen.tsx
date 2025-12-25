@@ -1,23 +1,31 @@
 import React from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { theme } from '../constants/theme';
 
 export const LogsScreen: React.FC = () => {
-  const { logs } = useApp();
+  const { logs, clearLogs } = useApp();
 
   return (
     <View style={styles.container}>
       <Text style={styles.pageTitle}>运行日志</Text>
       
       <View style={styles.card}>
-        <Text style={styles.cardHeader}>系统日志</Text>
-        <ScrollView style={styles.logsContainer}>
+        <View style={styles.headerContainer}>
+          <Text style={styles.cardHeader}>系统日志</Text>
+          <TouchableOpacity onPress={clearLogs} style={styles.clearButton}>
+            <Text style={styles.clearButtonText}>清空</Text>
+          </TouchableOpacity>
+        </View>
+        <ScrollView 
+          style={styles.logsContainer}
+          showsVerticalScrollIndicator={false}
+        >
           {logs.length > 0 ? (
             logs.map((log) => (
               <View key={log.id} style={styles.logItem}>
                 <Text style={styles.timestamp}>[{log.timestamp}]</Text>
-                <Text style={[styles.level, styles[`level_${log.level}`]]}>
+                <Text style={[styles.level, styles[`level_${log.level}` as keyof typeof styles]]}>
                   [{log.level.toUpperCase()}]
                 </Text>
                 <Text style={styles.message}>{log.message}</Text>
@@ -59,14 +67,30 @@ const styles = StyleSheet.create({
     shadowRadius: 32,
     elevation: 4,
   },
-  cardHeader: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0c4a6e',
+  headerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(14, 165, 233, 0.1)',
+  },
+  cardHeader: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0c4a6e',
+  },
+  clearButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 6,
+  },
+  clearButtonText: {
+    color: '#ef4444',
+    fontSize: 12,
+    fontWeight: '600',
   },
   logsContainer: {
     flex: 1,

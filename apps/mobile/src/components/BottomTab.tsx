@@ -22,6 +22,16 @@ const SettingsIcon = ({ active }: { active: boolean }) => (
   </Svg>
 );
 
+const LogsIcon = ({ active }: { active: boolean }) => (
+  <Svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? theme.colors.primary : '#94a3b8'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <Path d="M14 2v6h6" />
+    <Path d="M16 13H8" />
+    <Path d="M16 17H8" />
+    <Path d="M10 9H8" />
+  </Svg>
+);
+
 export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) => {
   return (
     <View style={styles.wrapper}>
@@ -44,6 +54,16 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
             <SettingsIcon active={activeTab === 'settings'} />
           </View>
           <Text style={[styles.tabText, activeTab === 'settings' && styles.activeText]}>配置设置</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.tabItem} 
+          onPress={() => onTabChange('logs')}
+        >
+          <View style={styles.iconContainer}>
+            <LogsIcon active={activeTab === 'logs'} />
+          </View>
+          <Text style={[styles.tabText, activeTab === 'logs' && styles.activeText]}>运行日志</Text>
         </TouchableOpacity>
       </View>
       <SafeAreaView style={{ backgroundColor: theme.colors.sidebarBg }} />

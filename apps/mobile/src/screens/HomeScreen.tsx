@@ -27,13 +27,13 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.statusContainer}>
             <View style={[
                 styles.badge,
-                networkStatus === 'connected' ? styles.borderSuccess :
-                networkStatus === 'disconnected' ? styles.borderDanger : styles.borderWarning
+                networkStatus === 'connected' ? styles.badgeSuccess :
+                networkStatus === 'disconnected' ? styles.badgeDanger : styles.badgeWarning
             ]}>
                 <Text style={[
                   styles.badgeText,
-                  networkStatus === 'connected' ? { color: '#166534' } :
-                  networkStatus === 'disconnected' ? { color: '#991b1b' } : { color: '#854d0e' }
+                  networkStatus === 'connected' ? { color: '#15803d' } :
+                  networkStatus === 'disconnected' ? { color: '#b91c1c' } : { color: '#b45309' }
                 ]}>{getStatusText(networkStatus)}</Text>
             </View>
         </View>
@@ -135,15 +135,23 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: theme.roundness.pill,
     borderWidth: 1.5,
-    backgroundColor: 'transparent', // 彻底透明，直接透出卡片的玻璃背景
   },
   badgeText: {
     fontWeight: '700',
     fontSize: 14,
   },
-  borderSuccess: { borderColor: 'rgba(34, 197, 94, 0.4)' },
-  borderDanger: { borderColor: 'rgba(239, 68, 68, 0.4)' },
-  borderWarning: { borderColor: 'rgba(245, 158, 11, 0.4)' },
+  badgeSuccess: { 
+    borderColor: 'rgba(34, 197, 94, 0.4)',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+  },
+  badgeDanger: { 
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+  },
+  badgeWarning: { 
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
   
   btn: {
     paddingVertical: 14,
