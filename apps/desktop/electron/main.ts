@@ -73,10 +73,9 @@ async function initServices(): Promise<AppServices> {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 900,
+    width: 880,
     height: 670,
-    minWidth: 800,
-    minHeight: 600,
+    resizable: false,
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
