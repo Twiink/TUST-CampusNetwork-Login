@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Switch } from 'react-native';
 import { useApp } from '../context/AppContext';
-import { theme } from '../constants/theme';
+import { useTheme } from '../context/ThemeContext';
+import { GlassView } from '../components/GlassView';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { AccountConfig, ISP } from '@repo/shared';
 
 const ISP_OPTIONS: { value: ISP; label: string }[] = [
@@ -13,16 +15,18 @@ const ISP_OPTIONS: { value: ISP; label: string }[] = [
 
 export const SettingsScreen: React.FC = () => {
   const { config, setConfig } = useApp();
+  const { theme } = useTheme();
+
   const [newAccount, setNewAccount] = useState<{
     username: string;
     password: string;
     serverUrl: string;
     isp: ISP;
-  }>({ 
-    username: '', 
-    password: '', 
+  }>({
+    username: '',
+    password: '',
     serverUrl: 'http://10.10.102.50:801',
-    isp: 'campus'
+    isp: 'campus',
   });
 
   const handleAddAccount = () => {
@@ -33,198 +37,297 @@ export const SettingsScreen: React.FC = () => {
       username: newAccount.username,
       password: newAccount.password,
       serverUrl: newAccount.serverUrl,
-      isp: newAccount.isp
+      isp: newAccount.isp,
     };
-    
+
     setConfig({
       ...config,
       accounts: [...config.accounts, account],
-      currentAccountId: config.currentAccountId || account.id
+      currentAccountId: config.currentAccountId || account.id,
     });
-    setNewAccount({ username: '', password: '', serverUrl: 'http://10.10.102.50:801', isp: 'campus' });
+    setNewAccount({
+      username: '',
+      password: '',
+      serverUrl: 'http://10.10.102.50:801',
+      isp: 'campus',
+    });
   };
 
   const toggleSetting = (key: string, value: boolean) => {
     setConfig({
-        ...config,
-        settings: { ...config.settings, [key]: value }
+      ...config,
+      settings: { ...config.settings, [key]: value },
     });
   };
 
   const getISPLabel = (isp: ISP) => {
-    return ISP_OPTIONS.find(opt => opt.value === isp)?.label || isp;
+    return ISP_OPTIONS.find((opt) => opt.value === isp)?.label || isp;
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
-      <Text style={styles.pageTitle}>配置设置</Text>
-
-      {/* General Settings Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>通用设置</Text>
-        <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>断线自动重连</Text>
-            <Switch 
-                trackColor={{ false: "rgba(0,0,0,0.1)", true: "#bae6fd" }}
-                thumbColor={config.settings.autoReconnect ? theme.colors.primary : "#f4f3f4"}
-                value={config.settings.autoReconnect} 
-                onValueChange={(v) => toggleSetting('autoReconnect', v)} 
-            />
+    <View style={[styles.container, { backgroundColor: theme.colors.bg }]}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header with Theme Toggle */}
+        <View style={styles.header}>
+          <Text style={[styles.pageTitle, { color: theme.colors.text }]}>配置设置</Text>
+          <ThemeToggle />
         </View>
-        <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-            <Text style={styles.settingLabel}>开机自动启动</Text>
-            <Switch 
-                trackColor={{ false: "rgba(0,0,0,0.1)", true: "#bae6fd" }}
-                thumbColor={config.settings.autoLaunch ? theme.colors.primary : "#f4f3f4"}
-                value={config.settings.autoLaunch} 
-                onValueChange={(v) => toggleSetting('autoLaunch', v)} 
-            />
-        </View>
-      </View>
 
-      {/* Account Management Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>账号管理</Text>
-        
-        <View style={{ marginBottom: 20 }}>
-          {config.accounts.map(acc => (
-              <View key={acc.id} style={styles.accountItem}>
-                  <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Text style={styles.accountName}>{acc.username}</Text>
-                        <View style={styles.ispBadge}>
-                          <Text style={styles.ispBadgeText}>{getISPLabel(acc.isp)}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.accountUrl}>{acc.serverUrl}</Text>
-                  </View>
-                  <TouchableOpacity 
-                      style={[styles.smallBtn, config.currentAccountId === acc.id ? styles.btnDisabled : styles.btnActive]}
-                      onPress={() => setConfig({ ...config, currentAccountId: acc.id })}
-                      disabled={config.currentAccountId === acc.id}
-                  >
-                      <Text style={[styles.smallBtnText, config.currentAccountId === acc.id ? { color: '#94a3b8' } : { color: '#fff' }]}>
-                          {config.currentAccountId === acc.id ? '正在使用' : '使用'}
+        {/* General Settings Card */}
+        <GlassView style={styles.card}>
+          <Text style={[styles.cardHeader, { color: theme.colors.text }]}>通用设置</Text>
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+              断线自动重连
+            </Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={config.settings.autoReconnect ? theme.colors.primary : '#f4f3f4'}
+              value={config.settings.autoReconnect}
+              onValueChange={(v) => toggleSetting('autoReconnect', v)}
+            />
+          </View>
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+              开机自动启动
+            </Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={config.settings.autoLaunch ? theme.colors.primary : '#f4f3f4'}
+              value={config.settings.autoLaunch}
+              onValueChange={(v) => toggleSetting('autoLaunch', v)}
+            />
+          </View>
+        </GlassView>
+
+        {/* Account Management Card */}
+        <GlassView style={styles.card}>
+          <Text style={[styles.cardHeader, { color: theme.colors.text }]}>账号管理</Text>
+
+          <View style={{ marginBottom: 20 }}>
+            {config.accounts.map((acc) => (
+              <View
+                key={acc.id}
+                style={[
+                  styles.accountItem,
+                  { borderBottomColor: theme.colors.border + '20' },
+                ]}
+              >
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={[styles.accountName, { color: theme.colors.text }]}>
+                      {acc.username}
+                    </Text>
+                    <View
+                      style={[
+                        styles.ispBadge,
+                        {
+                          backgroundColor: theme.colors.primary + '20',
+                          borderColor: theme.colors.primary + '30',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.ispBadgeText, { color: theme.colors.primary }]}>
+                        {getISPLabel(acc.isp)}
                       </Text>
-                  </TouchableOpacity>
+                    </View>
+                  </View>
+                  <Text style={[styles.accountUrl, { color: theme.colors.textSecondary }]}>
+                    {acc.serverUrl}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.smallBtn,
+                    config.currentAccountId === acc.id
+                      ? { backgroundColor: theme.colors.border }
+                      : { backgroundColor: theme.colors.primary },
+                  ]}
+                  onPress={() => setConfig({ ...config, currentAccountId: acc.id })}
+                  disabled={config.currentAccountId === acc.id}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.smallBtnText,
+                      {
+                        color:
+                          config.currentAccountId === acc.id
+                            ? theme.colors.textSecondary
+                            : '#fff',
+                      },
+                    ]}
+                  >
+                    {config.currentAccountId === acc.id ? '正在使用' : '使用'}
+                  </Text>
+                </TouchableOpacity>
               </View>
-          ))}
-        </View>
+            ))}
+          </View>
 
-        <Text style={styles.subHeader}>添加新账号</Text>
-        
-        <View style={styles.formGroup}>
-            <Text style={styles.label}>用户名</Text>
-            <TextInput 
-                style={styles.formControl} 
-                value={newAccount.username} 
-                onChangeText={t => setNewAccount({...newAccount, username: t})}
-                placeholder="请输入学号/用户名"
-                placeholderTextColor="#94a3b8"
+          <Text style={[styles.subHeader, { color: theme.colors.text }]}>添加新账号</Text>
+
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>用户名</Text>
+            <TextInput
+              style={[
+                styles.formControl,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
+              value={newAccount.username}
+              onChangeText={(t) => setNewAccount({ ...newAccount, username: t })}
+              placeholder="请输入学号/用户名"
+              placeholderTextColor={theme.colors.textSecondary}
             />
-        </View>
+          </View>
 
-        <View style={styles.formGroup}>
-            <Text style={styles.label}>密码</Text>
-            <TextInput 
-                style={styles.formControl} 
-                value={newAccount.password} 
-                onChangeText={t => setNewAccount({...newAccount, password: t})}
-                placeholder="请输入密码"
-                placeholderTextColor="#94a3b8"
-                secureTextEntry
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>密码</Text>
+            <TextInput
+              style={[
+                styles.formControl,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
+              value={newAccount.password}
+              onChangeText={(t) => setNewAccount({ ...newAccount, password: t })}
+              placeholder="请输入密码"
+              placeholderTextColor={theme.colors.textSecondary}
+              secureTextEntry
             />
-        </View>
+          </View>
 
-        <View style={styles.formGroup}>
-            <Text style={styles.label}>服务商</Text>
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>服务商</Text>
             <View style={styles.ispGrid}>
-              {ISP_OPTIONS.map(opt => (
+              {ISP_OPTIONS.map((opt) => (
                 <TouchableOpacity
                   key={opt.value}
                   style={[
                     styles.ispOption,
-                    newAccount.isp === opt.value && styles.ispOptionActive
+                    {
+                      borderColor: theme.colors.border + '40',
+                      backgroundColor: theme.colors.cardBg + '60',
+                    },
+                    newAccount.isp === opt.value && {
+                      backgroundColor: theme.colors.primary + '20',
+                      borderColor: theme.colors.primary,
+                    },
                   ]}
-                  onPress={() => setNewAccount({...newAccount, isp: opt.value})}
+                  onPress={() => setNewAccount({ ...newAccount, isp: opt.value })}
+                  activeOpacity={0.7}
                 >
-                  <Text style={[
-                    styles.ispOptionText,
-                    newAccount.isp === opt.value && styles.ispOptionTextActive
-                  ]}>{opt.label}</Text>
+                  <Text
+                    style={[
+                      styles.ispOptionText,
+                      { color: theme.colors.textSecondary },
+                      newAccount.isp === opt.value && {
+                        color: theme.colors.primary,
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
-        </View>
+          </View>
 
-        <View style={styles.formGroup}>
-            <Text style={styles.label}>服务器地址</Text>
-            <TextInput 
-                style={styles.formControl} 
-                value={newAccount.serverUrl} 
-                onChangeText={t => setNewAccount({...newAccount, serverUrl: t})}
-                placeholder="http://..."
-                placeholderTextColor="#94a3b8"
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              服务器地址
+            </Text>
+            <TextInput
+              style={[
+                styles.formControl,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
+              value={newAccount.serverUrl}
+              onChangeText={(t) => setNewAccount({ ...newAccount, serverUrl: t })}
+              placeholder="http://..."
+              placeholderTextColor={theme.colors.textSecondary}
             />
-        </View>
+          </View>
 
-        <TouchableOpacity style={styles.btnPrimary} onPress={handleAddAccount}>
+          <TouchableOpacity
+            style={[
+              styles.btnPrimary,
+              {
+                backgroundColor: theme.colors.primary,
+                shadowColor: theme.colors.primary,
+              },
+            ]}
+            onPress={handleAddAccount}
+            activeOpacity={0.8}
+          >
             <Text style={styles.btnText}>保存并添加账号</Text>
-        </TouchableOpacity>
-      </View>
-      
-      {/* Other Settings Card */}
-      <View style={styles.card}>
-        <Text style={styles.cardHeader}>其他</Text>
-        <Text style={{ color: theme.colors.textSecondary, fontSize: 14 }}>WiFi 自动连接功能即将推出...</Text>
-      </View>
-    </ScrollView>
+          </TouchableOpacity>
+        </GlassView>
+
+        {/* Other Settings Card */}
+        <GlassView style={styles.card}>
+          <Text style={[styles.cardHeader, { color: theme.colors.text }]}>其他</Text>
+          <Text style={[styles.otherText, { color: theme.colors.textSecondary }]}>
+            WiFi 自动连接功能即将推出...
+          </Text>
+        </GlassView>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.bg,
+  },
+  scrollView: {
+    flex: 1,
   },
   contentContainer: {
     padding: 24,
     paddingTop: 32,
     paddingBottom: 100,
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
   pageTitle: {
     fontSize: 28,
     fontWeight: '800',
-    marginBottom: 32,
-    color: '#0c4a6e',
     marginTop: 0,
   },
   card: {
-    backgroundColor: theme.colors.cardBg,
-    borderRadius: theme.roundness.l,
     padding: 24,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    shadowColor: '#0ea5e9',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 32,
-    elevation: 4,
   },
   cardHeader: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#0c4a6e',
     marginBottom: 20,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(14, 165, 233, 0.1)',
   },
   subHeader: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.text,
     marginBottom: 16,
     marginTop: 8,
   },
@@ -235,12 +338,11 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
   },
   settingLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: theme.colors.text,
   },
   accountItem: {
     flexDirection: 'row',
@@ -248,16 +350,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   accountName: {
     fontSize: 17,
     fontWeight: '700',
-    color: theme.colors.text,
   },
   accountUrl: {
     fontSize: 13,
-    color: theme.colors.textSecondary,
     marginTop: 4,
   },
   formGroup: {
@@ -266,63 +365,48 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.textSecondary,
     marginBottom: 8,
   },
   formControl: {
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)', // Very light border
-    borderRadius: theme.roundness.m,
+    borderRadius: 16,
     paddingHorizontal: 16,
-    paddingVertical: 12, // Desktop: 14px
-    backgroundColor: 'rgba(255, 255, 255, 0.4)', // More transparent
+    paddingVertical: 12,
     fontSize: 16,
-    color: theme.colors.text,
   },
   btnPrimary: {
-    backgroundColor: theme.colors.primary,
     padding: 14,
-    borderRadius: theme.roundness.m,
+    borderRadius: 16,
     alignItems: 'center',
     marginTop: 10,
-    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
     elevation: 4,
   },
-  btnText: { 
-    color: '#fff', 
+  btnText: {
+    color: '#fff',
     fontWeight: '600',
-    fontSize: 16 
+    fontSize: 16,
   },
   smallBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: theme.roundness.pill,
-  },
-  btnActive: {
-    backgroundColor: theme.colors.primary,
-  },
-  btnDisabled: {
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 50,
   },
   smallBtnText: {
     fontSize: 14,
     fontWeight: '700',
   },
   ispBadge: {
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
     marginLeft: 8,
     borderWidth: 1,
-    borderColor: 'rgba(14, 165, 233, 0.1)',
   },
   ispBadgeText: {
     fontSize: 10,
-    color: '#0369a1',
     fontWeight: '700',
   },
   ispGrid: {
@@ -334,21 +418,13 @@ const styles = StyleSheet.create({
     width: '48%',
     padding: 12,
     alignItems: 'center',
-    borderRadius: theme.roundness.m,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  ispOptionActive: {
-    backgroundColor: 'rgba(14, 165, 233, 0.1)',
-    borderColor: theme.colors.primary,
   },
   ispOptionText: {
-    color: theme.colors.textSecondary,
     fontWeight: '500',
   },
-  ispOptionTextActive: {
-    color: theme.colors.primary,
-    fontWeight: '600',
+  otherText: {
+    fontSize: 14,
   },
 });
