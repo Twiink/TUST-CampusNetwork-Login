@@ -1,0 +1,8 @@
+node_modules/
+android/build/
+android/.gradle/
+ios/build/
+ios/Pods/
+*.jsbundle
+coverage/
+pnpm-lock.yaml
