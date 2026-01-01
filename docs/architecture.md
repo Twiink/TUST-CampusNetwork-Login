@@ -7,212 +7,212 @@
 采用 pnpm Monorepo 架构，实现代码共享和统一管理：
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                             Monorepo Root                               │
-├────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                         apps/ (应用层)                           │   │
-│  │  ┌────────────────────┐    ┌────────────────────────────────┐   │   │
-│  │  │      desktop/      │    │           mobile/              │   │   │
-│  │  │   Electron App     │    │      React Native App          │   │   │
-│  │  │   (Win + macOS)    │    │         (Android)              │   │   │
-│  │  └────────────────────┘    └────────────────────────────────┘   │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                    │                                    │
-│                                    ▼                                    │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                       packages/ (共享层)                         │   │
-│  │  ┌─────────────────────────────────────────────────────────┐    │   │
-│  │  │                       shared/                           │    │   │
-│  │  │              核心业务逻辑 (跨平台共享)                    │    │   │
-│  │  └─────────────────────────────────────────────────────────┘    │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-└────────────────────────────────────────────────────────────────────────┘
++------------------------------------------------------------------------+
+|                             Monorepo Root                              |
++------------------------------------------------------------------------+
+|                                                                        |
+|  +------------------------------------------------------------------+  |
+|  |                         apps/ (Application Layer)                |  |
+|  |  +--------------------+    +----------------------------+        |  |
+|  |  |      desktop/      |    |           mobile/          |        |  |
+|  |  |   Electron App     |    |      React Native App      |        |  |
+|  |  |   (Win + macOS)    |    |         (Android)          |        |  |
+|  |  +--------------------+    +----------------------------+        |  |
+|  +------------------------------------------------------------------+  |
+|                                   |                                    |
+|                                   v                                    |
+|  +------------------------------------------------------------------+  |
+|  |                       packages/ (Shared Layer)                   |  |
+|  |  +---------------------------------------------------------+     |  |
+|  |  |                       shared/                           |     |  |
+|  |  |              Core Business Logic (Cross-platform)       |     |  |
+|  |  +---------------------------------------------------------+     |  |
+|  +------------------------------------------------------------------+  |
+|                                                                        |
++------------------------------------------------------------------------+
 ```
 
 ## 详细目录结构
 
 ```
 NetMate/
-├── .github/                          # GitHub 配置
-│   └── workflows/                    # CI/CD 工作流
-│       ├── desktop-build.yml         # 桌面端构建
-│       └── mobile-build.yml          # 移动端构建
-│
-├── apps/                             # 应用目录
-│   │
-│   ├── desktop/                      # Electron 桌面应用
-│   │   ├── electron/                 # Electron 主进程
-│   │   │   ├── main.ts               # 主进程入口
-│   │   │   ├── preload.ts            # 预加载脚本
-│   │   │   ├── ipc/                  # IPC 通信模块
-│   │   │   │   ├── index.ts          # IPC 处理器注册
-│   │   │   │   ├── auth.ts           # 认证相关 IPC
-│   │   │   │   ├── config.ts         # 配置相关 IPC
-│   │   │   │   └── network.ts        # 网络相关 IPC
-│   │   │   ├── services/             # 平台服务
-│   │   │   │   ├── tray.ts           # 系统托盘
-│   │   │   │   ├── autoLaunch.ts     # 开机自启
-│   │   │   │   ├── notification.ts   # 系统通知
-│   │   │   │   └── store.ts          # 本地存储
-│   │   │   └── utils/                # 工具函数
-│   │   │       └── network.ts        # 网络工具（获取 IP/MAC）
-│   │   ├── src/                      # 渲染进程（React）
-│   │   │   ├── main.tsx              # 入口文件
-│   │   │   ├── App.tsx               # 根组件
-│   │   │   ├── components/           # UI 组件
-│   │   │   │   ├── common/           # 通用组件
-│   │   │   │   │   ├── Button.tsx
-│   │   │   │   │   ├── Input.tsx
-│   │   │   │   │   └── Switch.tsx
-│   │   │   │   ├── AccountForm.tsx   # 账户配置表单
-│   │   │   │   ├── WifiForm.tsx      # WiFi 配置表单
-│   │   │   │   ├── SettingsForm.tsx  # 设置表单
-│   │   │   │   ├── StatusPanel.tsx   # 状态面板
-│   │   │   │   └── LogViewer.tsx     # 日志查看器
-│   │   │   ├── pages/                # 页面
-│   │   │   │   ├── Home.tsx          # 主页（状态概览）
-│   │   │   │   ├── Settings.tsx      # 设置页
-│   │   │   │   └── Logs.tsx          # 日志页
-│   │   │   ├── hooks/                # React Hooks
-│   │   │   │   ├── useConfig.ts      # 配置 Hook
-│   │   │   │   ├── useNetwork.ts     # 网络状态 Hook
-│   │   │   │   └── useAuth.ts        # 认证 Hook
-│   │   │   ├── stores/               # 状态管理
-│   │   │   │   └── index.ts          # Zustand Store
-│   │   │   ├── styles/               # 样式文件
-│   │   │   │   ├── index.css         # 全局样式
-│   │   │   │   └── variables.css     # CSS 变量
-│   │   │   └── types/                # 类型定义
-│   │   │       └── electron.d.ts     # Electron API 类型
-│   │   ├── public/                   # 静态资源
-│   │   │   └── icons/                # 应用图标
-│   │   ├── resources/                # 打包资源
-│   │   │   ├── icon.ico              # Windows 图标
-│   │   │   └── icon.icns             # macOS 图标
-│   │   ├── electron-builder.json5    # 打包配置
-│   │   ├── vite.config.ts            # Vite 配置
-│   │   ├── tsconfig.json             # TypeScript 配置
-│   │   └── package.json
-│   │
-│   └── mobile/                       # React Native 移动应用
-│       ├── android/                  # Android 原生代码
-│       │   ├── app/
-│       │   │   └── src/main/java/    # Java/Kotlin 代码
-│       │   │       └── modules/      # 原生模块
-│       │   │           ├── WifiModule.kt      # WiFi 控制
-│       │   │           └── AutoStartModule.kt # 开机自启
-│       │   └── build.gradle
-│       ├── ios/                      # iOS 原生代码（预留）
-│       ├── src/                      # React Native 代码
-│       │   ├── App.tsx               # 根组件
-│       │   ├── components/           # UI 组件
-│       │   │   ├── common/           # 通用组件
-│       │   │   ├── AccountForm.tsx
-│       │   │   ├── WifiForm.tsx
-│       │   │   ├── SettingsForm.tsx
-│       │   │   └── StatusPanel.tsx
-│       │   ├── screens/              # 页面
-│       │   │   ├── HomeScreen.tsx
-│       │   │   ├── SettingsScreen.tsx
-│       │   │   └── LogsScreen.tsx
-│       │   ├── navigation/           # 导航配置
-│       │   │   └── index.tsx
-│       │   ├── hooks/                # React Hooks
-│       │   ├── services/             # 平台服务
-│       │   │   ├── wifi.ts           # WiFi 控制
-│       │   │   ├── notification.ts   # 通知
-│       │   │   ├── background.ts     # 后台服务
-│       │   │   └── storage.ts        # 存储
-│       │   ├── stores/               # 状态管理
-│       │   └── types/                # 类型定义
-│       ├── index.js                  # 入口文件
-│       ├── metro.config.js           # Metro 配置
-│       ├── babel.config.js           # Babel 配置
-│       └── package.json
-│
-├── packages/                         # 共享包目录
-│   │
-│   └── shared/                       # 核心业务包
-│       ├── src/
-│       │   ├── index.ts              # 导出入口
-│       │   │
-│       │   ├── services/             # 核心服务
-│       │   │   ├── index.ts          # 服务导出
-│       │   │   ├── AuthService.ts    # 登录认证服务
-│       │   │   │   - login()         # 执行登录
-│       │   │   │   - logout()        # 执行登出
-│       │   │   │   - buildLoginUrl() # 构建登录 URL
-│       │   │   │
-│       │   │   ├── NetworkDetector.ts # 联网探测服务
-│       │   │   │   - checkConnectivity()   # 检查网络连通性
-│       │   │   │   - isAuthenticated()     # 检查是否已认证
-│       │   │   │   - startPolling()        # 开始轮询检测
-│       │   │   │   - stopPolling()         # 停止轮询检测
-│       │   │   │
-│       │   │   ├── RetryPolicy.ts    # 重试策略
-│       │   │   │   - execute()       # 执行带重试的操作
-│       │   │   │   - setMaxRetries() # 设置最大重试次数
-│       │   │   │   - setDelay()      # 设置重试延迟
-│       │   │   │
-│       │   │   └── ConfigManager.ts  # 配置管理
-│       │   │       - get()           # 获取配置
-│       │   │       - set()           # 设置配置
-│       │   │       - validate()      # 验证配置
-│       │   │
-│       │   ├── utils/                # 工具函数
-│       │   │   ├── index.ts          # 工具导出
-│       │   │   ├── urlEncode.ts      # URL 编码
-│       │   │   ├── httpClient.ts     # HTTP 客户端封装
-│       │   │   └── validator.ts      # 数据验证
-│       │   │
-│       │   ├── models/               # 数据模型
-│       │   │   ├── index.ts          # 模型导出
-│       │   │   ├── Logger.ts         # 日志模型
-│       │   │   │   - info()          # 信息日志
-│       │   │   │   - warn()          # 警告日志
-│       │   │   │   - error()         # 错误日志
-│       │   │   │   - getLogs()       # 获取日志列表
-│       │   │   │
-│       │   │   └── Config.ts         # 配置模型
-│       │   │       - AccountConfig   # 账户配置
-│       │   │       - WifiConfig      # WiFi 配置
-│       │   │       - AppConfig       # 应用配置
-│       │   │
-│       │   ├── types/                # 类型定义
-│       │   │   ├── index.ts          # 类型导出
-│       │   │   ├── auth.ts           # 认证相关类型
-│       │   │   ├── config.ts         # 配置相关类型
-│       │   │   ├── network.ts        # 网络相关类型
-│       │   │   └── log.ts            # 日志相关类型
-│       │   │
-│       │   └── constants/            # 常量定义
-│       │       ├── index.ts          # 常量导出
-│       │       ├── defaults.ts       # 默认值
-│       │       └── errors.ts         # 错误码
-│       │
-│       ├── tsup.config.ts            # 构建配置
-│       ├── tsconfig.json             # TypeScript 配置
-│       └── package.json
-│
-├── docs/                             # 项目文档
-│   ├── architecture.md               # 架构设计（本文档）
-│   ├── api.md                        # API 文档
-│   └── development.md                # 开发指南
-│
-├── shell/                            # 参考脚本
-│   └── base.sh                       # 登录脚本参考
-│
-├── .github/                          # GitHub 配置
-├── .eslintrc.cjs                     # ESLint 配置
-├── .prettierrc.cjs                   # Prettier 配置
-├── .gitignore                        # Git 忽略配置
-├── package.json                      # 根 package.json
-├── pnpm-workspace.yaml               # pnpm 工作区配置
-├── pnpm-lock.yaml                    # 依赖锁定文件
-└── README.md                         # 项目说明
++-- .github/                          # GitHub config
+|   +-- workflows/                    # CI/CD workflows
+|       +-- desktop-build.yml         # Desktop build
+|       +-- mobile-build.yml          # Mobile build
+|
++-- apps/                             # Application directory
+|   |
+|   +-- desktop/                      # Electron desktop app
+|   |   +-- electron/                 # Electron main process
+|   |   |   +-- main.ts               # Main process entry
+|   |   |   +-- preload.ts            # Preload script
+|   |   |   +-- ipc/                  # IPC communication module
+|   |   |   |   +-- index.ts          # IPC handler registration
+|   |   |   |   +-- auth.ts           # Auth-related IPC
+|   |   |   |   +-- config.ts         # Config-related IPC
+|   |   |   |   +-- network.ts        # Network-related IPC
+|   |   |   +-- services/             # Platform services
+|   |   |   |   +-- tray.ts           # System tray
+|   |   |   |   +-- autoLaunch.ts     # Auto launch
+|   |   |   |   +-- notification.ts   # System notifications
+|   |   |   |   +-- store.ts          # Local storage
+|   |   |   +-- utils/                # Utility functions
+|   |   |       +-- network.ts        # Network utils (get IP/MAC)
+|   |   +-- src/                      # Renderer process (React)
+|   |   |   +-- main.tsx              # Entry file
+|   |   |   +-- App.tsx               # Root component
+|   |   |   +-- components/           # UI components
+|   |   |   |   +-- common/           # Common components
+|   |   |   |   |   +-- Button.tsx
+|   |   |   |   |   +-- Input.tsx
+|   |   |   |   |   +-- Switch.tsx
+|   |   |   |   +-- AccountForm.tsx   # Account config form
+|   |   |   |   +-- WifiForm.tsx      # WiFi config form
+|   |   |   |   +-- SettingsForm.tsx  # Settings form
+|   |   |   |   +-- StatusPanel.tsx   # Status panel
+|   |   |   |   +-- LogViewer.tsx     # Log viewer
+|   |   |   +-- pages/                # Pages
+|   |   |   |   +-- Home.tsx          # Home (status overview)
+|   |   |   |   +-- Settings.tsx      # Settings page
+|   |   |   |   +-- Logs.tsx          # Logs page
+|   |   |   +-- hooks/                # React Hooks
+|   |   |   |   +-- useConfig.ts      # Config Hook
+|   |   |   |   +-- useNetwork.ts     # Network status Hook
+|   |   |   |   +-- useAuth.ts        # Auth Hook
+|   |   |   +-- stores/               # State management
+|   |   |   |   +-- index.ts          # Zustand Store
+|   |   |   +-- styles/               # Style files
+|   |   |   |   +-- index.css         # Global styles
+|   |   |   |   +-- variables.css     # CSS variables
+|   |   |   +-- types/                # Type definitions
+|   |   |       +-- electron.d.ts     # Electron API types
+|   |   +-- public/                   # Static assets
+|   |   |   +-- icons/                # App icons
+|   |   +-- resources/                # Build resources
+|   |   |   +-- icon.ico              # Windows icon
+|   |   |   +-- icon.icns             # macOS icon
+|   |   +-- electron-builder.json5    # Build config
+|   |   +-- vite.config.ts            # Vite config
+|   |   +-- tsconfig.json             # TypeScript config
+|   |   +-- package.json
+|   |
+|   +-- mobile/                       # React Native mobile app
+|       +-- android/                  # Android native code
+|       |   +-- app/
+|       |   |   +-- src/main/java/    # Java/Kotlin code
+|       |   |       +-- modules/      # Native modules
+|       |   |           +-- WifiModule.kt      # WiFi control
+|       |   |           +-- AutoStartModule.kt # Auto start
+|       |   +-- build.gradle
+|       +-- ios/                      # iOS native code (reserved)
+|       +-- src/                      # React Native code
+|       |   +-- App.tsx               # Root component
+|       |   +-- components/           # UI components
+|       |   |   +-- common/           # Common components
+|       |   |   +-- AccountForm.tsx
+|       |   |   +-- WifiForm.tsx
+|       |   |   +-- SettingsForm.tsx
+|       |   |   +-- StatusPanel.tsx
+|       |   +-- screens/              # Screens
+|       |   |   +-- HomeScreen.tsx
+|       |   |   +-- SettingsScreen.tsx
+|       |   |   +-- LogsScreen.tsx
+|       |   +-- navigation/           # Navigation config
+|       |   |   +-- index.tsx
+|       |   +-- hooks/                # React Hooks
+|       |   +-- services/             # Platform services
+|       |   |   +-- wifi.ts           # WiFi control
+|       |   |   +-- notification.ts   # Notifications
+|       |   |   +-- background.ts     # Background service
+|       |   |   +-- storage.ts        # Storage
+|       |   +-- stores/               # State management
+|       |   +-- types/                # Type definitions
+|       +-- index.js                  # Entry file
+|       +-- metro.config.js           # Metro config
+|       +-- babel.config.js           # Babel config
+|       +-- package.json
+|
++-- packages/                         # Shared packages directory
+|   |
+|   +-- shared/                       # Core business package
+|       +-- src/
+|       |   +-- index.ts              # Export entry
+|       |   |
+|       |   +-- services/             # Core services
+|       |   |   +-- index.ts          # Service exports
+|       |   |   +-- AuthService.ts    # Login auth service
+|       |   |   |   - login()         # Execute login
+|       |   |   |   - logout()        # Execute logout
+|       |   |   |   - buildLoginUrl() # Build login URL
+|       |   |   |
+|       |   |   +-- NetworkDetector.ts # Network detection service
+|       |   |   |   - checkConnectivity()   # Check network connectivity
+|       |   |   |   - isAuthenticated()     # Check if authenticated
+|       |   |   |   - startPolling()        # Start polling detection
+|       |   |   |   - stopPolling()         # Stop polling detection
+|       |   |   |
+|       |   |   +-- RetryPolicy.ts    # Retry policy
+|       |   |   |   - execute()       # Execute with retry
+|       |   |   |   - setMaxRetries() # Set max retries
+|       |   |   |   - setDelay()      # Set retry delay
+|       |   |   |
+|       |   |   +-- ConfigManager.ts  # Config management
+|       |   |       - get()           # Get config
+|       |   |       - set()           # Set config
+|       |   |       - validate()      # Validate config
+|       |   |
+|       |   +-- utils/                # Utility functions
+|       |   |   +-- index.ts          # Utils exports
+|       |   |   +-- urlEncode.ts      # URL encoding
+|       |   |   +-- httpClient.ts     # HTTP client wrapper
+|       |   |   +-- validator.ts      # Data validation
+|       |   |
+|       |   +-- models/               # Data models
+|       |   |   +-- index.ts          # Model exports
+|       |   |   +-- Logger.ts         # Logger model
+|       |   |   |   - info()          # Info log
+|       |   |   |   - warn()          # Warning log
+|       |   |   |   - error()         # Error log
+|       |   |   |   - getLogs()       # Get log list
+|       |   |   |
+|       |   |   +-- Config.ts         # Config model
+|       |   |       - AccountConfig   # Account config
+|       |   |       - WifiConfig      # WiFi config
+|       |   |       - AppConfig       # App config
+|       |   |
+|       |   +-- types/                # Type definitions
+|       |   |   +-- index.ts          # Type exports
+|       |   |   +-- auth.ts           # Auth-related types
+|       |   |   +-- config.ts         # Config-related types
+|       |   |   +-- network.ts        # Network-related types
+|       |   |   +-- log.ts            # Log-related types
+|       |   |
+|       |   +-- constants/            # Constants
+|       |       +-- index.ts          # Constants exports
+|       |       +-- defaults.ts       # Default values
+|       |       +-- errors.ts         # Error codes
+|       |
+|       +-- tsup.config.ts            # Build config
+|       +-- tsconfig.json             # TypeScript config
+|       +-- package.json
+|
++-- docs/                             # Project docs
+|   +-- architecture.md               # Architecture design (this doc)
+|   +-- api.md                        # API docs
+|   +-- development.md                # Development guide
+|
++-- shell/                            # Reference scripts
+|   +-- base.sh                       # Login script reference
+|
++-- .github/                          # GitHub config
++-- .eslintrc.cjs                     # ESLint config
++-- .prettierrc.cjs                   # Prettier config
++-- .gitignore                        # Git ignore config
++-- package.json                      # Root package.json
++-- pnpm-workspace.yaml               # pnpm workspace config
++-- pnpm-lock.yaml                    # Dependency lock file
++-- README.md                         # Project readme
 ```
 
 ## 模块设计
@@ -409,34 +409,34 @@ interface NotificationOptions {
 ### 3. 数据流
 
 ```
-用户操作
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        UI 层                                 │
-│  (React / React Native 组件)                                │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼ 调用 Hooks / Store Actions
-┌─────────────────────────────────────────────────────────────┐
-│                      状态管理层                              │
-│  (Zustand Store)                                            │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼ 调用平台适配器 / 共享服务
-┌─────────────────────────────────────────────────────────────┐
-│                      服务层                                  │
-│  ┌─────────────────┐    ┌────────────────────────────┐     │
-│  │  平台适配器      │    │      共享服务               │     │
-│  │  (Platform)     │    │  (packages/shared)         │     │
-│  └─────────────────┘    └────────────────────────────┘     │
-└─────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      系统/网络层                             │
-│  (OS APIs / HTTP Requests)                                  │
-└─────────────────────────────────────────────────────────────┘
+User Action
+    |
+    v
++-------------------------------------------------------------+
+|                        UI Layer                             |
+|  (React / React Native Components)                          |
++-------------------------------------------------------------+
+    |
+    v  Call Hooks / Store Actions
++-------------------------------------------------------------+
+|                    State Management Layer                   |
+|  (Zustand Store)                                            |
++-------------------------------------------------------------+
+    |
+    v  Call Platform Adapters / Shared Services
++-------------------------------------------------------------+
+|                      Service Layer                          |
+|  +-----------------+    +----------------------------+      |
+|  |  Platform       |    |      Shared Services       |      |
+|  |  Adapters       |    |  (packages/shared)         |      |
+|  +-----------------+    +----------------------------+      |
++-------------------------------------------------------------+
+    |
+    v
++-------------------------------------------------------------+
+|                    System/Network Layer                     |
+|  (OS APIs / HTTP Requests)                                  |
++-------------------------------------------------------------+
 ```
 
 ## 配置模型
@@ -501,50 +501,55 @@ WiFi 配置支持两种类型：
 ### 心跳检测与 WiFi 切换流程
 
 ```
-┌─────────────────┐
-│  启用心跳检测    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  定时轮询检测    │ ◄──────────────────┐
-└────────┬────────┘                     │
-         │                              │
-         ▼                              │
-    ┌────────┐     是                  │
-    │ 网络正常? ├───────────────────────┘
-    └────┬───┘
-         │ 否
-         ▼
-┌─────────────────┐
-│  尝试重新登录    │
-│ (最多 N 次重试)  │
-└────────┬────────┘
-         │
-         ▼
-    ┌────────┐     是
-    │ 重连成功? ├───────────────────────┐
-    └────┬───┘                          │
-         │ 否                           │
-         ▼                              │
-┌─────────────────┐                     │
-│ 按优先级切换WiFi  │                    │
-└────────┬────────┘                     │
-         │                              │
-         ▼                              │
-    ┌────────────┐                      │
-    │requiresAuth?│                     │
-    └─────┬──────┘                      │
-     是 │    │ 否                       │
-        ▼    ▼                          │
-┌─────────┐ ┌────────┐                  │
-│发送登录  │ │仅连接   │                  │
-│请求     │ │WiFi    │                  │
-└────┬────┘ └────┬───┘                  │
-     │           │                      │
-     └─────┬─────┘                      │
-           │                            │
-           └────────────────────────────┘
++-----------------+
+|  Enable         |
+|  Heartbeat      |
++--------+--------+
+         |
+         v
++-----------------+
+|  Timed Polling  | <----------------------+
++--------+--------+                        |
+         |                                 |
+         v                                 |
+    +--------+      Yes                    |
+    | Network |-----------------------------+
+    | OK?     |
+    +----+----+
+         | No
+         v
++-----------------+
+|  Try Reconnect  |
+| (max N retries) |
++--------+--------+
+         |
+         v
+    +---------+     Yes
+    | Reconnect|------------------------+
+    | Success? |                        |
+    +----+-----+                        |
+         | No                           |
+         v                              |
++-----------------+                     |
+| Switch WiFi     |                     |
+| by Priority     |                     |
++--------+--------+                     |
+         |                              |
+         v                              |
+    +-------------+                     |
+    | requiresAuth|                     |
+    +------+------+                     |
+     Yes   |    No                      |
+        v    v                          |
++---------+ +--------+                  |
+| Send    | | Just   |                  |
+| Login   | | Connect|                  |
+| Request | | WiFi   |                  |
++----+----+ +----+---+                  |
+     |           |                      |
+     +-----+-----+                      |
+           |                            |
+           +----------------------------+
 ```
 
 ## 安全考虑
