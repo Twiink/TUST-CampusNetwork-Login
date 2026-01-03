@@ -253,7 +253,28 @@ export class DesktopWifiAdapter implements WifiAdapter {
       // SSID（支持中英文）
       const ssid = data['ssid'] || data['名称'] || '';
       console.log('[WiFiAdapter] SSID:', ssid);
-      if (!ssid) {
+
+      // 如果 SSID 是乱码，尝试使用不带 chcp 的命令重新获取
+      let finalSsid = ssid;
+      if (!ssid || ssid.includes('�') || /[\x00-\x1F\x7F]/.test(ssid)) {
+        console.log('[WiFiAdapter] SSID seems corrupted, trying alternative method...');
+        try {
+          // 使用 GBK 编码重新获取 SSID
+          const { stdout: rawOutput } = await execAsync('netsh wlan show interfaces', {
+            encoding: 'buffer',
+          });
+          const gbkOutput = rawOutput.toString('gbk');
+          const ssidMatch = gbkOutput.match(/^\s*SSID\s*:\s*(.+)$/m);
+          if (ssidMatch && ssidMatch[1]) {
+            finalSsid = ssidMatch[1].trim();
+            console.log('[WiFiAdapter] SSID from GBK:', finalSsid);
+          }
+        } catch (err) {
+          console.error('[WiFiAdapter] Failed to get SSID with GBK encoding:', err);
+        }
+      }
+
+      if (!finalSsid) {
         console.log('[WiFiAdapter] No SSID found, returning null');
         return null;
       }
@@ -263,11 +284,12 @@ export class DesktopWifiAdapter implements WifiAdapter {
       const signalStrength = parseInt(signalStr.replace('%', '')) || 0;
 
       // 连接速度：Receive rate 或 Transmit rate (Mbps) - 支持中英文
-      const receiveRateStr = data['receive rate'] || data['接收速率'] || '0';
-      const transmitRateStr = data['transmit rate'] || data['传输速率'] || '0';
+      const receiveRateStr = data['receive rate'] || data['receive rate (mbps)'] || data['接收速率'] || '0';
+      const transmitRateStr = data['transmit rate'] || data['transmit rate (mbps)'] || data['传输速率'] || '0';
       const receiveRate = parseFloat(receiveRateStr) || 0;
       const transmitRate = parseFloat(transmitRateStr) || 0;
       const linkSpeed = Math.max(receiveRate, transmitRate);
+      console.log('[WiFiAdapter] Link speed - Receive:', receiveRate, 'Transmit:', transmitRate, 'Max:', linkSpeed);
 
       // 信道：Channel - 支持中英文
       const channelStr = data['channel'] || data['信道'] || '0';

@@ -28,9 +28,9 @@ const CONNECTIVITY_CHECK_URLS = [
 const AUTH_CHECK_URL = 'http://10.10.102.50:801/eportal/portal/page/checkstatus';
 
 /**
- * 默认 Ping 目标（公共 DNS）
+ * 默认 Ping 目标（使用 Google 的连通性检测服务）
  */
-const DEFAULT_PING_TARGET = '8.8.8.8';
+const DEFAULT_PING_TARGET = 'http://www.gstatic.com/generate_204';
 
 /**
  * 联网探测服务类
@@ -103,6 +103,7 @@ export class NetworkDetector {
     const testTarget = target || AUTH_CHECK_URL;
 
     try {
+      console.log('[NetworkDetector] Testing latency to:', testTarget);
       // 尝试 HTTP 请求来模拟 ping
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
@@ -115,6 +116,7 @@ export class NetworkDetector {
 
       clearTimeout(timeout);
       const latency = Date.now() - startTime;
+      console.log('[NetworkDetector] Latency test succeeded:', latency, 'ms');
 
       return {
         value: latency,
@@ -123,14 +125,16 @@ export class NetworkDetector {
         timestamp: Date.now(),
       };
     } catch (error) {
-      // 如果第一次失败，尝试公共 DNS
+      console.log('[NetworkDetector] Primary latency test failed:', error instanceof Error ? error.message : error);
+      // 如果第一次失败，尝试备用连通性检测服务
       if (testTarget === AUTH_CHECK_URL) {
         try {
+          console.log('[NetworkDetector] Trying fallback target:', DEFAULT_PING_TARGET);
           const fallbackStart = Date.now();
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 5000);
 
-          await fetch(`http://${DEFAULT_PING_TARGET}`, {
+          await fetch(DEFAULT_PING_TARGET, {
             method: 'HEAD',
             signal: controller.signal,
             cache: 'no-cache',
@@ -138,6 +142,7 @@ export class NetworkDetector {
 
           clearTimeout(timeout);
           const latency = Date.now() - fallbackStart;
+          console.log('[NetworkDetector] Fallback latency test succeeded:', latency, 'ms');
 
           return {
             value: latency,
@@ -145,7 +150,8 @@ export class NetworkDetector {
             target: DEFAULT_PING_TARGET,
             timestamp: Date.now(),
           };
-        } catch {
+        } catch (fallbackError) {
+          console.error('[NetworkDetector] Fallback latency test also failed:', fallbackError instanceof Error ? fallbackError.message : fallbackError);
           // 两次都失败，返回超时
           return {
             value: 9999,
@@ -157,6 +163,7 @@ export class NetworkDetector {
       }
 
       // 超时或失败
+      console.error('[NetworkDetector] Latency test timed out');
       return {
         value: 9999,
         status: 'timeout',
