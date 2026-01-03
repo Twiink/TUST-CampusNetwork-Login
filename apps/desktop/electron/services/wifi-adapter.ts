@@ -213,7 +213,6 @@ export class DesktopWifiAdapter implements WifiAdapter {
    */
   private async getWindowsWifiInfo(): Promise<WifiInfo | null> {
     try {
-      console.log('[WiFiAdapter] Executing: netsh wlan show interfaces with UTF-8 encoding');
       // 使用 chcp 65001 切换到 UTF-8 编码，避免中文乱码
       const { stdout, stderr } = await execAsync('chcp 65001 >nul && netsh wlan show interfaces', {
         encoding: 'buffer',  // 先获取原始 buffer
@@ -221,43 +220,30 @@ export class DesktopWifiAdapter implements WifiAdapter {
 
       // 手动使用 UTF-8 解码
       const output = stdout.toString('utf8');
-      console.log('[WiFiAdapter] Command output length:', output.length);
-      console.log('[WiFiAdapter] First 500 chars:', output.substring(0, 500));
 
       // 使用正则分割行，同时处理 \r\n 和 \n
       const lines = output.split(/\r?\n/);
       const data: Record<string, string> = {};
-      console.log('[WiFiAdapter] Total lines:', lines.length);
 
       for (const line of lines) {
         // 去除首尾空白
         const trimmedLine = line.trim();
-
-        // 打印前几行来调试
-        if (lines.indexOf(line) < 15) {
-          console.log(`[WiFiAdapter] Line ${lines.indexOf(line)}: "${trimmedLine}" (original length: ${line.length})`);
-        }
 
         // 匹配键值对格式：Key : Value
         const match = trimmedLine.match(/^([^:]+?)\s*:\s*(.+)$/);
         if (match) {
           const key = match[1].trim().toLowerCase();
           const value = match[2].trim();
-          console.log(`[WiFiAdapter] Matched: key="${key}", value="${value}"`);
           data[key] = value;
         }
       }
 
-      console.log('[WiFiAdapter] Parsed data keys:', Object.keys(data));
-
       // SSID（支持中英文）
       const ssid = data['ssid'] || data['名称'] || '';
-      console.log('[WiFiAdapter] SSID:', ssid);
 
       // 如果 SSID 是乱码，尝试使用不带 chcp 的命令重新获取
       let finalSsid = ssid;
       if (!ssid || ssid.includes('�') || /[\x00-\x1F\x7F]/.test(ssid)) {
-        console.log('[WiFiAdapter] SSID seems corrupted, trying alternative method...');
         try {
           // 使用 GBK 编码重新获取 SSID
           const { stdout: rawOutput } = await execAsync('netsh wlan show interfaces', {
@@ -267,7 +253,6 @@ export class DesktopWifiAdapter implements WifiAdapter {
           const ssidMatch = gbkOutput.match(/^\s*SSID\s*:\s*(.+)$/m);
           if (ssidMatch && ssidMatch[1]) {
             finalSsid = ssidMatch[1].trim();
-            console.log('[WiFiAdapter] SSID from GBK:', finalSsid);
           }
         } catch (err) {
           console.error('[WiFiAdapter] Failed to get SSID with GBK encoding:', err);
@@ -275,7 +260,6 @@ export class DesktopWifiAdapter implements WifiAdapter {
       }
 
       if (!finalSsid) {
-        console.log('[WiFiAdapter] No SSID found, returning null');
         return null;
       }
 
@@ -289,7 +273,6 @@ export class DesktopWifiAdapter implements WifiAdapter {
       const receiveRate = parseFloat(receiveRateStr) || 0;
       const transmitRate = parseFloat(transmitRateStr) || 0;
       const linkSpeed = Math.max(receiveRate, transmitRate);
-      console.log('[WiFiAdapter] Link speed - Receive:', receiveRate, 'Transmit:', transmitRate, 'Max:', linkSpeed);
 
       // 信道：Channel - 支持中英文
       const channelStr = data['channel'] || data['信道'] || '0';

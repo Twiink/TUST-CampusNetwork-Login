@@ -121,8 +121,20 @@ function createWindow() {
   });
 
   // Test active push message to Renderer-process.
-  win.webContents.on('did-finish-load', () => {
+  win.webContents.on('did-finish-load', async () => {
     win?.webContents.send('main-process-message', new Date().toLocaleString());
+
+    // 窗口加载完成后，立即获取并发送当前网络状态
+    // 避免用户看到长时间的"未连接"状态
+    if (services) {
+      try {
+        const currentStatus = await services.networkDetector.getNetworkStatus();
+        win?.webContents.send('event:network:statusChanged', currentStatus);
+        services.logger.info('窗口加载完成，已发送初始网络状态');
+      } catch (error) {
+        services.logger.error('获取初始网络状态失败', error);
+      }
+    }
   });
 
   if (VITE_DEV_SERVER_URL) {
@@ -264,9 +276,9 @@ app.whenReady().then(async () => {
       }
     );
 
-    // 启动后台服务（带自动重连）
+    // 启动后台服务（带自动重连和心跳检测设置）
     const pollingInterval = settings.pollingInterval * 1000;
-    startBackgroundServices(services, pollingInterval, autoReconnectService);
+    startBackgroundServices(services, pollingInterval, autoReconnectService, settings.enableHeartbeat);
 
     // 创建窗口
     createWindow();

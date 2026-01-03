@@ -21,6 +21,12 @@ import {
   Network,
   Shield,
   RefreshCw,
+  Globe2,
+  MonitorSmartphone,
+  Router,
+  Cpu,
+  Radio,
+  Lock,
 } from 'lucide-react';
 
 // 检测是否为深色模式
@@ -89,6 +95,7 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
 
   const signal = getSignalIcon(signalStrength);
   const latencyValue = latency?.value || 9999;
+  const latencySource = latency?.source || '';
   const latencyStatusInfo = getLatencyStatus(latencyValue);
   const linkSpeedStatus = getLinkSpeedStatus(linkSpeed);
 
@@ -188,7 +195,14 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
         >
           <Activity size={16} color={latencyStatusInfo.color} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>网络延迟</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              网络延迟
+              {latencySource && (
+                <span style={{ marginLeft: 4, fontSize: '0.7rem', opacity: 0.7 }}>
+                  ({latencySource})
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: '0.95rem', fontWeight: 600, color: latencyStatusInfo.color }}>
               {latencyValue === 9999 ? '超时' : `${latencyValue}ms · ${latencyStatusInfo.text}`}
             </div>
@@ -240,100 +254,222 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
       {(networkStatus.ip || networkStatus.mac || networkStatus.bssid || networkStatus.security) && (
         <div
           style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: '1px solid rgba(0, 0, 0, 0.1)',
+            marginTop: 16,
           }}
         >
           <div
             style={{
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              color: 'var(--text-secondary)',
+              marginBottom: 12,
+            }}
+          >
+            网络详情
+          </div>
+          <div
+            style={{
               display: 'grid',
-              gridTemplateColumns: '1fr',
+              gridTemplateColumns: 'repeat(2, 1fr)',
               gap: 8,
               fontSize: '0.85rem',
             }}
           >
             {networkStatus.ip && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>IPv4:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.ip}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Globe2 size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>IPv4 地址</span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {networkStatus.ip}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.ipv6 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>IPv6:</span>
-                <span
-                  style={{
-                    color: 'var(--text-primary)',
-                    fontFamily: 'monospace',
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  {networkStatus.ipv6}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Globe size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>IPv6 地址</span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.75rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                    title={networkStatus.ipv6}
+                  >
+                    {networkStatus.ipv6}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.mac && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>MAC:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.mac}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <MonitorSmartphone size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>MAC 地址</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {networkStatus.mac}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.gateway && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>网关:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.gateway}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Router size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>默认网关</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {networkStatus.gateway}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.dns && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>DNS:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.dns}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Server size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>DNS 服务器</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {networkStatus.dns}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.subnetMask && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Network size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>子网掩码:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.subnetMask}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Network size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>子网掩码</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {networkStatus.subnetMask}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.bssid && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Wifi size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>BSSID:</span>
-                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
-                  {networkStatus.bssid}
-                </span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Cpu size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>BSSID</span>
+                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                    {networkStatus.bssid}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.channel && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Wifi size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>信道:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{networkStatus.channel}</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Radio size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>WiFi 信道</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                    {networkStatus.channel}
+                  </span>
+                </div>
               </div>
             )}
             {networkStatus.security && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Shield size={14} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>安全类型:</span>
-                <span style={{ color: 'var(--text-primary)' }}>{networkStatus.security}</span>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Lock size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>安全类型</span>
+                  <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                    {networkStatus.security}
+                  </span>
+                </div>
               </div>
             )}
           </div>
@@ -345,9 +481,17 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
 
 export const Home: React.FC = () => {
   const { networkStatus, ipAddress, login, logout, config } = useApp();
-  const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading } = useNetwork();
+  const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
+    useNetwork();
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // 显示toast提示
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // 手动刷新WiFi信息
   const handleRefresh = async () => {
@@ -362,8 +506,10 @@ export const Home: React.FC = () => {
 
     try {
       await fetchStatus();
+      showToast('WiFi 信息已更新', 'success');
     } catch (error) {
       console.error('Failed to refresh WiFi info:', error);
+      showToast('刷新失败，请重试', 'error');
     } finally {
       // 确保至少显示1秒的加载动画
       setTimeout(() => {
@@ -406,6 +552,35 @@ export const Home: React.FC = () => {
         return '#ef4444';
     }
   };
+
+  // 优先级 0：如果还在初始检测，显示加载状态
+  if (!initialCheckDone || (wifiConnected && loading)) {
+    return (
+      <div className="page-home">
+        <h1 className="page-title">
+          <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          运行状态
+        </h1>
+
+        <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <Loader
+            size={64}
+            color="var(--primary-color)"
+            style={{
+              marginBottom: 24,
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <h2 style={{ margin: '0 0 12px 0', color: 'var(--text-primary)' }}>
+            {!initialCheckDone ? '正在检测 WiFi 连接...' : '正在获取 WiFi 详情...'}
+          </h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+            {!initialCheckDone ? '请稍候，正在检查网络连接状态' : '正在获取网络配置信息，请稍候'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // 第一优先级：检查 WiFi 连接状态（无论是否配置账户）
   if (!wifiConnected) {
@@ -755,6 +930,34 @@ export const Home: React.FC = () => {
         </div>
       )}
 
+      {/* Toast 提示 */}
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            backgroundColor: toast.type === 'success' ? '#22c55e' : '#ef4444',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            animation: 'slideInRight 0.3s ease-out',
+            zIndex: 1000,
+          }}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 size={18} />
+          ) : (
+            <AlertCircle size={18} />
+          )}
+          <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{toast.message}</span>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }
@@ -766,6 +969,16 @@ export const Home: React.FC = () => {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.5; }
+        }
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
       `}</style>
     </div>

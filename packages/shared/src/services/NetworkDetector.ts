@@ -14,12 +14,12 @@ import { httpGet, isUrlReachable } from '../utils/httpClient';
 import type { WifiAdapter } from './WifiAdapter';
 
 /**
- * 网络探测 URL
+ * 网络探测 URL（使用国内服务）
  */
 const CONNECTIVITY_CHECK_URLS = [
-  'http://www.gstatic.com/generate_204',
+  'https://www.baidu.com',
+  'https://www.speedtest.cn',
   'http://connectivitycheck.platform.hicloud.com/generate_204',
-  'http://connect.rom.miui.com/generate_204',
 ];
 
 /**
@@ -28,9 +28,14 @@ const CONNECTIVITY_CHECK_URLS = [
 const AUTH_CHECK_URL = 'http://10.10.102.50:801/eportal/portal/page/checkstatus';
 
 /**
- * 默认 Ping 目标（使用 Google 的连通性检测服务）
+ * 默认 Ping 目标（使用百度）
  */
-const DEFAULT_PING_TARGET = 'http://www.gstatic.com/generate_204';
+const DEFAULT_PING_TARGET = 'https://www.baidu.com';
+
+/**
+ * 备用 Ping 目标（测速网）
+ */
+const FALLBACK_PING_TARGET = 'https://www.speedtest.cn';
 
 /**
  * 联网探测服务类
@@ -94,21 +99,43 @@ export class NetworkDetector {
 
   /**
    * 测量网络延迟（Ping）
-   * 优先测试认证服务器，失败则测试公共 DNS
-   * @param target 测试目标（可选）
+   * 使用国内服务：百度 → 测速网
    * @returns 延迟测试结果
    */
-  async measureLatency(target?: string): Promise<LatencyResult> {
+  async measureLatency(): Promise<LatencyResult> {
+    // 先尝试百度
+    const baiduResult = await this.testSingleTarget(DEFAULT_PING_TARGET, '百度');
+    if (baiduResult.status !== 'timeout') {
+      return baiduResult;
+    }
+
+    // 百度失败，尝试测速网
+    const speedtestResult = await this.testSingleTarget(FALLBACK_PING_TARGET, '测速网');
+    if (speedtestResult.status !== 'timeout') {
+      return speedtestResult;
+    }
+
+    // 都失败了，返回超时
+    return {
+      value: 9999,
+      status: 'timeout',
+      target: DEFAULT_PING_TARGET,
+      source: '百度',
+      timestamp: Date.now(),
+    };
+  }
+
+  /**
+   * 测试单个目标的延迟
+   */
+  private async testSingleTarget(target: string, source: string): Promise<LatencyResult> {
     const startTime = Date.now();
-    const testTarget = target || AUTH_CHECK_URL;
 
     try {
-      console.log('[NetworkDetector] Testing latency to:', testTarget);
-      // 尝试 HTTP 请求来模拟 ping
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
 
-      await fetch(testTarget, {
+      await fetch(target, {
         method: 'HEAD',
         signal: controller.signal,
         cache: 'no-cache',
@@ -116,58 +143,20 @@ export class NetworkDetector {
 
       clearTimeout(timeout);
       const latency = Date.now() - startTime;
-      console.log('[NetworkDetector] Latency test succeeded:', latency, 'ms');
 
       return {
         value: latency,
         status: this.getLatencyStatus(latency),
-        target: testTarget,
+        target,
+        source,
         timestamp: Date.now(),
       };
     } catch (error) {
-      console.log('[NetworkDetector] Primary latency test failed:', error instanceof Error ? error.message : error);
-      // 如果第一次失败，尝试备用连通性检测服务
-      if (testTarget === AUTH_CHECK_URL) {
-        try {
-          console.log('[NetworkDetector] Trying fallback target:', DEFAULT_PING_TARGET);
-          const fallbackStart = Date.now();
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5000);
-
-          await fetch(DEFAULT_PING_TARGET, {
-            method: 'HEAD',
-            signal: controller.signal,
-            cache: 'no-cache',
-          });
-
-          clearTimeout(timeout);
-          const latency = Date.now() - fallbackStart;
-          console.log('[NetworkDetector] Fallback latency test succeeded:', latency, 'ms');
-
-          return {
-            value: latency,
-            status: this.getLatencyStatus(latency),
-            target: DEFAULT_PING_TARGET,
-            timestamp: Date.now(),
-          };
-        } catch (fallbackError) {
-          console.error('[NetworkDetector] Fallback latency test also failed:', fallbackError instanceof Error ? fallbackError.message : fallbackError);
-          // 两次都失败，返回超时
-          return {
-            value: 9999,
-            status: 'timeout',
-            target: DEFAULT_PING_TARGET,
-            timestamp: Date.now(),
-          };
-        }
-      }
-
-      // 超时或失败
-      console.error('[NetworkDetector] Latency test timed out');
       return {
         value: 9999,
         status: 'timeout',
-        target: testTarget,
+        target,
+        source,
         timestamp: Date.now(),
       };
     }
@@ -209,10 +198,8 @@ export class NetworkDetector {
     // 如果有 WiFi 适配器，获取 WiFi 详细信息
     if (this.wifiAdapter) {
       try {
-        console.log('[NetworkDetector] Getting WiFi details...');
         // 使用 getWifiDetails() 而不是直接调用适配器，这样会包含延迟测试
         const wifiDetails = await this.getWifiDetails();
-        console.log('[NetworkDetector] WiFi details:', wifiDetails);
         if (wifiDetails) {
           return {
             connected,
@@ -233,14 +220,10 @@ export class NetworkDetector {
             channel: wifiDetails.channel,
             security: wifiDetails.security,
           };
-        } else {
-          console.log('[NetworkDetector] WiFi details is null, returning basic status');
         }
       } catch (error) {
         console.error('[NetworkDetector] Failed to get WiFi details:', error);
       }
-    } else {
-      console.log('[NetworkDetector] No WiFi adapter configured');
     }
 
     // 如果没有 WiFi 适配器或获取失败，返回基本状态

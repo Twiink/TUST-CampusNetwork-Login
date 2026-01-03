@@ -23,7 +23,7 @@ export function registerNetworkIPC(
       return await networkDetector.getNetworkStatus();
     } catch (error) {
       logger.error('获取网络状态失败', error);
-      return { connected: false, authenticated: false };
+      return { connected: false, authenticated: false, wifiConnected: false };
     }
   });
 
@@ -82,24 +82,33 @@ export function startNetworkPolling(
   networkDetector: NetworkDetector,
   logger: ReturnType<typeof createLogger>,
   intervalMs: number = 30000,
-  autoReconnectService?: AutoReconnectService
+  autoReconnectService?: AutoReconnectService,
+  enableHeartbeat: boolean = false
 ) {
-  networkDetector.startPolling(
-    async (status) => {
-      // 广播给所有窗口
-      BrowserWindow.getAllWindows().forEach((win) => {
-        win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);
-      });
+  // 定义状态处理回调
+  const statusCallback = async (status: any) => {
+    // 广播给所有窗口
+    BrowserWindow.getAllWindows().forEach((win) => {
+      win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);
+    });
 
-      // 如果有自动重连服务，处理状态变化
-      if (autoReconnectService) {
-        await autoReconnectService.handleStatusChange(status);
-      }
-    },
-    { interval: intervalMs, immediate: true }
-  );
+    // 如果有自动重连服务，处理状态变化
+    if (autoReconnectService) {
+      await autoReconnectService.handleStatusChange(status);
+    }
+  };
 
-  logger.info(`网络状态轮询已启动 (间隔: ${intervalMs / 1000}s)`);
+  if (enableHeartbeat) {
+    // 启动持续轮询
+    networkDetector.startPolling(statusCallback, { interval: intervalMs, immediate: true });
+    logger.info(`网络状态轮询已启动 (间隔: ${intervalMs / 1000}s)`);
+  } else {
+    // 只执行一次检测
+    networkDetector.getNetworkStatus().then(statusCallback).catch((err) => {
+      logger.error('获取初始网络状态失败', err);
+    });
+    logger.info('网络状态已检测（心跳检测已关闭）');
+  }
 }
 
 /**

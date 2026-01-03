@@ -62,13 +62,15 @@ export function registerAllIPC(services: AppServices): void {
 export function startBackgroundServices(
   services: AppServices,
   pollingInterval: number = 30000,
-  autoReconnectService?: AutoReconnectService
+  autoReconnectService?: AutoReconnectService,
+  enableHeartbeat: boolean = false
 ): void {
   startNetworkPolling(
     services.networkDetector,
     services.logger,
     pollingInterval,
-    autoReconnectService
+    autoReconnectService,
+    enableHeartbeat
   );
 }
 

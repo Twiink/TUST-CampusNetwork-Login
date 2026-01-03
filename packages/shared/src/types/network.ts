@@ -22,6 +22,8 @@ export interface LatencyResult {
   status: LatencyStatus;
   /** 测试目标地址 */
   target: string;
+  /** 数据来源标识（如："校园网服务器"、"百度"、"测速网"） */
+  source: string;
   /** 测试时间戳 */
   timestamp: number;
 }
