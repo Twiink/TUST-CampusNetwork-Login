@@ -36,36 +36,58 @@ export async function getCurrentWifiSSID(): Promise<WifiStatus> {
 }
 
 /**
- * macOS: 使用 airport 命令获取 SSID
+ * macOS: 使用 system_profiler 命令获取 SSID
  */
 async function getMacOSWifiSSID(): Promise<WifiStatus> {
   try {
-    // 方法1: 使用 airport 命令（更可靠）
+    // 方法1: 使用 system_profiler（推荐，在新版 macOS 上稳定可靠）
     const { stdout } = await execAsync(
-      '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I'
+      'system_profiler SPAirPortDataType 2>/dev/null',
+      { timeout: 5000 }
     );
 
-    // 解析输出，查找 SSID 行
-    const ssidMatch = stdout.match(/\s+SSID:\s*(.+)/);
-    if (ssidMatch && ssidMatch[1]) {
-      const ssid = ssidMatch[1].trim();
-      return { connected: true, ssid };
+    // 解析输出，查找当前网络信息
+    const lines = stdout.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // 检测 "Current Network Information:" 标记
+      if (line.includes('Current Network Information:')) {
+        // 下一行通常是 SSID（以冒号结尾）
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1].trim();
+          const ssidMatch = nextLine.match(/^([^:]+):$/);
+          if (ssidMatch) {
+            const ssid = ssidMatch[1].trim();
+            return { connected: true, ssid };
+          }
+        }
+        break;
+      }
     }
 
-    return { connected: false, ssid: null };
+    // 如果 system_profiler 未找到 SSID，尝试备选方法
+    return await getMacOSWifiSSIDFallback();
   } catch {
-    // 备选方法: networksetup
-    try {
-      const { stdout } = await execAsync('networksetup -getairportnetwork en0');
-      const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
-      if (match && match[1]) {
-        return { connected: true, ssid: match[1].trim() };
-      }
-    } catch {
-      // 忽略错误
-    }
-    return { connected: false, ssid: null };
+    // 如果 system_profiler 失败，尝试备选方法
+    return await getMacOSWifiSSIDFallback();
   }
+}
+
+/**
+ * macOS: 备选方法获取 SSID
+ */
+async function getMacOSWifiSSIDFallback(): Promise<WifiStatus> {
+  try {
+    const { stdout } = await execAsync('networksetup -getairportnetwork en0');
+    const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
+    if (match && match[1]) {
+      return { connected: true, ssid: match[1].trim() };
+    }
+  } catch {
+    // 忽略错误
+  }
+  return { connected: false, ssid: null };
 }
 
 /**
