@@ -17,23 +17,20 @@ export function registerTrayIPC(
   /**
    * 更新托盘状态
    */
-  ipcMain.handle(
-    IPC_CHANNELS.TRAY_SET_STATUS,
-    async (_, status: TrayStatus): Promise<boolean> => {
-      try {
-        const trayService = getTrayService();
-        if (trayService) {
-          trayService.setStatus(status);
-          logger.debug(`托盘状态已更新: ${status}`);
-          return true;
-        }
-        return false;
-      } catch (error) {
-        logger.error('更新托盘状态失败', error);
-        return false;
+  ipcMain.handle(IPC_CHANNELS.TRAY_SET_STATUS, async (_, status: TrayStatus): Promise<boolean> => {
+    try {
+      const trayService = getTrayService();
+      if (trayService) {
+        trayService.setStatus(status);
+        logger.debug(`托盘状态已更新: ${status}`);
+        return true;
       }
+      return false;
+    } catch (error) {
+      logger.error('更新托盘状态失败', error);
+      return false;
     }
-  );
+  });
 
   /**
    * 获取托盘状态

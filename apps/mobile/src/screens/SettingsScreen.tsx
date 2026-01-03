@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Switch } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  Switch,
+} from 'react-native';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { GlassView } from '../components/GlassView';
@@ -78,9 +86,12 @@ export const SettingsScreen: React.FC = () => {
       ...config,
       accounts: updatedAccounts,
       wifiList: updatedWifiList,
-      currentAccountId: config.currentAccountId === id
-        ? (updatedAccounts.length > 0 ? updatedAccounts[0].id : null)
-        : config.currentAccountId
+      currentAccountId:
+        config.currentAccountId === id
+          ? updatedAccounts.length > 0
+            ? updatedAccounts[0].id
+            : null
+          : config.currentAccountId,
     });
   };
 
@@ -115,7 +126,7 @@ export const SettingsScreen: React.FC = () => {
   const handleRemoveWifi = (id: string) => {
     setConfig({
       ...config,
-      wifiList: config.wifiList.filter((w) => w.id !== id),
+      wifiList: config.wifiList.filter(w => w.id !== id),
     });
   };
 
@@ -127,7 +138,7 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const getISPLabel = (isp: ISP) => {
-    return ISP_OPTIONS.find((opt) => opt.value === isp)?.label || isp;
+    return ISP_OPTIONS.find(opt => opt.value === isp)?.label || isp;
   };
 
   return (
@@ -145,22 +156,18 @@ export const SettingsScreen: React.FC = () => {
           <Text style={[styles.cardHeader, { color: theme.colors.text }]}>通用设置</Text>
 
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-              开机自动启动
-            </Text>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>开机自动启动</Text>
             <Switch
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={config.settings.autoLaunch ? theme.colors.primary : '#f4f3f4'}
               value={config.settings.autoLaunch}
-              onValueChange={(v) => toggleSetting('autoLaunch', v)}
+              onValueChange={v => toggleSetting('autoLaunch', v)}
             />
           </View>
 
           <View style={styles.settingRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                启用心跳检测
-              </Text>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>启用心跳检测</Text>
               <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
                 自动检测网络连接状态
               </Text>
@@ -169,31 +176,27 @@ export const SettingsScreen: React.FC = () => {
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={config.settings.enableHeartbeat ? theme.colors.primary : '#f4f3f4'}
               value={config.settings.enableHeartbeat}
-              onValueChange={(v) => toggleSetting('enableHeartbeat', v)}
+              onValueChange={v => toggleSetting('enableHeartbeat', v)}
             />
           </View>
 
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-              断线自动重连
-            </Text>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>断线自动重连</Text>
             <Switch
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={config.settings.autoReconnect ? theme.colors.primary : '#f4f3f4'}
               value={config.settings.autoReconnect}
-              onValueChange={(v) => toggleSetting('autoReconnect', v)}
+              onValueChange={v => toggleSetting('autoReconnect', v)}
             />
           </View>
 
           <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-              显示通知
-            </Text>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>显示通知</Text>
             <Switch
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={config.settings.showNotification ? theme.colors.primary : '#f4f3f4'}
               value={config.settings.showNotification}
-              onValueChange={(v) => toggleSetting('showNotification', v)}
+              onValueChange={v => toggleSetting('showNotification', v)}
             />
           </View>
 
@@ -223,7 +226,7 @@ export const SettingsScreen: React.FC = () => {
                     },
                   ]}
                   value={String(config.settings.pollingInterval)}
-                  onChangeText={(text) => {
+                  onChangeText={text => {
                     const value = parseInt(text) || 5;
                     if (value >= 5 && value <= 300) {
                       toggleSetting('pollingInterval', value);
@@ -258,7 +261,7 @@ export const SettingsScreen: React.FC = () => {
                     },
                   ]}
                   value={String(config.settings.maxRetries)}
-                  onChangeText={(text) => {
+                  onChangeText={text => {
                     const value = parseInt(text) || 0;
                     if (value >= 0 && value <= 10) {
                       toggleSetting('maxRetries', value);
@@ -279,13 +282,10 @@ export const SettingsScreen: React.FC = () => {
           <Text style={[styles.cardHeader, { color: theme.colors.text }]}>账号管理</Text>
 
           <View style={{ marginBottom: 20 }}>
-            {config.accounts.map((acc) => (
+            {config.accounts.map(acc => (
               <View
                 key={acc.id}
-                style={[
-                  styles.accountItem,
-                  { borderBottomColor: theme.colors.border + '20' },
-                ]}
+                style={[styles.accountItem, { borderBottomColor: theme.colors.border + '20' }]}
               >
                 <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -337,16 +337,11 @@ export const SettingsScreen: React.FC = () => {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[
-                      styles.deleteBtn,
-                      { backgroundColor: theme.colors.danger + '20' },
-                    ]}
+                    style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                     onPress={() => handleRemoveAccount(acc.id)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>
-                      删除
-                    </Text>
+                    <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>删除</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -367,7 +362,7 @@ export const SettingsScreen: React.FC = () => {
                 },
               ]}
               value={newAccount.username}
-              onChangeText={(t) => setNewAccount({ ...newAccount, username: t })}
+              onChangeText={t => setNewAccount({ ...newAccount, username: t })}
               placeholder="请输入学号/用户名"
               placeholderTextColor={theme.colors.textSecondary}
             />
@@ -385,7 +380,7 @@ export const SettingsScreen: React.FC = () => {
                 },
               ]}
               value={newAccount.password}
-              onChangeText={(t) => setNewAccount({ ...newAccount, password: t })}
+              onChangeText={t => setNewAccount({ ...newAccount, password: t })}
               placeholder="请输入密码"
               placeholderTextColor={theme.colors.textSecondary}
               secureTextEntry
@@ -395,7 +390,7 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.formGroup}>
             <Text style={[styles.label, { color: theme.colors.textSecondary }]}>服务商</Text>
             <View style={styles.ispGrid}>
-              {ISP_OPTIONS.map((opt) => (
+              {ISP_OPTIONS.map(opt => (
                 <TouchableOpacity
                   key={opt.value}
                   style={[
@@ -430,9 +425,7 @@ export const SettingsScreen: React.FC = () => {
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-              服务器地址
-            </Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>服务器地址</Text>
             <TextInput
               style={[
                 styles.formControl,
@@ -443,7 +436,7 @@ export const SettingsScreen: React.FC = () => {
                 },
               ]}
               value={newAccount.serverUrl}
-              onChangeText={(t) => setNewAccount({ ...newAccount, serverUrl: t })}
+              onChangeText={t => setNewAccount({ ...newAccount, serverUrl: t })}
               placeholder="http://..."
               placeholderTextColor={theme.colors.textSecondary}
             />
@@ -467,38 +460,81 @@ export const SettingsScreen: React.FC = () => {
         {/* WiFi Configuration Card */}
         <GlassView style={styles.card}>
           <Text style={[styles.cardHeader, { color: theme.colors.text }]}>WiFi 配置</Text>
-          <Text style={[styles.settingDesc, { color: theme.colors.textSecondary, marginBottom: 16 }]}>
+          <Text
+            style={[styles.settingDesc, { color: theme.colors.textSecondary, marginBottom: 16 }]}
+          >
             配置需要自动连接的 WiFi 网络。启用心跳检测后，断线时会按优先级尝试切换网络。
           </Text>
 
           <View style={{ marginBottom: 20 }}>
             {config.wifiList.length === 0 ? (
-              <View style={{ padding: 20, alignItems: 'center', backgroundColor: theme.colors.cardBg + '40', borderRadius: 16 }}>
+              <View
+                style={{
+                  padding: 20,
+                  alignItems: 'center',
+                  backgroundColor: theme.colors.cardBg + '40',
+                  borderRadius: 16,
+                }}
+              >
                 <Text style={{ color: theme.colors.textSecondary }}>暂无 WiFi 配置</Text>
               </View>
             ) : (
               config.wifiList.map((wifi, index) => {
                 const linkedAccount = config.accounts.find(a => a.id === wifi.linkedAccountId);
                 return (
-                  <View key={wifi.id} style={[styles.accountItem, { borderBottomColor: theme.colors.border + '20' }]}>
+                  <View
+                    key={wifi.id}
+                    style={[styles.accountItem, { borderBottomColor: theme.colors.border + '20' }]}
+                  >
                     <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginBottom: 4 }}>
-                        <Text style={[styles.accountName, { color: theme.colors.text, marginRight: 8 }]}>{wifi.ssid}</Text>
-                        <View style={[styles.ispBadge, {
-                          backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
-                          borderColor: 'transparent'
-                        }]}>
-                          <Text style={[styles.ispBadgeText, { color: wifi.requiresAuth ? '#92400e' : '#065f46' }]}>
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          marginBottom: 4,
+                        }}
+                      >
+                        <Text
+                          style={[styles.accountName, { color: theme.colors.text, marginRight: 8 }]}
+                        >
+                          {wifi.ssid}
+                        </Text>
+                        <View
+                          style={[
+                            styles.ispBadge,
+                            {
+                              backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
+                              borderColor: 'transparent',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.ispBadgeText,
+                              { color: wifi.requiresAuth ? '#92400e' : '#065f46' },
+                            ]}
+                          >
                             {wifi.requiresAuth ? '需要认证' : '无需认证'}
                           </Text>
                         </View>
-                        <View style={[styles.ispBadge, { backgroundColor: '#f3f4f6', borderColor: 'transparent' }]}>
-                          <Text style={[styles.ispBadgeText, { color: '#6b7280' }]}>优先级 {index + 1}</Text>
+                        <View
+                          style={[
+                            styles.ispBadge,
+                            { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
+                          ]}
+                        >
+                          <Text style={[styles.ispBadgeText, { color: '#6b7280' }]}>
+                            优先级 {index + 1}
+                          </Text>
                         </View>
                       </View>
                       {wifi.requiresAuth && (
                         <Text style={[styles.accountUrl, { color: theme.colors.textSecondary }]}>
-                          关联账号: {linkedAccount ? `${linkedAccount.username} (${getISPLabel(linkedAccount.isp)})` : '未关联 (可能已删除)'}
+                          关联账号:{' '}
+                          {linkedAccount
+                            ? `${linkedAccount.username} (${getISPLabel(linkedAccount.isp)})`
+                            : '未关联 (可能已删除)'}
                         </Text>
                       )}
                     </View>
@@ -506,7 +542,9 @@ export const SettingsScreen: React.FC = () => {
                       style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                       onPress={() => handleRemoveWifi(wifi.id)}
                     >
-                      <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>删除</Text>
+                      <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>
+                        删除
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 );
@@ -517,11 +555,20 @@ export const SettingsScreen: React.FC = () => {
           <Text style={[styles.subHeader, { color: theme.colors.text }]}>添加 WiFi</Text>
 
           <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>WiFi 名称 (SSID)</Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              WiFi 名称 (SSID)
+            </Text>
             <TextInput
-              style={[styles.formControl, { borderColor: theme.colors.border + '40', backgroundColor: theme.colors.cardBg + '80', color: theme.colors.text }]}
+              style={[
+                styles.formControl,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
               value={newWifi.ssid}
-              onChangeText={(t) => setNewWifi({ ...newWifi, ssid: t })}
+              onChangeText={t => setNewWifi({ ...newWifi, ssid: t })}
               placeholder="请输入 WiFi 名称"
               placeholderTextColor={theme.colors.textSecondary}
             />
@@ -530,9 +577,16 @@ export const SettingsScreen: React.FC = () => {
           <View style={styles.formGroup}>
             <Text style={[styles.label, { color: theme.colors.textSecondary }]}>WiFi 密码</Text>
             <TextInput
-              style={[styles.formControl, { borderColor: theme.colors.border + '40', backgroundColor: theme.colors.cardBg + '80', color: theme.colors.text }]}
+              style={[
+                styles.formControl,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
               value={newWifi.password}
-              onChangeText={(t) => setNewWifi({ ...newWifi, password: t })}
+              onChangeText={t => setNewWifi({ ...newWifi, password: t })}
               placeholder="请输入 WiFi 密码（可选）"
               placeholderTextColor={theme.colors.textSecondary}
               secureTextEntry
@@ -541,7 +595,9 @@ export const SettingsScreen: React.FC = () => {
 
           <View style={styles.settingRow}>
             <View>
-              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>需要校园网认证</Text>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                需要校园网认证
+              </Text>
               <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
                 关闭则视为家庭/热点网络
               </Text>
@@ -550,7 +606,7 @@ export const SettingsScreen: React.FC = () => {
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={newWifi.requiresAuth ? theme.colors.primary : '#f4f3f4'}
               value={newWifi.requiresAuth}
-              onValueChange={(v) => setNewWifi({ ...newWifi, requiresAuth: v, linkedAccountId: '' })}
+              onValueChange={v => setNewWifi({ ...newWifi, requiresAuth: v, linkedAccountId: '' })}
             />
           </View>
 
@@ -558,7 +614,9 @@ export const SettingsScreen: React.FC = () => {
             <View style={styles.formGroup}>
               <Text style={[styles.label, { color: theme.colors.textSecondary }]}>关联账号</Text>
               {config.accounts.length === 0 ? (
-                <Text style={{ color: theme.colors.danger, fontSize: 14 }}>请先在上方「账号管理」添加账号</Text>
+                <Text style={{ color: theme.colors.danger, fontSize: 14 }}>
+                  请先在上方「账号管理」添加账号
+                </Text>
               ) : (
                 <View style={{ gap: 8 }}>
                   {config.accounts.map(acc => (
@@ -566,20 +624,49 @@ export const SettingsScreen: React.FC = () => {
                       key={acc.id}
                       style={[
                         styles.ispOption,
-                        { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', marginBottom: 8 },
-                        newWifi.linkedAccountId === acc.id ? { backgroundColor: theme.colors.primary + '20', borderColor: theme.colors.primary } : { borderColor: theme.colors.border + '40', backgroundColor: theme.colors.cardBg + '60' }
+                        {
+                          width: '100%',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          marginBottom: 8,
+                        },
+                        newWifi.linkedAccountId === acc.id
+                          ? {
+                              backgroundColor: theme.colors.primary + '20',
+                              borderColor: theme.colors.primary,
+                            }
+                          : {
+                              borderColor: theme.colors.border + '40',
+                              backgroundColor: theme.colors.cardBg + '60',
+                            },
                       ]}
                       onPress={() => setNewWifi({ ...newWifi, linkedAccountId: acc.id })}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.ispOptionText, { color: newWifi.linkedAccountId === acc.id ? theme.colors.primary : theme.colors.textSecondary }]}>
+                      <Text
+                        style={[
+                          styles.ispOptionText,
+                          {
+                            color:
+                              newWifi.linkedAccountId === acc.id
+                                ? theme.colors.primary
+                                : theme.colors.textSecondary,
+                          },
+                        ]}
+                      >
                         {acc.username}
                       </Text>
-                      <View style={[styles.ispBadge, {
-                        backgroundColor: theme.colors.primary + '20',
-                        borderColor: theme.colors.primary + '30',
-                        marginLeft: 8
-                      }]}>
+                      <View
+                        style={[
+                          styles.ispBadge,
+                          {
+                            backgroundColor: theme.colors.primary + '20',
+                            borderColor: theme.colors.primary + '30',
+                            marginLeft: 8,
+                          },
+                        ]}
+                      >
                         <Text style={[styles.ispBadgeText, { color: theme.colors.primary }]}>
                           {getISPLabel(acc.isp)}
                         </Text>
@@ -596,7 +683,8 @@ export const SettingsScreen: React.FC = () => {
               styles.btnPrimary,
               {
                 backgroundColor: theme.colors.primary,
-                opacity: (newWifi.requiresAuth && !newWifi.linkedAccountId) || !newWifi.ssid ? 0.5 : 1
+                opacity:
+                  (newWifi.requiresAuth && !newWifi.linkedAccountId) || !newWifi.ssid ? 0.5 : 1,
               },
             ]}
             onPress={handleAddWifi}

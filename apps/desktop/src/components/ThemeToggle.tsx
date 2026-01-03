@@ -1,21 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface ThemeToggleProps {
-  value?: 'light' | 'dark'
-  size?: number
-  onChange?: (theme: 'light' | 'dark') => void
+  value?: 'light' | 'dark';
+  size?: number;
+  onChange?: (theme: 'light' | 'dark') => void;
 }
 
-const ThemeToggle: React.FC<ThemeToggleProps> = ({
-  value = 'light',
-  size = 3,
-  onChange
-}) => {
-  const [isDark, setIsDark] = useState(value === 'dark')
-  const [isClicked, setIsClicked] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const intervalRef = useRef<number | null>(null)
-  
+const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, onChange }) => {
+  const [isDark, setIsDark] = useState(value === 'dark');
+  const [isClicked, setIsClicked] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<number | null>(null);
+
   // Ref to hold DOM elements for direct manipulation
   const domRef = useRef<{
     mainButton: HTMLElement | null;
@@ -26,10 +22,10 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
     mainButton: null,
     daytimeBackground: null,
     cloudSons: null,
-    stars: null
-  })
+    stars: null,
+  });
 
-  const fontSize = `${(size / 3).toFixed(2)}px`
+  const fontSize = `${(size / 3).toFixed(2)}px`;
 
   // Coordinates from script.js
   const starHoverPos = [
@@ -38,8 +34,8 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
     { top: '26em', left: '16em' },
     { top: '38em', left: '63em' },
     { top: '20.5em', left: '72em' },
-    { top: '51.5em', left: '35em' }
-  ]
+    { top: '51.5em', left: '35em' },
+  ];
 
   const cloudHoverPos = [
     { right: '-24em', bottom: '10em' },
@@ -53,101 +49,110 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
     { right: '18em', bottom: '-42em' },
     { right: '47em', bottom: '-38em' },
     { right: '74em', bottom: '-64em' },
-    { right: '110em', bottom: '-55em' }
-  ]
+    { right: '110em', bottom: '-55em' },
+  ];
 
   const getRandomDirection = useCallback(() => {
-    const directions = ['2em', '-2em']
-    return directions[Math.floor(Math.random() * directions.length)]
-  }, [])
+    const directions = ['2em', '-2em'];
+    return directions[Math.floor(Math.random() * directions.length)];
+  }, []);
 
-  const moveElementRandomly = useCallback((element: HTMLElement) => {
-    const randomDirectionX = getRandomDirection()
-    const randomDirectionY = getRandomDirection()
-    element.style.transform = `translate(${randomDirectionX}, ${randomDirectionY})`
-  }, [getRandomDirection])
+  const moveElementRandomly = useCallback(
+    (element: HTMLElement) => {
+      const randomDirectionX = getRandomDirection();
+      const randomDirectionY = getRandomDirection();
+      element.style.transform = `translate(${randomDirectionX}, ${randomDirectionY})`;
+    },
+    [getRandomDirection]
+  );
 
   const clearInlineStyles = useCallback(() => {
-    const dom = domRef.current
-    if (!dom.mainButton) return
+    const dom = domRef.current;
+    if (!dom.mainButton) return;
 
-    dom.mainButton.style.transform = ''
-    dom.daytimeBackground?.forEach(el => el.style.transform = '')
-    dom.cloudSons?.forEach(el => {
-      el.style.right = ''
-      el.style.bottom = ''
-    })
-    dom.stars?.forEach(el => {
-      el.style.top = ''
-      el.style.left = ''
-    })
-  }, [])
+    dom.mainButton.style.transform = '';
+    dom.daytimeBackground?.forEach((el) => (el.style.transform = ''));
+    dom.cloudSons?.forEach((el) => {
+      el.style.right = '';
+      el.style.bottom = '';
+    });
+    dom.stars?.forEach((el) => {
+      el.style.top = '';
+      el.style.left = '';
+    });
+  }, []);
 
   const toggle = useCallback(() => {
-    setIsDark(prev => {
-      const newValue = !prev
-      const theme = newValue ? 'dark' : 'light'
-      onChange?.(theme)
-      return newValue
-    })
-    setIsClicked(true)
-    
+    setIsDark((prev) => {
+      const newValue = !prev;
+      const theme = newValue ? 'dark' : 'light';
+      onChange?.(theme);
+      return newValue;
+    });
+    setIsClicked(true);
+
     // Clear inline styles so CSS classes take over
-    clearInlineStyles()
+    clearInlineStyles();
 
-    setTimeout(() => setIsClicked(false), 500)
-  }, [onChange, clearInlineStyles])
+    setTimeout(() => setIsClicked(false), 500);
+  }, [onChange, clearInlineStyles]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isClicked || !domRef.current.mainButton) return
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isClicked || !domRef.current.mainButton) return;
 
-    const dom = domRef.current
+      const dom = domRef.current;
 
-    if (isDark) {
-      // Dark Mode Hover
-      dom.mainButton!.style.transform = "translateX(100em)"
-      if (dom.daytimeBackground) {
-        dom.daytimeBackground[0].style.transform = "translateX(100em)"
-        dom.daytimeBackground[1].style.transform = "translateX(73em)"
-        dom.daytimeBackground[2].style.transform = "translateX(46em)"
-      }
-
-      dom.stars?.forEach((star, i) => {
-        if (starHoverPos[i]) {
-          star.style.top = starHoverPos[i].top
-          star.style.left = starHoverPos[i].left
+      if (isDark) {
+        // Dark Mode Hover
+        dom.mainButton!.style.transform = 'translateX(100em)';
+        if (dom.daytimeBackground) {
+          dom.daytimeBackground[0].style.transform = 'translateX(100em)';
+          dom.daytimeBackground[1].style.transform = 'translateX(73em)';
+          dom.daytimeBackground[2].style.transform = 'translateX(46em)';
         }
-      })
-    } else {
-      // Light Mode Hover
-      dom.mainButton!.style.transform = "translateX(10em)"
-      if (dom.daytimeBackground) {
-        dom.daytimeBackground[0].style.transform = "translateX(10em)"
-        dom.daytimeBackground[1].style.transform = "translateX(7em)"
-        dom.daytimeBackground[2].style.transform = "translateX(4em)"
-      }
 
-      dom.cloudSons?.forEach((cloud, i) => {
-        if (cloudHoverPos[i]) {
-          cloud.style.right = cloudHoverPos[i].right
-          cloud.style.bottom = cloudHoverPos[i].bottom
+        dom.stars?.forEach((star, i) => {
+          if (starHoverPos[i]) {
+            star.style.top = starHoverPos[i].top;
+            star.style.left = starHoverPos[i].left;
+          }
+        });
+      } else {
+        // Light Mode Hover
+        dom.mainButton!.style.transform = 'translateX(10em)';
+        if (dom.daytimeBackground) {
+          dom.daytimeBackground[0].style.transform = 'translateX(10em)';
+          dom.daytimeBackground[1].style.transform = 'translateX(7em)';
+          dom.daytimeBackground[2].style.transform = 'translateX(4em)';
         }
-      })
-    }
-  }, [isClicked, isDark])
 
-  const handleMouseOut = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (isClicked) return
-    clearInlineStyles()
-  }, [isClicked, clearInlineStyles])
+        dom.cloudSons?.forEach((cloud, i) => {
+          if (cloudHoverPos[i]) {
+            cloud.style.right = cloudHoverPos[i].right;
+            cloud.style.bottom = cloudHoverPos[i].bottom;
+          }
+        });
+      }
+    },
+    [isClicked, isDark]
+  );
+
+  const handleMouseOut = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (isClicked) return;
+      clearInlineStyles();
+    },
+    [isClicked, clearInlineStyles]
+  );
 
   // Sync with external value
   useEffect(() => {
-    setIsDark(value === 'dark')
-    clearInlineStyles()
-  }, [value, clearInlineStyles])
+    setIsDark(value === 'dark');
+    clearInlineStyles();
+  }, [value, clearInlineStyles]);
 
   // Initialize DOM elements and Cloud floating animation
   useEffect(() => {
@@ -156,47 +161,44 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
         mainButton: containerRef.current.querySelector('.main-button'),
         daytimeBackground: containerRef.current.querySelectorAll('.daytime-background'),
         cloudSons: containerRef.current.querySelectorAll('.cloud-son'),
-        stars: containerRef.current.querySelectorAll('.star')
-      }
+        stars: containerRef.current.querySelectorAll('.star'),
+      };
 
-      const cloudSons = domRef.current.cloudSons
+      const cloudSons = domRef.current.cloudSons;
       if (cloudSons) {
         intervalRef.current = window.setInterval(() => {
-          cloudSons.forEach(moveElementRandomly)
-        }, 1000)
+          cloudSons.forEach(moveElementRandomly);
+        }, 1000);
       }
     }
 
     return () => {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+        clearInterval(intervalRef.current);
       }
-    }
-  }, [moveElementRandomly])
+    };
+  }, [moveElementRandomly]);
 
   // System theme listener
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
     const handleChange = (e: MediaQueryListEvent) => {
       if (e.matches !== isDark) {
-        toggle()
+        toggle();
       }
-    }
+    };
 
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [isDark, toggle])
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [isDark, toggle]);
 
   return (
     <div ref={containerRef} className="theme-toggle-container" style={{ fontSize }}>
       <style>{styles}</style>
-      <div
-        className={`components ${isDark ? 'dark' : ''}`}
-        onClick={toggle}
-      >
+      <div className={`components ${isDark ? 'dark' : ''}`} onClick={toggle}>
         {/* Sun/Moon Button */}
-        <div 
+        <div
           className={`main-button ${isDark ? 'dark' : ''}`}
           onMouseMove={handleMouseMove}
           onMouseOut={handleMouseOut}
@@ -236,8 +238,8 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
 const styles = `
   .theme-toggle-container * {
@@ -569,6 +571,6 @@ const styles = `
       #fff
     );
   }
-`
+`;
 
-export default ThemeToggle
+export default ThemeToggle;

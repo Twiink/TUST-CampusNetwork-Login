@@ -75,10 +75,7 @@ export class ConfigManager {
       if (config) {
         const validation = validateAppConfig(config);
         if (!validation.valid) {
-          throw new AppError(
-            ErrorCode.CONFIG_INVALID,
-            validation.errors.join('; ')
-          );
+          throw new AppError(ErrorCode.CONFIG_INVALID, validation.errors.join('; '));
         }
         this.config = config;
       }

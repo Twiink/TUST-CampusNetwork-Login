@@ -4,32 +4,32 @@
 
 ## 需求确认
 
-| 需求项 | 决定 |
-|--------|------|
-| 认证服务器地址 | 可配置，提供默认值 |
-| 多账户支持 | 支持，可切换账户 |
-| 服务商选择 | 支持（校园网/移动/联通/电信） |
-| 多 WiFi 支持 | 支持，可配置多个 WiFi，支持优先级切换 |
-| WiFi 认证配置 | 每个 WiFi 可独立配置是否需要校园网认证 |
+| 需求项           | 决定                                         |
+| ---------------- | -------------------------------------------- |
+| 认证服务器地址   | 可配置，提供默认值                           |
+| 多账户支持       | 支持，可切换账户                             |
+| 服务商选择       | 支持（校园网/移动/联通/电信）                |
+| 多 WiFi 支持     | 支持，可配置多个 WiFi，支持优先级切换        |
+| WiFi 认证配置    | 每个 WiFi 可独立配置是否需要校园网认证       |
 | 启动时 WiFi 检测 | 支持，启动时自动检测当前 WiFi 连接状态并显示 |
-| 心跳检测开关 | 支持手动开启/关闭心跳检测功能 |
-| iOS 支持 | 暂不开发，等 Win/macOS/Android 稳定后再考虑 |
-| UI 设计 | 三端统一风格，使用 lucide-react 图标库 |
-| 国际化 | 不需要，仅支持中文 |
-| 自动更新 | 支持（桌面端 + Android） |
-| 数据同步 | 暂不支持，后续有需要再加 |
+| 心跳检测开关     | 支持手动开启/关闭心跳检测功能                |
+| iOS 支持         | 暂不开发，等 Win/macOS/Android 稳定后再考虑  |
+| UI 设计          | 三端统一风格，使用 lucide-react 图标库       |
+| 国际化           | 不需要，仅支持中文                           |
+| 自动更新         | 支持（桌面端 + Android）                     |
+| 数据同步         | 暂不支持，后续有需要再加                     |
 
 ---
 
 ## 开发阶段概览
 
-| 阶段 | 名称 | 主要目标 |
-|------|------|----------|
-| Phase 1 | 核心业务层 | 实现共享包的核心服务 |
-| Phase 2 | 桌面端基础 | Electron 应用基础功能 |
+| 阶段    | 名称       | 主要目标                  |
+| ------- | ---------- | ------------------------- |
+| Phase 1 | 核心业务层 | 实现共享包的核心服务      |
+| Phase 2 | 桌面端基础 | Electron 应用基础功能     |
 | Phase 3 | 移动端基础 | React Native 应用基础功能 |
-| Phase 4 | 平台特性 | 各平台特有功能实现 |
-| Phase 5 | 优化与发布 | 测试、优化、打包发布 |
+| Phase 4 | 平台特性   | 各平台特有功能实现        |
+| Phase 5 | 优化与发布 | 测试、优化、打包发布      |
 
 ---
 
@@ -377,7 +377,7 @@
 interface AppConfig {
   // 账户配置（支持多账户）
   accounts: AccountConfig[];
-  currentAccountId: string | null;  // 当前使用的账户 ID
+  currentAccountId: string | null; // 当前使用的账户 ID
 
   // WiFi 配置（支持多个）
   wifiList: WifiConfig[];
@@ -387,32 +387,32 @@ interface AppConfig {
 }
 
 interface AccountConfig {
-  id: string;               // 账户唯一标识
-  name: string;             // 账户名称（显示用）
-  username: string;         // 校园网账号
-  password: string;         // 校园网密码（加密存储）
-  serverUrl: string;        // 认证服务器地址（可自定义，有默认值）
+  id: string; // 账户唯一标识
+  name: string; // 账户名称（显示用）
+  username: string; // 校园网账号
+  password: string; // 校园网密码（加密存储）
+  serverUrl: string; // 认证服务器地址（可自定义，有默认值）
   isp: 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 服务商选择
 }
 
 interface WifiConfig {
-  id: string;               // WiFi 配置唯一标识
-  ssid: string;             // WiFi 名称
-  password: string;         // WiFi 密码（加密存储）
-  autoConnect: boolean;     // 是否自动连接
-  requiresAuth: boolean;    // 是否需要校园网认证登录
+  id: string; // WiFi 配置唯一标识
+  ssid: string; // WiFi 名称
+  password: string; // WiFi 密码（加密存储）
+  autoConnect: boolean; // 是否自动连接
+  requiresAuth: boolean; // 是否需要校园网认证登录
   linkedAccountId?: string; // 关联的账号ID（仅当 requiresAuth 为 true 时使用）
-  priority: number;         // 优先级（数字越小优先级越高）
+  priority: number; // 优先级（数字越小优先级越高）
 }
 
 interface AppSettings {
-  autoLaunch: boolean;      // 开机自启
+  autoLaunch: boolean; // 开机自启
   enableHeartbeat: boolean; // 是否启用心跳检测（用户可手动开关）
-  pollingInterval: number;  // 轮询间隔（秒），默认 30
-  autoReconnect: boolean;   // 自动重连
-  maxRetries: number;       // 最大重试次数，默认 3
+  pollingInterval: number; // 轮询间隔（秒），默认 30
+  autoReconnect: boolean; // 自动重连
+  maxRetries: number; // 最大重试次数，默认 3
   showNotification: boolean; // 显示通知
-  autoUpdate: boolean;      // 自动检查更新
+  autoUpdate: boolean; // 自动检查更新
 }
 ```
 
@@ -442,35 +442,35 @@ interface AppSettings {
 
 ### 共享包
 
-| 需求 | 方案 |
-|------|------|
-| 构建工具 | tsup |
-| 测试框架 | Vitest |
+| 需求        | 方案       |
+| ----------- | ---------- |
+| 构建工具    | tsup       |
+| 测试框架    | Vitest     |
 | HTTP 客户端 | 原生 fetch |
-| UUID 生成 | nanoid |
+| UUID 生成   | nanoid     |
 
 ### 桌面端
 
-| 需求 | 方案 |
-|------|------|
-| 状态管理 | Zustand |
-| 路由 | React Router |
-| 本地存储 | electron-store |
+| 需求     | 方案                 |
+| -------- | -------------------- |
+| 状态管理 | Zustand              |
+| 路由     | React Router         |
+| 本地存储 | electron-store       |
 | 加密存储 | Electron safeStorage |
-| 开机自启 | auto-launch |
-| 自动更新 | electron-updater |
+| 开机自启 | auto-launch          |
+| 自动更新 | electron-updater     |
 
 ### 移动端
 
-| 需求 | 方案 |
-|------|------|
-| 状态管理 | Zustand |
-| 导航 | React Navigation |
-| 本地存储 | @react-native-async-storage/async-storage |
-| 加密存储 | react-native-keychain |
-| WiFi 控制 | 自定义原生模块 |
-| 通知 | @notifee/react-native |
-| 后台服务 | react-native-background-actions |
+| 需求      | 方案                                      |
+| --------- | ----------------------------------------- |
+| 状态管理  | Zustand                                   |
+| 导航      | React Navigation                          |
+| 本地存储  | @react-native-async-storage/async-storage |
+| 加密存储  | react-native-keychain                     |
+| WiFi 控制 | 自定义原生模块                            |
+| 通知      | @notifee/react-native                     |
+| 后台服务  | react-native-background-actions           |
 
 ---
 
@@ -489,14 +489,14 @@ interface AppSettings {
 
 ## 里程碑
 
-| 里程碑 | 完成标准 |
-|--------|----------|
-| M1 - 核心可用 | shared 包完成，单元测试通过 |
-| M2 - 桌面端可用 | 桌面端可手动登录，启动时显示 WiFi 状态，多账户/多WiFi配置可保存 |
-| M3 - 桌面端完整 | 托盘、自启、自动重连、自动更新功能完成 |
+| 里程碑          | 完成标准                                                          |
+| --------------- | ----------------------------------------------------------------- |
+| M1 - 核心可用   | shared 包完成，单元测试通过                                       |
+| M2 - 桌面端可用 | 桌面端可手动登录，启动时显示 WiFi 状态，多账户/多WiFi配置可保存   |
+| M3 - 桌面端完整 | 托盘、自启、自动重连、自动更新功能完成                            |
 | M4 - 移动端可用 | Android 可手动登录，启动时显示 WiFi 状态，多账户/多WiFi配置可保存 |
-| M5 - 移动端完整 | 后台服务、自动连接、应用内更新功能完成 |
-| M6 - 发布就绪 | 测试通过，打包完成，发布到 GitHub Releases |
+| M5 - 移动端完整 | 后台服务、自动连接、应用内更新功能完成                            |
+| M6 - 发布就绪   | 测试通过，打包完成，发布到 GitHub Releases                        |
 
 ---
 

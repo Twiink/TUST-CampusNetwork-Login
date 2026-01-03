@@ -1,8 +1,8 @@
 # 端口检查与清理工具使用说明
 
-| 脚本文件 | 支持平台 |
-|----------|----------|
-| `check-ports.sh` | macOS / Linux |
+| 脚本文件          | 支持平台                 |
+| ----------------- | ------------------------ |
+| `check-ports.sh`  | macOS / Linux            |
 | `check-ports.bat` | Windows (CMD/PowerShell) |
 
 ---
@@ -22,23 +22,23 @@
 
 脚本默认检查以下常用端口：
 
-| 端口 | 用途说明 |
-|------|----------|
-| 80   | HTTP 反向代理/服务器 (nginx, apache) |
-| 443  | HTTPS 反向代理/服务器 |
-| 8080 | 应用 HTTP (Spring Boot, Tomcat, 开发服务器) |
-| 8843 | 非标准 HTTPS/管理控制台 |
-| 3000 | 前端开发服务器 (React, Next.js) |
-| 5173 | Vite 默认开发服务器 |
-| 8000 | 后端开发 (Django, FastAPI, Uvicorn) |
-| 9000 | 运维/中间件 (Portainer, 管理工具) |
-| 5432 | PostgreSQL 数据库 |
-| 3306 | MySQL / MariaDB 数据库 |
-| 6379 | Redis 缓存 |
-| 27017 | MongoDB 数据库 |
-| 8081 | 备用 HTTP/次级实例 |
-| 7001 | Java 管理/WebLogic |
-| 5000 | 后端开发 (Flask, 本地 API) |
+| 端口  | 用途说明                                    |
+| ----- | ------------------------------------------- |
+| 80    | HTTP 反向代理/服务器 (nginx, apache)        |
+| 443   | HTTPS 反向代理/服务器                       |
+| 8080  | 应用 HTTP (Spring Boot, Tomcat, 开发服务器) |
+| 8843  | 非标准 HTTPS/管理控制台                     |
+| 3000  | 前端开发服务器 (React, Next.js)             |
+| 5173  | Vite 默认开发服务器                         |
+| 8000  | 后端开发 (Django, FastAPI, Uvicorn)         |
+| 9000  | 运维/中间件 (Portainer, 管理工具)           |
+| 5432  | PostgreSQL 数据库                           |
+| 3306  | MySQL / MariaDB 数据库                      |
+| 6379  | Redis 缓存                                  |
+| 27017 | MongoDB 数据库                              |
+| 8081  | 备用 HTTP/次级实例                          |
+| 7001  | Java 管理/WebLogic                          |
+| 5000  | 后端开发 (Flask, 本地 API)                  |
 
 ---
 
@@ -58,12 +58,12 @@ check-ports.bat [选项]
 
 ### 命令行参数（跨平台通用）
 
-| 参数 | 说明 |
-|------|------|
-| `--kill` | 启用终止模式，终止占用端口的进程 |
-| `--kill=端口` | 只检查并终止指定端口的进程 |
-| `--protect=端口1,端口2,...` | 设置保护端口列表（逗号分隔） |
-| `--force-protected` | 强制终止被保护的端口（危险） |
+| 参数                        | 说明                             |
+| --------------------------- | -------------------------------- |
+| `--kill`                    | 启用终止模式，终止占用端口的进程 |
+| `--kill=端口`               | 只检查并终止指定端口的进程       |
+| `--protect=端口1,端口2,...` | 设置保护端口列表（逗号分隔）     |
+| `--force-protected`         | 强制终止被保护的端口（危险）     |
 
 ---
 
@@ -74,16 +74,19 @@ check-ports.bat [选项]
 **最安全的模式**，只检查端口占用情况，不执行任何终止操作。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat
 ```
 
 输出示例：
+
 ```
 ========================================
 Windows Port Checker
@@ -113,11 +116,13 @@ Done
 检查并终止占用默认端口列表中所有端口的进程。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill
 ```
@@ -129,11 +134,13 @@ check-ports.bat --kill
 只检查并终止指定端口的进程。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill=3000
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill=3000
 ```
@@ -145,16 +152,19 @@ check-ports.bat --kill=3000
 检查并终止进程，但保护指定端口不被终止。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill --protect=3000,5173,8000
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill --protect=3000,5173,8000
 ```
 
 当尝试终止被保护的端口时：
+
 ```
 [SKIP] Port 3000 is protected. Not killing PID 12345.
        Use --force-protected to override.
@@ -167,11 +177,13 @@ check-ports.bat --kill --protect=3000,5173,8000
 **危险操作**：强制终止所有进程，包括被保护的端口。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill --protect=3000,5173 --force-protected
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill --protect=3000,5173 --force-protected
 ```
@@ -191,6 +203,7 @@ lsof -nP -iTCP:"端口" -sTCP:LISTEN
 ```
 
 参数说明：
+
 - `-n`：不进行 DNS 反向解析（加快速度）
 - `-P`：不显示服务名称（直接显示端口号）
 - `-iTCP:端口`：过滤 TCP 端口
@@ -211,11 +224,11 @@ kill -KILL $PID
 
 #### 3. 依赖工具
 
-| 工具 | 用途 |
-|------|------|
+| 工具   | 用途                           |
+| ------ | ------------------------------ |
 | `lsof` | 列出打开的文件（包括网络端口） |
-| `ps` | 显示进程信息 |
-| `kill` | 发送信号给进程 |
+| `ps`   | 显示进程信息                   |
+| `kill` | 发送信号给进程                 |
 
 ---
 
@@ -230,6 +243,7 @@ netstat -ano -p tcp | findstr /R /C:":端口 .*LISTENING"
 ```
 
 参数说明：
+
 - `-a`：显示所有连接和监听端口
 - `-n`：以数字形式显示地址和端口（不解析 DNS）
 - `-o`：显示每个连接的进程 ID (PID)
@@ -245,6 +259,7 @@ tasklist /FI "PID eq 1234" /FO LIST
 ```
 
 参数说明：
+
 - `/FI "PID eq 1234"`：过滤指定 PID
 - `/FO LIST`：以列表格式输出
 
@@ -257,17 +272,18 @@ taskkill /PID 1234 /F
 ```
 
 参数说明：
+
 - `/PID 1234`：指定要终止的进程 ID
 - `/F`：强制终止进程（不等待确认）
 
 #### 4. 依赖工具
 
-| 工具 | 用途 |
-|------|------|
-| `netstat` | 显示网络连接和端口状态 |
-| `tasklist` | 显示运行中的进程列表 |
-| `taskkill` | 终止指定的进程 |
-| `findstr` | 文本搜索/过滤（类似 grep） |
+| 工具       | 用途                       |
+| ---------- | -------------------------- |
+| `netstat`  | 显示网络连接和端口状态     |
+| `tasklist` | 显示运行中的进程列表       |
+| `taskkill` | 终止指定的进程             |
+| `findstr`  | 文本搜索/过滤（类似 grep） |
 
 #### 5. PowerShell 彩色输出
 
@@ -281,14 +297,14 @@ powershell -NoProfile -Command "Write-Host '消息' -ForegroundColor 颜色"
 
 ## 输出状态说明
 
-| 状态 | 颜色 | 含义 |
-|------|------|------|
-| `[OK]` | 绿色 | 端口未被占用 |
-| `[BUSY]` | 红色 | 端口被占用 |
-| `[KILLED]` | 绿色 | 进程已成功终止 |
-| `[SKIP]` | 黄色 | 跳过保护的端口 |
-| `[FAIL]` | 红色 | 终止失败（可能需要管理员权限） |
-| `[WARN]` | 黄色 | 警告信息 |
+| 状态       | 颜色 | 含义                           |
+| ---------- | ---- | ------------------------------ |
+| `[OK]`     | 绿色 | 端口未被占用                   |
+| `[BUSY]`   | 红色 | 端口被占用                     |
+| `[KILLED]` | 绿色 | 进程已成功终止                 |
+| `[SKIP]`   | 黄色 | 跳过保护的端口                 |
+| `[FAIL]`   | 红色 | 终止失败（可能需要管理员权限） |
+| `[WARN]`   | 黄色 | 警告信息                       |
 
 ---
 
@@ -299,11 +315,13 @@ powershell -NoProfile -Command "Write-Host '消息' -ForegroundColor 颜色"
 启动新项目前，检查端口是否被占用。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat
 ```
@@ -315,11 +333,13 @@ check-ports.bat
 关闭所有开发服务器和数据库。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill
 ```
@@ -331,12 +351,14 @@ check-ports.bat --kill
 只清理 3000 和 5173 端口。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill=3000
 ./check-ports.sh --kill=5173
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill=3000
 check-ports.bat --kill=5173
@@ -349,11 +371,13 @@ check-ports.bat --kill=5173
 保留数据库运行，只清理应用服务。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill --protect=5432,3306,6379,27017
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill --protect=5432,3306,6379,27017
 ```
@@ -365,11 +389,13 @@ check-ports.bat --kill --protect=5432,3306,6379,27017
 只检查 8080 端口。
 
 **macOS/Linux:**
+
 ```bash
 ./check-ports.sh --kill=8080
 ```
 
 **Windows:**
+
 ```cmd
 check-ports.bat --kill=8080
 ```
@@ -388,10 +414,12 @@ check-ports.bat --kill=8080
 ### 权限要求
 
 #### macOS / Linux
+
 - 普通用户可以终止自己的进程
 - 终止其他用户的进程可能需要 `sudo` 权限
 
 #### Windows
+
 - 终止某些系统进程或管理员启动的进程需要**以管理员身份运行**
 - 右键点击 `check-ports.bat`，选择"以管理员身份运行"
 
@@ -400,6 +428,7 @@ check-ports.bat --kill=8080
 **Q: 为什么有些进程无法终止？**
 
 A: 可能原因：
+
 - macOS/Linux: 进程属于其他用户，需要 `sudo` 权限
 - Windows: 需要管理员权限运行脚本
 - 进程是系统关键进程，拒绝终止
@@ -410,6 +439,7 @@ A: 可能原因：
 **Q: 终止后端口仍显示被占用？**
 
 A: 可能原因：
+
 - 进程正在优雅退出中，等待几秒后再次检查
 - 有新的进程自动启动并占用了端口
 - 端口被系统服务占用
@@ -421,11 +451,13 @@ A: 可能原因：
 A: 可以。
 
 **macOS/Linux** - 编辑 `check-ports.sh`：
+
 ```bash
 DEFAULT_PORTS=(80 443 8080 你的端口1 你的端口2)
 ```
 
 **Windows** - 编辑 `check-ports.bat`：
+
 ```cmd
 set "DEFAULT_PORTS=80 443 8080 你的端口1 你的端口2"
 ```
@@ -434,15 +466,15 @@ set "DEFAULT_PORTS=80 443 8080 你的端口1 你的端口2"
 
 ## 技术细节对比
 
-| 特性 | macOS/Linux (check-ports.sh) | Windows (check-ports.bat) |
-|------|------------------------------|---------------------------|
-| 端口检测 | `lsof -nP -iTCP:端口 -sTCP:LISTEN` | `netstat -ano -p tcp \| findstr` |
+| 特性     | macOS/Linux (check-ports.sh)           | Windows (check-ports.bat)            |
+| -------- | -------------------------------------- | ------------------------------------ |
+| 端口检测 | `lsof -nP -iTCP:端口 -sTCP:LISTEN`     | `netstat -ano -p tcp \| findstr`     |
 | 进程信息 | `ps -p PID -o pid,ppid,user,comm,args` | `tasklist /FI "PID eq xxx" /FO LIST` |
-| 进程终止 | `kill -TERM` → `kill -KILL`（两步） | `taskkill /PID xxx /F`（强制） |
-| 彩色输出 | ANSI 转义码 | 调用 PowerShell Write-Host |
-| PID 去重 | `sort -u` | 空格分隔列表 + findstr |
-| 变量展开 | Bash 参数扩展 | EnableDelayedExpansion |
-| 函数定义 | `function_name() { }` | `:FUNCTION_LABEL` ... `exit /b` |
+| 进程终止 | `kill -TERM` → `kill -KILL`（两步）    | `taskkill /PID xxx /F`（强制）       |
+| 彩色输出 | ANSI 转义码                            | 调用 PowerShell Write-Host           |
+| PID 去重 | `sort -u`                              | 空格分隔列表 + findstr               |
+| 变量展开 | Bash 参数扩展                          | EnableDelayedExpansion               |
+| 函数定义 | `function_name() { }`                  | `:FUNCTION_LABEL` ... `exit /b`      |
 
 ---
 
@@ -451,11 +483,13 @@ set "DEFAULT_PORTS=80 443 8080 你的端口1 你的端口2"
 ### 修改默认端口列表
 
 **macOS/Linux** - 编辑 `shell/check-ports.sh`，找到第 59 行：
+
 ```bash
 DEFAULT_PORTS=(80 443 8080 8843 3000 5173 8000 9000 5432 3306 6379 27017 8081 7001 5000)
 ```
 
 **Windows** - 编辑 `shell/check-ports.bat`，找到第 58 行：
+
 ```cmd
 set "DEFAULT_PORTS=80 443 8080 8843 3000 5173 8000 9000 5432 3306 6379 27017 8081 7001 5000"
 ```
@@ -463,6 +497,7 @@ set "DEFAULT_PORTS=80 443 8080 8843 3000 5173 8000 9000 5432 3306 6379 27017 808
 ### 添加快捷命令（可选）
 
 **macOS/Linux** - 添加到 `~/.bashrc` 或 `~/.zshrc`：
+
 ```bash
 alias ports='~/path/to/check-ports.sh'
 alias portsk='~/path/to/check-ports.sh --kill'
@@ -470,6 +505,7 @@ alias ports3='~/path/to/check-ports.sh --kill=3000'
 ```
 
 **Windows** - 创建别名或添加到 PATH：
+
 1. 将 `shell` 目录添加到系统 PATH
 2. 直接运行：`check-ports.bat --kill`
 

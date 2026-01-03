@@ -63,7 +63,7 @@ export class Logger {
     }
 
     // 通知监听器
-    this.listeners.forEach(listener => {
+    this.listeners.forEach((listener) => {
       try {
         listener(entry);
       } catch {
@@ -104,9 +104,10 @@ export class Logger {
    * 错误日志
    */
   error(message: string, error?: Error | unknown): void {
-    const data = error instanceof Error
-      ? { name: error.name, message: error.message, stack: error.stack }
-      : error;
+    const data =
+      error instanceof Error
+        ? { name: error.name, message: error.message, stack: error.stack }
+        : error;
     this.addLog(this.createEntry('error', message, data));
   }
 
@@ -125,15 +126,15 @@ export class Logger {
 
     // 按级别过滤
     if (options.level) {
-      result = result.filter(log => log.level === options.level);
+      result = result.filter((log) => log.level === options.level);
     }
 
     // 按时间范围过滤
     if (options.startTime) {
-      result = result.filter(log => log.timestamp >= options.startTime!);
+      result = result.filter((log) => log.timestamp >= options.startTime!);
     }
     if (options.endTime) {
-      result = result.filter(log => log.timestamp <= options.endTime!);
+      result = result.filter((log) => log.timestamp <= options.endTime!);
     }
 
     // 分页
@@ -192,7 +193,7 @@ export class Logger {
    */
   exportAsText(): string {
     return this.logs
-      .map(log => {
+      .map((log) => {
         const timestamp = log.timestamp.toISOString();
         const level = log.level.toUpperCase().padEnd(7);
         const data = log.data ? ` | ${JSON.stringify(log.data)}` : '';

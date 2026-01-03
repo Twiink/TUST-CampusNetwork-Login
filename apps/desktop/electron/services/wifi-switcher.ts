@@ -90,7 +90,9 @@ async function scanWindows(): Promise<AvailableNetwork[]> {
     for (const block of blocks.slice(1)) {
       const ssidMatch = block.match(/^\s*(.+?)[\r\n]/);
       const signalMatch = block.match(/Signal\s*:\s*(\d+)%/i) || block.match(/信号\s*:\s*(\d+)%/);
-      const authMatch = block.match(/Authentication\s*:\s*(.+?)[\r\n]/i) || block.match(/身份验证\s*:\s*(.+?)[\r\n]/);
+      const authMatch =
+        block.match(/Authentication\s*:\s*(.+?)[\r\n]/i) ||
+        block.match(/身份验证\s*:\s*(.+?)[\r\n]/);
 
       if (ssidMatch) {
         const ssid = ssidMatch[1].trim();
@@ -114,10 +116,9 @@ async function scanWindows(): Promise<AvailableNetwork[]> {
  */
 async function scanLinux(): Promise<AvailableNetwork[]> {
   try {
-    const { stdout } = await execAsync(
-      'nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list',
-      { timeout: 10000 }
-    );
+    const { stdout } = await execAsync('nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list', {
+      timeout: 10000,
+    });
 
     const networks: AvailableNetwork[] = [];
     const lines = stdout.trim().split('\n');
@@ -165,7 +166,7 @@ async function connectMacOS(ssid: string): Promise<boolean> {
   try {
     // 获取 WiFi 接口名称
     const { stdout: ifaceOutput } = await execAsync(
-      'networksetup -listallhardwareports | grep -A1 Wi-Fi | grep Device | awk \'{print $2}\''
+      "networksetup -listallhardwareports | grep -A1 Wi-Fi | grep Device | awk '{print $2}'"
     );
     const iface = ifaceOutput.trim() || 'en0';
 
@@ -227,12 +228,10 @@ export class WifiSwitcherService {
    */
   async getNextAvailableNetwork(currentSsid: string | null): Promise<string | null> {
     const availableNetworks = await scanAvailableNetworks();
-    const availableSsids = new Set(availableNetworks.map(n => n.ssid));
+    const availableSsids = new Set(availableNetworks.map((n) => n.ssid));
 
     // 找到当前网络在配置列表中的位置
-    const currentIndex = currentSsid
-      ? this.configuredNetworks.indexOf(currentSsid)
-      : -1;
+    const currentIndex = currentSsid ? this.configuredNetworks.indexOf(currentSsid) : -1;
 
     // 从下一个位置开始查找可用的网络
     for (let i = currentIndex + 1; i < this.configuredNetworks.length; i++) {
@@ -254,7 +253,9 @@ export class WifiSwitcherService {
   /**
    * 尝试切换到下一个可用网络
    */
-  async switchToNextNetwork(currentSsid: string | null): Promise<{ success: boolean; ssid: string | null }> {
+  async switchToNextNetwork(
+    currentSsid: string | null
+  ): Promise<{ success: boolean; ssid: string | null }> {
     const nextSsid = await this.getNextAvailableNetwork(currentSsid);
 
     if (!nextSsid) {

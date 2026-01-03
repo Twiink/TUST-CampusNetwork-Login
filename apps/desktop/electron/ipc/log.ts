@@ -20,9 +20,12 @@ export function registerLogIPC(logger: Logger) {
   /**
    * 获取日志
    */
-  ipcMain.handle(IPC_CHANNELS.LOG_GET, async (_, options?: LogQueryOptions): Promise<LogEntry[]> => {
-    return logger.getLogs(options);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.LOG_GET,
+    async (_, options?: LogQueryOptions): Promise<LogEntry[]> => {
+      return logger.getLogs(options);
+    }
+  );
 
   /**
    * 清除日志
@@ -34,10 +37,13 @@ export function registerLogIPC(logger: Logger) {
   /**
    * 导出日志
    */
-  ipcMain.handle(IPC_CHANNELS.LOG_EXPORT, async (_, format: 'text' | 'json' = 'text'): Promise<string> => {
-    if (format === 'json') {
-      return logger.exportAsJson();
+  ipcMain.handle(
+    IPC_CHANNELS.LOG_EXPORT,
+    async (_, format: 'text' | 'json' = 'text'): Promise<string> => {
+      if (format === 'json') {
+        return logger.exportAsJson();
+      }
+      return logger.exportAsText();
     }
-    return logger.exportAsText();
-  });
+  );
 }

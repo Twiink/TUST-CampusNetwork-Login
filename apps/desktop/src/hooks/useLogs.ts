@@ -51,12 +51,9 @@ export function useLogs() {
 
   // 监听新日志
   useEffect(() => {
-    const unsubscribe = window.electronAPI.on(
-      IPC_EVENTS.LOG_ADDED,
-      (entry: unknown) => {
-        setLogs(prev => [entry as LogEntry, ...prev].slice(0, 500));
-      }
-    );
+    const unsubscribe = window.electronAPI.on(IPC_EVENTS.LOG_ADDED, (entry: unknown) => {
+      setLogs((prev) => [entry as LogEntry, ...prev].slice(0, 500));
+    });
 
     return () => {
       unsubscribe();

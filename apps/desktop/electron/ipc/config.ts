@@ -63,14 +63,17 @@ export function registerConfigIPC(
   /**
    * 更新设置
    */
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, async (_, settings: Partial<AppSettings>): Promise<AppSettings> => {
-    try {
-      const updated = await configManager.updateSettings(settings);
-      logger.info('设置已更新');
-      return updated;
-    } catch (error) {
-      logger.error('更新设置失败', error);
-      throw error;
+  ipcMain.handle(
+    IPC_CHANNELS.SETTINGS_UPDATE,
+    async (_, settings: Partial<AppSettings>): Promise<AppSettings> => {
+      try {
+        const updated = await configManager.updateSettings(settings);
+        logger.info('设置已更新');
+        return updated;
+      } catch (error) {
+        logger.error('更新设置失败', error);
+        throw error;
+      }
     }
-  });
+  );
 }

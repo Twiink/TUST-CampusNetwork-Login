@@ -51,18 +51,12 @@ export const EnhancedThemeToggle: React.FC = () => {
 
     // Cloud floating animation
     cloud1Translate.value = withRepeat(
-      withSequence(
-        withTiming(2 * EM, { duration: 1000 }),
-        withTiming(-2 * EM, { duration: 1000 })
-      ),
+      withSequence(withTiming(2 * EM, { duration: 1000 }), withTiming(-2 * EM, { duration: 1000 })),
       -1,
       true
     );
     cloud2Translate.value = withRepeat(
-      withSequence(
-        withTiming(-2 * EM, { duration: 1200 }),
-        withTiming(2 * EM, { duration: 1200 })
-      ),
+      withSequence(withTiming(-2 * EM, { duration: 1200 }), withTiming(2 * EM, { duration: 1200 })),
       -1,
       true
     );
@@ -94,17 +88,11 @@ export const EnhancedThemeToggle: React.FC = () => {
   }));
 
   const cloud1Style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: cloud1Translate.value },
-      { translateY: cloud1Translate.value },
-    ],
+    transform: [{ translateX: cloud1Translate.value }, { translateY: cloud1Translate.value }],
   }));
 
   const cloud2Style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: cloud2Translate.value },
-      { translateY: -cloud2Translate.value },
-    ],
+    transform: [{ translateX: cloud2Translate.value }, { translateY: -cloud2Translate.value }],
   }));
 
   const starsStyle = useAnimatedStyle(() => ({
@@ -139,22 +127,82 @@ export const EnhancedThemeToggle: React.FC = () => {
       <Animated.View style={[styles.cloudsContainer, cloudsStyle]}>
         {/* Cloud 1 */}
         <Animated.View style={[styles.cloud, cloud1Style]}>
-          <View style={[styles.cloudCircle, { right: -20 * EM, bottom: 10 * EM, width: 50 * EM, height: 50 * EM }]} />
-          <View style={[styles.cloudCircle, { right: -10 * EM, bottom: -25 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 20 * EM, bottom: -40 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 50 * EM, bottom: -35 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 75 * EM, bottom: -60 * EM, width: 75 * EM, height: 75 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 110 * EM, bottom: -50 * EM, width: 60 * EM, height: 60 * EM }]} />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: -20 * EM, bottom: 10 * EM, width: 50 * EM, height: 50 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: -10 * EM, bottom: -25 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 20 * EM, bottom: -40 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 50 * EM, bottom: -35 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 75 * EM, bottom: -60 * EM, width: 75 * EM, height: 75 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 110 * EM, bottom: -50 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
         </Animated.View>
 
         {/* Cloud Light */}
         <Animated.View style={[styles.cloudLight, cloud2Style]}>
-          <View style={[styles.cloudCircle, { right: -20 * EM, bottom: 10 * EM, width: 50 * EM, height: 50 * EM }]} />
-          <View style={[styles.cloudCircle, { right: -10 * EM, bottom: -25 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 20 * EM, bottom: -40 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 50 * EM, bottom: -35 * EM, width: 60 * EM, height: 60 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 75 * EM, bottom: -60 * EM, width: 75 * EM, height: 75 * EM }]} />
-          <View style={[styles.cloudCircle, { right: 110 * EM, bottom: -50 * EM, width: 60 * EM, height: 60 * EM }]} />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: -20 * EM, bottom: 10 * EM, width: 50 * EM, height: 50 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: -10 * EM, bottom: -25 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 20 * EM, bottom: -40 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 50 * EM, bottom: -35 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 75 * EM, bottom: -60 * EM, width: 75 * EM, height: 75 * EM },
+            ]}
+          />
+          <View
+            style={[
+              styles.cloudCircle,
+              { right: 110 * EM, bottom: -50 * EM, width: 60 * EM, height: 60 * EM },
+            ]}
+          />
         </Animated.View>
       </Animated.View>
 
@@ -180,10 +228,50 @@ export const EnhancedThemeToggle: React.FC = () => {
               },
             ]}
           >
-            <View style={[styles.starPart, { width: star.size, height: star.size, backgroundColor: 'transparent', borderTopLeftRadius: star.size }]} />
-            <View style={[styles.starPart, { width: star.size, height: star.size, backgroundColor: 'transparent', borderTopRightRadius: star.size }]} />
-            <View style={[styles.starPart, { width: star.size, height: star.size, backgroundColor: 'transparent', borderBottomLeftRadius: star.size }]} />
-            <View style={[styles.starPart, { width: star.size, height: star.size, backgroundColor: '#fff', borderBottomRightRadius: star.size }]} />
+            <View
+              style={[
+                styles.starPart,
+                {
+                  width: star.size,
+                  height: star.size,
+                  backgroundColor: 'transparent',
+                  borderTopLeftRadius: star.size,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.starPart,
+                {
+                  width: star.size,
+                  height: star.size,
+                  backgroundColor: 'transparent',
+                  borderTopRightRadius: star.size,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.starPart,
+                {
+                  width: star.size,
+                  height: star.size,
+                  backgroundColor: 'transparent',
+                  borderBottomLeftRadius: star.size,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.starPart,
+                {
+                  width: star.size,
+                  height: star.size,
+                  backgroundColor: '#fff',
+                  borderBottomRightRadius: star.size,
+                },
+              ]}
+            />
           </View>
         ))}
       </Animated.View>

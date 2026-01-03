@@ -46,10 +46,7 @@ export class RetryPolicy {
    * @param options 可选的重试选项覆盖
    * @returns 操作结果
    */
-  async execute<T>(
-    operation: () => Promise<T>,
-    options?: Partial<RetryOptions>
-  ): Promise<T> {
+  async execute<T>(operation: () => Promise<T>, options?: Partial<RetryOptions>): Promise<T> {
     const opts = { ...this.options, ...options };
     let lastError: Error = new Error('Unknown error');
     let currentDelay = opts.delay;
@@ -106,7 +103,7 @@ export class RetryPolicy {
    * 休眠
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

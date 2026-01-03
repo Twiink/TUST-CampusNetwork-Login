@@ -3,6 +3,7 @@
 > 本文档列出项目中存在的问题和改进建议，按优先级分类。
 
 **优先级说明：**
+
 - **P0**: 紧急/阻塞性问题，必须立即修复（安全漏洞、崩溃性 Bug）
 - **P1**: 高优先级，应尽快修复（功能性 Bug、重要缺失功能）
 - **P2**: 中优先级，计划内修复（代码质量、性能优化）
@@ -30,21 +31,24 @@
 
 **问题描述**:
 登录凭据（包括 `user_password`）作为 URL 查询参数通过 GET 请求传输，这会导致：
+
 - 密码出现在浏览器历史记录中
 - 密码被记录在服务器访问日志中
 - 密码在网络传输中以明文形式暴露
 
 **当前代码**:
+
 ```typescript
 const params = new URLSearchParams({
   user_account: userAccount,
-  user_password: config.password,  // 危险！密码在 URL 中
+  user_password: config.password, // 危险！密码在 URL 中
   // ...
 });
 const url = `${this.serverUrl}${LOGIN_PATH}?${params.toString()}`;
 ```
 
 **修复建议**:
+
 ```typescript
 // 方案1: 改用 POST 请求
 async login(config: LoginConfig): Promise<LoginResult> {
@@ -77,12 +81,14 @@ const encodedPassword = encodeURIComponent(btoa(config.password));
 移动端使用 `AsyncStorage` 存储配置，但密码以明文形式保存，与桌面端使用 `safeStorage` 加密不同。
 
 **当前代码**:
+
 ```typescript
 // 直接保存，无加密
 await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(config));
 ```
 
 **修复建议**:
+
 ```typescript
 // 使用 react-native-keychain 存储敏感信息
 import * as Keychain from 'react-native-keychain';
@@ -108,10 +114,12 @@ await EncryptedStorage.setItem('config', JSON.stringify(config));
 
 **问题描述**:
 调用了不存在的方法，会导致应用崩溃：
+
 - `configManager.updateConfig()` 不存在，应为 `update()`
 - `accountManager.setCurrentAccount()` 不存在，应为 `switchAccount()`
 
 **当前代码**:
+
 ```typescript
 // Line 248 - 方法不存在
 servicesRef.current?.configManager.updateConfig(newConfig);
@@ -121,6 +129,7 @@ await servicesRef.current.accountManager.setCurrentAccount(newAccount.id);
 ```
 
 **修复建议**:
+
 ```typescript
 // Line 248
 servicesRef.current?.configManager.update(newConfig);
@@ -141,11 +150,13 @@ await servicesRef.current.accountManager.switchAccount(newAccount.id);
 认证请求使用 HTTP 而非 HTTPS，所有数据（包括密码）在网络中明文传输。
 
 **当前代码**:
+
 ```typescript
 export const DEFAULT_SERVER_URL = 'http://10.10.102.50:801';
 ```
 
 **修复建议**:
+
 ```typescript
 // 如果服务器支持 HTTPS
 export const DEFAULT_SERVER_URL = 'https://10.10.102.50:801';
@@ -172,6 +183,7 @@ if (serverUrl.startsWith('http://')) {
 整个应用没有 Error Boundary，任何未捕获的错误都会导致白屏崩溃。
 
 **当前代码**:
+
 ```typescript
 // apps/desktop/src/main.tsx
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -184,6 +196,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 ```
 
 **修复建议**:
+
 ```typescript
 // components/ErrorBoundary.tsx
 import React, { Component, ErrorInfo, ReactNode } from 'react';
@@ -246,14 +259,16 @@ export class ErrorBoundary extends Component<Props, State> {
 项目中定义了完整的验证函数（账号验证、WiFi 配置验证、应用配置验证），但在实际代码中完全没有使用，导致用户可以输入无效数据。
 
 **当前状态**:
+
 ```typescript
 // validator.ts 中定义了这些函数，但从未被调用
-export function validateAccountConfig(config: unknown): ValidationResult
-export function validateWifiConfig(config: unknown): ValidationResult
-export function validateAppConfig(config: unknown): ValidationResult
+export function validateAccountConfig(config: unknown): ValidationResult;
+export function validateWifiConfig(config: unknown): ValidationResult;
+export function validateAppConfig(config: unknown): ValidationResult;
 ```
 
 **修复建议**:
+
 ```typescript
 // 在添加账号时使用验证
 // apps/desktop/src/hooks/useAccounts.ts
@@ -292,6 +307,7 @@ ipcMain.handle(IPC_CHANNELS.ACCOUNT_ADD, async (_, account) => {
 用户输入（用户名、密码）直接使用，未进行验证或清理，可能导致注入攻击。
 
 **修复建议**:
+
 ```typescript
 // 添加输入验证工具
 // packages/shared/src/utils/validator.ts
@@ -323,12 +339,14 @@ const safeUsername = sanitizeInput(config.username);
 多处使用 `!` 非空断言操作符，如果 `config` 为 `null` 会导致运行时错误。
 
 **当前代码**:
+
 ```typescript
 this.config = { ...this.config!, ...partial };
 this.config!.settings = { ...this.config!.settings, ...settings };
 ```
 
 **修复建议**:
+
 ```typescript
 async update(partial: Partial<AppConfig>): Promise<void> {
   if (!this.config) {
@@ -355,10 +373,12 @@ async updateSettings(settings: Partial<AppSettings>): Promise<void> {
 
 **问题描述**:
 项目几乎没有单元测试，只有一个空的移动端测试文件：
+
 - `packages/shared/src/` 核心业务逻辑无测试
 - `AuthService`、`ConfigManager`、`NetworkDetector` 等关键服务无测试
 
 **修复建议**:
+
 ```typescript
 // packages/shared/src/services/__tests__/AuthService.test.ts
 import { describe, it, expect, vi } from 'vitest';
@@ -410,6 +430,7 @@ describe('AuthService', () => {
 多处静默吞掉错误，导致问题难以调试。
 
 **当前代码**:
+
 ```typescript
 } catch {
   // 忽略监听器错误
@@ -421,6 +442,7 @@ this.persistAdapter.save(this.logs).catch(() => {
 ```
 
 **修复建议**:
+
 ```typescript
 } catch (error) {
   console.error('Listener callback failed:', error);
@@ -444,6 +466,7 @@ this.persistAdapter.save(this.logs).catch((error) => {
 `authenticated` 字段永远等于 `connected`，失去了区分意义。
 
 **当前代码**:
+
 ```typescript
 async isAuthenticated(): Promise<boolean> {
   const hasInternet = await this.checkConnectivity();
@@ -457,6 +480,7 @@ async getNetworkStatus(): Promise<NetworkStatus> {
 ```
 
 **修复建议**:
+
 ```typescript
 // 真正检查是否通过校园网认证
 async isAuthenticated(): Promise<boolean> {
@@ -491,6 +515,7 @@ private parseAuthStatus(response: string): { authenticated: boolean } {
 Android 后台服务的心跳检测只更新通知，不执行实际网络检查。
 
 **当前代码**:
+
 ```kotlin
 private fun performHeartbeat() {
     // 这里只是更新通知，实际的网络检测由 React Native 层处理
@@ -498,6 +523,7 @@ private fun performHeartbeat() {
 ```
 
 **修复建议**:
+
 ```kotlin
 private fun performHeartbeat() {
     CoroutineScope(Dispatchers.IO).launch {
@@ -537,6 +563,7 @@ private fun performHeartbeat() {
 长时间运行的登录请求无法被用户取消，也无法防止并发登录请求。
 
 **修复建议**:
+
 ```typescript
 // 添加请求取消支持
 let currentLoginController: AbortController | null = null;
@@ -551,7 +578,7 @@ ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async () => {
 
   try {
     const result = await authService.login(config, {
-      signal: currentLoginController.signal
+      signal: currentLoginController.signal,
     });
     return result;
   } finally {
@@ -580,6 +607,7 @@ ipcMain.handle(IPC_CHANNELS.AUTH_CANCEL, async () => {
 登录和登出请求在网络波动时没有自动重试机制，而 `RetryPolicy` 类存在但未被使用。
 
 **当前代码**:
+
 ```typescript
 // AuthService.ts - 没有重试
 const response = await this.httpClient.get(url, { timeout: 10000 });
@@ -591,6 +619,7 @@ export class RetryPolicy {
 ```
 
 **修复建议**:
+
 ```typescript
 import { RetryPolicy } from './RetryPolicy';
 
@@ -602,7 +631,7 @@ export class AuthService {
     retryCondition: (error) => {
       // 只对网络错误重试
       return error.code === 'NETWORK_ERROR' || error.code === 'TIMEOUT';
-    }
+    },
   });
 
   async login(config: LoginConfig): Promise<LoginResult> {
@@ -619,6 +648,7 @@ export class AuthService {
 ### P1-009: useEffect 内存泄漏风险
 
 **位置**:
+
 - `apps/desktop/src/components/ThemeToggle.tsx:153-175`
 - `apps/mobile/src/hooks/useHeartbeat.ts:122-124`
 - `apps/mobile/src/hooks/useNetwork.ts:99-111`
@@ -627,6 +657,7 @@ export class AuthService {
 多个 `useEffect` 中创建了 `setInterval`，但清理逻辑不完善，可能导致内存泄漏。
 
 **当前代码**:
+
 ```typescript
 // ThemeToggle.tsx
 useEffect(() => {
@@ -641,6 +672,7 @@ useEffect(() => {
 ```
 
 **修复建议**:
+
 ```typescript
 useEffect(() => {
   const intervalId = setInterval(() => {
@@ -664,22 +696,24 @@ useEffect(() => {
 删除账号时先更新本地状态，再调用 API，如果 API 失败，状态会不一致。
 
 **当前代码**:
+
 ```typescript
 const removeAccount = async (id: string) => {
   // 先更新状态
-  setAccounts(accounts.filter(acc => acc.id !== id));
+  setAccounts(accounts.filter((acc) => acc.id !== id));
   // 再调用 API（如果失败，状态已经改变）
   await window.electron.accounts.remove(id);
 };
 ```
 
 **修复建议**:
+
 ```typescript
 const removeAccount = async (id: string) => {
   const previousAccounts = accounts;
 
   // 乐观更新
-  setAccounts(accounts.filter(acc => acc.id !== id));
+  setAccounts(accounts.filter((acc) => acc.id !== id));
 
   try {
     await window.electron.accounts.remove(id);
@@ -701,6 +735,7 @@ const removeAccount = async (id: string) => {
 用户可以同时从托盘菜单和主窗口触发登录，导致并发请求和状态混乱。
 
 **修复建议**:
+
 ```typescript
 // 添加登录锁
 let isLoginInProgress = false;
@@ -734,6 +769,7 @@ ipcMain.handle('auth:login', () => performLogin());
 权限声明缺少 `<uses-feature>` 标签，且 `FOREGROUND_SERVICE` 需要指定类型（Android 14+）。
 
 **修复建议**:
+
 ```xml
 <manifest>
   <!-- 权限声明 -->
@@ -774,6 +810,7 @@ ipcMain.handle('auth:login', () => performLogin());
 使用同步文件 I/O 会阻塞 Electron 主进程。
 
 **当前代码**:
+
 ```typescript
 if (fs.existsSync(filePath)) {
   const content = fs.readFileSync(filePath, 'utf-8');
@@ -782,6 +819,7 @@ fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2), 'utf-8');
 ```
 
 **修复建议**:
+
 ```typescript
 import { promises as fs } from 'fs';
 
@@ -820,6 +858,7 @@ async saveToFile(): Promise<void> {
 每次调用 `set()` 都会写入整个配置文件，频繁操作时性能较差。
 
 **修复建议**:
+
 ```typescript
 class ElectronStore {
   private saveDebounceTimer: NodeJS.Timeout | null = null;
@@ -867,6 +906,7 @@ class ElectronStore {
 使用 `unshift()` 和 `slice()` 创建新数组，每条日志 O(n) 复杂度。
 
 **当前代码**:
+
 ```typescript
 private addLog(entry: LogEntry): void {
   this.logs.unshift(entry);  // O(n)
@@ -877,6 +917,7 @@ private addLog(entry: LogEntry): void {
 ```
 
 **修复建议**:
+
 ```typescript
 // 方案1: 使用 push + reverse（读取时）
 private addLog(entry: LogEntry): void {
@@ -918,6 +959,7 @@ class CircularBuffer<T> {
 ### P2-004: 使用已废弃的 API
 
 **位置**:
+
 - `apps/mobile/android/.../WifiModule.kt:48-49` - `connectionInfo`
 - `apps/mobile/src/context/AppContext.tsx:142` - `substr()`
 
@@ -925,6 +967,7 @@ class CircularBuffer<T> {
 使用已废弃的 API，未来版本可能不兼容。
 
 **修复建议**:
+
 ```kotlin
 // Android - 使用新的 NetworkCallback API
 private fun getCurrentWifiInfo(): WifiInfo? {
@@ -965,6 +1008,7 @@ id: uuidv4(),
 使用浏览器原生 `alert()` 不符合应用设计风格。
 
 **修复建议**:
+
 ```typescript
 // 使用 Toast 或 Modal 组件
 import { toast } from 'react-hot-toast';
@@ -989,6 +1033,7 @@ setError('需要认证的 WiFi 必须选择关联账号');
 ### P2-006: 内联样式过多
 
 **位置**:
+
 - `apps/desktop/src/pages/Home.tsx`
 - `apps/desktop/src/pages/Settings.tsx`
 - `apps/desktop/src/pages/Logs.tsx`
@@ -997,6 +1042,7 @@ setError('需要认证的 WiFi 必须选择关联账号');
 大量使用内联样式，难以维护和主题化。
 
 **修复建议**:
+
 ```typescript
 // Before
 <div style={{
@@ -1034,6 +1080,7 @@ const CardGrid = styled.div`
 桌面应用版本号为 `0.0.0`，影响自动更新功能。
 
 **修复建议**:
+
 ```json
 {
   "name": "netmate-desktop",
@@ -1049,6 +1096,7 @@ const CardGrid = styled.div`
 ### P2-009: 组件缺少 useMemo/useCallback 优化
 
 **位置**:
+
 - `apps/desktop/src/pages/Settings.tsx:56-141`
 - `apps/desktop/src/pages/Home.tsx:26-52`
 - `apps/desktop/src/context/AppContext.tsx:80-87`
@@ -1057,6 +1105,7 @@ const CardGrid = styled.div`
 函数和计算结果在每次渲染时都重新创建，导致不必要的子组件重渲染。
 
 **当前代码**:
+
 ```typescript
 // Settings.tsx - 每次渲染都创建新函数
 const handleAddAccount = async () => { ... };
@@ -1071,6 +1120,7 @@ const formattedLogs = logs.map(log => ({
 ```
 
 **修复建议**:
+
 ```typescript
 // 使用 useCallback 包裹事件处理函数
 const handleAddAccount = useCallback(async () => {
@@ -1082,11 +1132,12 @@ const handleAddWifi = useCallback(async () => {
 }, [dependencies]);
 
 // 使用 useMemo 缓存计算结果
-const formattedLogs = useMemo(() =>
-  logs.map(log => ({
-    ...log,
-    formattedTime: new Date(log.timestamp).toLocaleString()
-  })),
+const formattedLogs = useMemo(
+  () =>
+    logs.map((log) => ({
+      ...log,
+      formattedTime: new Date(log.timestamp).toLocaleString(),
+    })),
   [logs]
 );
 
@@ -1107,6 +1158,7 @@ const getISPLabel = (isp: ISPType): string => {
 Electron API 类型声明使用 `any`，失去了类型安全。
 
 **当前代码**:
+
 ```typescript
 interface Window {
   electron: {
@@ -1120,6 +1172,7 @@ interface Window {
 ```
 
 **修复建议**:
+
 ```typescript
 import type { AppConfig, AccountConfig, WifiConfig } from '@repo/shared';
 
@@ -1155,6 +1208,7 @@ interface Window {
 日志级别硬编码，无法根据环境（开发/生产）调整。
 
 **修复建议**:
+
 ```typescript
 export enum LogLevel {
   DEBUG = 0,
@@ -1205,6 +1259,7 @@ if (process.env.NODE_ENV === 'development') {
 网络状态自动刷新在应用后台时仍在运行，造成不必要的电量消耗。
 
 **修复建议**:
+
 ```typescript
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -1253,6 +1308,7 @@ export function useNetwork() {
 ### P2-013: 混合使用 console 和 Logger
 
 **位置**:
+
 - `apps/desktop/electron/main.ts:63, 71, 269, 270, 287...`
 - `apps/mobile/src/native/WifiModule.ts:72, 127, 144...`
 
@@ -1260,6 +1316,7 @@ export function useNetwork() {
 代码中混合使用 `console.log/warn/error` 和结构化 `Logger`，日志管理不一致。
 
 **修复建议**:
+
 ```typescript
 // 统一使用 Logger
 // 不要这样
@@ -1289,6 +1346,7 @@ class Logger {
 ### P2-014: TypeScript 版本不一致
 
 **位置**:
+
 - `package.json:35` - TypeScript 5.9.3
 - `apps/mobile/package.json:48` - TypeScript 5.8.3
 
@@ -1296,6 +1354,7 @@ class Logger {
 根目录和移动端使用不同版本的 TypeScript，可能导致类型行为不一致。
 
 **修复建议**:
+
 ```json
 // 统一在根目录管理 TypeScript 版本
 // package.json (root)
@@ -1323,12 +1382,14 @@ class Logger {
 WiFi 切换后硬编码等待 3 秒，不够灵活。
 
 **当前代码**:
+
 ```typescript
 // 等待 WiFi 连接稳定
-await new Promise(resolve => setTimeout(resolve, 3000));
+await new Promise((resolve) => setTimeout(resolve, 3000));
 ```
 
 **修复建议**:
+
 ```typescript
 // 使用轮询检测代替固定等待
 async function waitForWifiConnection(
@@ -1342,10 +1403,10 @@ async function waitForWifiConnection(
     const currentSsid = await wifiDetector.getCurrentSSID();
     if (currentSsid === ssid) {
       // 再等待一小段时间确保连接稳定
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       return true;
     }
-    await new Promise(resolve => setTimeout(resolve, interval));
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
 
   return false;
@@ -1368,26 +1429,21 @@ if (!connected) {
 应用启动 5 秒后检查更新，错误被静默忽略。
 
 **修复建议**:
+
 ```typescript
 // 异步检查更新，不阻塞主流程
 async function checkForUpdatesAsync() {
   try {
     // 延迟更长时间，确保应用完全启动
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    await new Promise((resolve) => setTimeout(resolve, 10000));
 
     const result = await autoUpdater.checkForUpdates();
     if (result?.updateInfo) {
-      services.logger.info(
-        `发现新版本: ${result.updateInfo.version}`,
-        'Updater'
-      );
+      services.logger.info(`发现新版本: ${result.updateInfo.version}`, 'Updater');
     }
   } catch (error) {
     // 记录错误但不影响应用运行
-    services.logger.warn(
-      `检查更新失败: ${error.message}`,
-      'Updater'
-    );
+    services.logger.warn(`检查更新失败: ${error.message}`, 'Updater');
   }
 }
 
@@ -1405,6 +1461,7 @@ checkForUpdatesAsync();
 没有 `.github/workflows/` 目录，缺少自动化测试和部署。
 
 **修复建议**:
+
 ```yaml
 # .github/workflows/ci.yml
 name: CI
@@ -1466,6 +1523,7 @@ jobs:
 WiFi 模块只支持 Android，iOS 返回 mock 数据。
 
 **修复建议**:
+
 ```typescript
 // iOS 实现需要使用 NetworkExtension 框架
 // 但 iOS 对 WiFi 操作有严格限制
@@ -1502,6 +1560,7 @@ class WifiModule: NSObject {
 加载状态只显示文字，缺少加载动画。
 
 **修复建议**:
+
 ```typescript
 // 添加骨架屏组件
 const SettingsSkeleton = () => (
@@ -1546,6 +1605,7 @@ const LoadingSpinner = () => (
 使用 `unknown` 类型失去了 TypeScript 类型检查的好处。
 
 **修复建议**:
+
 ```typescript
 // 定义 IPC 类型
 // types/ipc.ts
@@ -1584,7 +1644,8 @@ const accounts: IPCAccounts = {
 公开接口缺少 JSDoc 注释，不便于其他开发者使用。
 
 **修复建议**:
-```typescript
+
+````typescript
 /**
  * 认证服务 - 处理校园网登录/登出
  *
@@ -1615,7 +1676,7 @@ export class AuthService {
     // ...
   }
 }
-```
+````
 
 ---
 
@@ -1627,21 +1688,22 @@ export class AuthService {
 `_configManager` 参数未使用，增加了不必要的复杂性。
 
 **修复建议**:
+
 ```typescript
 // 如果确实不需要，移除参数
 export function registerAuthIPC(
   authService: AuthService,
   // _configManager: ConfigManager,  // 移除
-  accountManager: AccountManager,
+  accountManager: AccountManager
   // ...
-)
+);
 
 // 或者如果将来可能用到，保留并添加注释
 export function registerAuthIPC(
   authService: AuthService,
-  _configManager: ConfigManager, // Reserved for future use
+  _configManager: ConfigManager // Reserved for future use
   // ...
-)
+);
 ```
 
 ---
@@ -1654,6 +1716,7 @@ export function registerAuthIPC(
 缺少 Linux 构建目标和代码签名配置。
 
 **修复建议**:
+
 ```json
 {
   "build": {
@@ -1689,6 +1752,7 @@ export function registerAuthIPC(
 ### P3-007: React 版本不一致
 
 **位置**:
+
 - `apps/desktop/package.json` - React 18.2.0
 - `apps/mobile/package.json` - React 19.2.0
 
@@ -1696,6 +1760,7 @@ export function registerAuthIPC(
 桌面端和移动端使用不同版本的 React，可能导致共享组件行为不一致。
 
 **修复建议**:
+
 ```json
 // 统一为 React 18.x (更稳定)
 // apps/mobile/package.json
@@ -1726,12 +1791,14 @@ export function registerAuthIPC(
 GitHub 用户名和版本号硬编码在代码中。
 
 **当前代码**:
+
 ```typescript
-const GITHUB_OWNER = 'your-github-username';  // 占位符
-const CURRENT_VERSION = '0.0.1';  // 硬编码
+const GITHUB_OWNER = 'your-github-username'; // 占位符
+const CURRENT_VERSION = '0.0.1'; // 硬编码
 ```
 
 **修复建议**:
+
 ```typescript
 // 从配置或 package.json 读取
 import { version } from '../../package.json';
@@ -1752,16 +1819,14 @@ const CURRENT_VERSION = version;
 原生模块在某些情况下可能为 `undefined`，但代码没有防护。
 
 **修复建议**:
+
 ```typescript
 const WifiModule = NativeModules.WifiModule;
 
 // 添加模块检查
 function assertWifiModule(): void {
   if (!WifiModule) {
-    throw new Error(
-      'WifiModule 原生模块不可用。' +
-      '请确保已正确链接原生代码并重新构建应用。'
-    );
+    throw new Error('WifiModule 原生模块不可用。' + '请确保已正确链接原生代码并重新构建应用。');
   }
 }
 
@@ -1790,6 +1855,7 @@ const WifiModuleSafe = WifiModule || {
 缺少重要的 ESLint 规则，如 `react-hooks/exhaustive-deps`。
 
 **修复建议**:
+
 ```javascript
 // eslint.config.js
 export default [
@@ -1808,10 +1874,10 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'prefer-const': 'error',
       'no-var': 'error',
-      'eqeqeq': ['error', 'always'],
-      'curly': ['error', 'all'],
-    }
-  }
+      eqeqeq: ['error', 'always'],
+      curly: ['error', 'all'],
+    },
+  },
 ];
 ```
 
@@ -1825,6 +1891,7 @@ export default [
 连通性检查只有 5 秒超时，在网络慢时可能误判。
 
 **修复建议**:
+
 ```typescript
 // 提供可配置的超时时间
 interface ConnectivityOptions {
@@ -1863,6 +1930,7 @@ async checkConnectivity(options: ConnectivityOptions = {}): Promise<boolean> {
 窗口大小固定为 900x600，在不同屏幕尺寸上体验可能不佳。
 
 **修复建议**:
+
 ```typescript
 // 支持窗口大小调整，并记住用户偏好
 const DEFAULT_WIDTH = 900;
@@ -1880,7 +1948,7 @@ mainWindow = new BrowserWindow({
   y: savedBounds?.y,
   minWidth: MIN_WIDTH,
   minHeight: MIN_HEIGHT,
-  resizable: true,  // 允许调整大小
+  resizable: true, // 允许调整大小
   // ...
 });
 
@@ -1903,11 +1971,12 @@ mainWindow.on('close', () => {
 网络状态检查无法区分"完全离线"和"校园网未认证"。
 
 **修复建议**:
+
 ```typescript
 interface NetworkState {
-  isOnline: boolean;          // 系统网络是否可用
-  isConnected: boolean;       // 能否访问互联网
-  isAuthenticated: boolean;   // 是否通过校园网认证
+  isOnline: boolean; // 系统网络是否可用
+  isConnected: boolean; // 能否访问互联网
+  isAuthenticated: boolean; // 是否通过校园网认证
   currentSSID: string | null;
   ip: string | null;
 }
@@ -1917,7 +1986,13 @@ async function getDetailedNetworkStatus(): Promise<NetworkState> {
   // 1. 检查系统网络
   const isOnline = navigator.onLine;
   if (!isOnline) {
-    return { isOnline: false, isConnected: false, isAuthenticated: false, currentSSID: null, ip: null };
+    return {
+      isOnline: false,
+      isConnected: false,
+      isAuthenticated: false,
+      currentSSID: null,
+      ip: null,
+    };
   }
 
   // 2. 获取 WiFi 信息
@@ -1927,9 +2002,7 @@ async function getDetailedNetworkStatus(): Promise<NetworkState> {
   const isConnected = await window.electron.network.checkConnectivity();
 
   // 4. 检查校园网认证
-  const isAuthenticated = isConnected
-    ? await window.electron.network.checkAuthentication()
-    : false;
+  const isAuthenticated = isConnected ? await window.electron.network.checkAuthentication() : false;
 
   return {
     isOnline,
@@ -1946,6 +2019,7 @@ async function getDetailedNetworkStatus(): Promise<NetworkState> {
 ### P3-014: 缺少组件 React.memo 优化
 
 **位置**:
+
 - `apps/desktop/src/components/ThemeToggle.tsx`
 - `apps/desktop/src/components/Sidebar.tsx`
 
@@ -1953,6 +2027,7 @@ async function getDetailedNetworkStatus(): Promise<NetworkState> {
 频繁重渲染的组件未使用 `React.memo` 优化。
 
 **修复建议**:
+
 ```typescript
 // Sidebar.tsx
 import { memo } from 'react';
@@ -1984,6 +2059,7 @@ export const ThemeToggle = memo(function ThemeToggle() {
 单个 400+ 行的 Context 文件处理所有状态，违反单一职责原则。
 
 **修复建议**:
+
 ```typescript
 // 拆分为多个 Context
 
@@ -2031,6 +2107,7 @@ export const LogContext = createContext<LogContextValue>(null!);
 服务直接创建，难以进行单元测试和替换实现。
 
 **修复建议**:
+
 ```typescript
 // 使用简单的 DI 容器
 // di/container.ts
@@ -2074,6 +2151,7 @@ container.register('storage', () => createMockStorage());
 登出响应解析依赖简单字符串匹配，可能不准确。
 
 **修复建议**:
+
 ```typescript
 // 完整实现登出响应解析
 parseLogoutResponse(responseText: string): LogoutResult {
@@ -2112,6 +2190,7 @@ parseLogoutResponse(responseText: string): LogoutResult {
 ### P4-004: 硬编码服务器地址
 
 **位置**:
+
 - `packages/shared/src/constants/defaults.ts:3`
 - `packages/shared/src/services/NetworkDetector.ts:20`
 
@@ -2119,6 +2198,7 @@ parseLogoutResponse(responseText: string): LogoutResult {
 服务器地址硬编码，不同学校无法直接使用。
 
 **修复建议**:
+
 ```typescript
 // 支持多学校配置
 // constants/schools.ts
@@ -2168,6 +2248,7 @@ export const CUSTOM_SCHOOL_ID = 'custom';
 所有文本硬编码为中文，不支持多语言。
 
 **修复建议**:
+
 ```typescript
 // 使用 i18next
 // i18n/index.ts
@@ -2227,6 +2308,7 @@ function LoginForm() {
 缺少 ARIA 标签和键盘导航支持。
 
 **修复建议**:
+
 ```typescript
 // 添加 ARIA 标签
 <button
@@ -2268,6 +2350,7 @@ function LoginForm() {
 没有错误监控和上报机制，无法追踪生产环境的问题。
 
 **修复建议**:
+
 ```typescript
 // 集成 Sentry 或类似服务
 // utils/errorReporter.ts
@@ -2283,7 +2366,7 @@ Sentry.init({
       delete event.user.ip_address;
     }
     return event;
-  }
+  },
 });
 
 export function captureException(error: Error, context?: Record<string, unknown>) {
@@ -2314,6 +2397,7 @@ try {
 没有性能监控，无法了解应用的实际表现。
 
 **修复建议**:
+
 ```typescript
 // 简单的性能监控
 class PerformanceMonitor {
@@ -2363,6 +2447,7 @@ endTimer();
 使用 JSON 文件存储所有数据，不适合大量数据或复杂查询。
 
 **修复建议**:
+
 ```typescript
 // 对于 Electron，使用 better-sqlite3
 import Database from 'better-sqlite3';
@@ -2404,6 +2489,7 @@ import { Database } from '@nozbe/watermelondb';
 不同学校可能有不同的认证方式，但无法扩展。
 
 **修复建议**:
+
 ```typescript
 // 定义认证协议接口
 interface AuthProtocol {
@@ -2425,7 +2511,7 @@ const ePortalProtocol: AuthProtocol = {
   },
   parseResponse(response) {
     // 当前实现
-  }
+  },
 };
 
 // 注册表
@@ -2446,36 +2532,37 @@ const request = protocol.buildLoginRequest(config);
 
 ## 改进统计
 
-| 优先级 | 数量 | 类别分布 |
-|--------|------|----------|
-| P0 | 6 | 安全 (4), Bug (1), 稳定性 (1) |
-| P1 | 12 | 安全 (1), Bug (4), 测试 (1), 代码质量 (4), 功能 (2) |
-| P2 | 16 | 性能 (5), 代码质量 (7), 配置 (3), 日志 (1) |
-| P3 | 14 | 功能 (4), UX (3), 代码质量 (5), 配置 (2) |
-| P4 | 10 | 架构 (4), 功能 (4), 监控 (2) |
-| **总计** | **58** | |
+| 优先级   | 数量   | 类别分布                                            |
+| -------- | ------ | --------------------------------------------------- |
+| P0       | 6      | 安全 (4), Bug (1), 稳定性 (1)                       |
+| P1       | 12     | 安全 (1), Bug (4), 测试 (1), 代码质量 (4), 功能 (2) |
+| P2       | 16     | 性能 (5), 代码质量 (7), 配置 (3), 日志 (1)          |
+| P3       | 14     | 功能 (4), UX (3), 代码质量 (5), 配置 (2)            |
+| P4       | 10     | 架构 (4), 功能 (4), 监控 (2)                        |
+| **总计** | **58** |                                                     |
 
 ---
 
 ## 按类别统计
 
-| 类别 | 数量 | 占比 |
-|------|------|------|
-| 代码质量 | 16 | 27.6% |
-| 安全 | 5 | 8.6% |
-| 性能 | 5 | 8.6% |
-| Bug | 5 | 8.6% |
-| 功能缺失 | 10 | 17.2% |
-| 架构设计 | 7 | 12.1% |
-| 配置/构建 | 5 | 8.6% |
-| UX | 3 | 5.2% |
-| 监控/日志 | 2 | 3.5% |
+| 类别      | 数量 | 占比  |
+| --------- | ---- | ----- |
+| 代码质量  | 16   | 27.6% |
+| 安全      | 5    | 8.6%  |
+| 性能      | 5    | 8.6%  |
+| Bug       | 5    | 8.6%  |
+| 功能缺失  | 10   | 17.2% |
+| 架构设计  | 7    | 12.1% |
+| 配置/构建 | 5    | 8.6%  |
+| UX        | 3    | 5.2%  |
+| 监控/日志 | 2    | 3.5%  |
 
 ---
 
 ## 推荐修复顺序
 
 ### 第一阶段（1-2 周）：修复 P0 问题
+
 1. P0-003: 方法名不匹配（立即修复，防止崩溃）
 2. P0-005: 添加 Error Boundary（防止白屏）
 3. P0-006: 启用已有的验证函数
@@ -2484,6 +2571,7 @@ const request = protocol.buildLoginRequest(config);
 6. P0-004: HTTP 安全警告
 
 ### 第二阶段（2-4 周）：修复 P1 问题
+
 1. P1-003: 添加单元测试（优先核心服务）
 2. P1-009: 修复内存泄漏
 3. P1-010: 修复状态竞争条件
@@ -2498,18 +2586,21 @@ const request = protocol.buildLoginRequest(config);
 12. P1-012: Android 权限修复
 
 ### 第三阶段（4-8 周）：修复 P2 问题
+
 - 性能优化 (P2-001, P2-002, P2-003, P2-009, P2-012)
 - 代码质量 (P2-004, P2-005, P2-006, P2-010, P2-011, P2-013)
 - CI/CD 配置 (P2-008)
 - 配置一致性 (P2-007, P2-014, P2-015, P2-016)
 
 ### 第四阶段（8-12 周）：修复 P3 问题
+
 - iOS 支持评估 (P3-001)
 - UX 改进 (P3-002, P3-012, P3-013)
 - 代码规范 (P3-003, P3-004, P3-005, P3-010, P3-014)
 - 功能增强 (P3-006, P3-008, P3-009, P3-011)
 
 ### 长期规划：P4 问题
+
 - 架构重构 (P4-001, P4-002, P4-003)
 - 多学校支持 (P4-004, P4-010)
 - 国际化 (P4-005)
@@ -2519,7 +2610,7 @@ const request = protocol.buildLoginRequest(config);
 
 ---
 
-*文档版本: 2.0*
-*最后更新: 2026-01-02*
-*作者: Claude*
-*问题总数: 58 个*
+_文档版本: 2.0_
+_最后更新: 2026-01-02_
+_作者: Claude_
+_问题总数: 58 个_

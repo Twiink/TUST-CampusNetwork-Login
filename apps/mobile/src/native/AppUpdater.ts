@@ -119,7 +119,9 @@ export function getPlatformAsset(release: ReleaseInfo): ReleaseAsset | null {
     // 查找 APK 文件
     return (
       release.assets.find(
-        asset => asset.name.endsWith('.apk') || asset.contentType === 'application/vnd.android.package-archive'
+        asset =>
+          asset.name.endsWith('.apk') ||
+          asset.contentType === 'application/vnd.android.package-archive'
       ) || null
     );
   }
@@ -150,20 +152,16 @@ export async function openDownloadPage(release: ReleaseInfo): Promise<void> {
  * 显示更新对话框
  */
 export function showUpdateDialog(release: ReleaseInfo): void {
-  Alert.alert(
-    `发现新版本 ${release.version}`,
-    release.body || '有新版本可用，是否现在更新？',
-    [
-      {
-        text: '稍后',
-        style: 'cancel',
-      },
-      {
-        text: '更新',
-        onPress: () => openDownloadPage(release),
-      },
-    ]
-  );
+  Alert.alert(`发现新版本 ${release.version}`, release.body || '有新版本可用，是否现在更新？', [
+    {
+      text: '稍后',
+      style: 'cancel',
+    },
+    {
+      text: '更新',
+      onPress: () => openDownloadPage(release),
+    },
+  ]);
 }
 
 /**

@@ -27,7 +27,7 @@ export function useWifiConfigs() {
     setLoading(true);
     try {
       const newWifi = await window.electronAPI.wifi.add(wifi);
-      setWifiList(prev => [...prev, newWifi]);
+      setWifiList((prev) => [...prev, newWifi]);
       setError(null);
       return newWifi;
     } catch (err) {
@@ -43,7 +43,7 @@ export function useWifiConfigs() {
     setLoading(true);
     try {
       const updated = await window.electronAPI.wifi.update(id, updates);
-      setWifiList(prev => prev.map(w => w.id === id ? updated : w));
+      setWifiList((prev) => prev.map((w) => (w.id === id ? updated : w)));
       setError(null);
       return updated;
     } catch (err) {
@@ -59,7 +59,7 @@ export function useWifiConfigs() {
     setLoading(true);
     try {
       await window.electronAPI.wifi.remove(id);
-      setWifiList(prev => prev.filter(w => w.id !== id));
+      setWifiList((prev) => prev.filter((w) => w.id !== id));
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : '删除 WiFi 失败';

@@ -34,10 +34,7 @@ export const HomeScreen: React.FC = () => {
         false
       );
       pulseOpacity.value = withRepeat(
-        withSequence(
-          withTiming(0.6, { duration: 800 }),
-          withTiming(1, { duration: 800 })
-        ),
+        withSequence(withTiming(0.6, { duration: 800 }), withTiming(1, { duration: 800 })),
         -1,
         false
       );
@@ -54,10 +51,14 @@ export const HomeScreen: React.FC = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'connected': return '已连接';
-      case 'disconnected': return '未连接';
-      case 'connecting': return '连接中...';
-      default: return status;
+      case 'connected':
+        return '已连接';
+      case 'disconnected':
+        return '未连接';
+      case 'connecting':
+        return '连接中...';
+      default:
+        return status;
     }
   };
 
@@ -75,16 +76,19 @@ export const HomeScreen: React.FC = () => {
           <GlassView style={styles.card}>
             <View style={styles.warningCardContent}>
               <Text style={styles.warningIcon}>⚠️</Text>
-              <Text style={[styles.warningTitle, { color: theme.colors.warning }]}>
-                未配置账户
-              </Text>
+              <Text style={[styles.warningTitle, { color: theme.colors.warning }]}>未配置账户</Text>
               <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
                 请先前往"配置设置"添加校园网账户，才能使用登录功能。
               </Text>
-              <View style={[styles.warningBox, {
-                backgroundColor: theme.colors.warning + '20',
-                borderColor: theme.colors.warning + '40',
-              }]}>
+              <View
+                style={[
+                  styles.warningBox,
+                  {
+                    backgroundColor: theme.colors.warning + '20',
+                    borderColor: theme.colors.warning + '40',
+                  },
+                ]}
+              >
                 <Text style={[styles.warningBoxText, { color: theme.colors.textSecondary }]}>
                   ⚙️ 点击底部菜单的"配置设置"添加账户
                 </Text>
@@ -125,10 +129,19 @@ export const HomeScreen: React.FC = () => {
                 styles.badge,
                 animatedBadgeStyle,
                 networkStatus === 'connected'
-                  ? { borderColor: theme.colors.success, backgroundColor: `${theme.colors.success}20` }
+                  ? {
+                      borderColor: theme.colors.success,
+                      backgroundColor: `${theme.colors.success}20`,
+                    }
                   : networkStatus === 'disconnected'
-                  ? { borderColor: theme.colors.danger, backgroundColor: `${theme.colors.danger}20` }
-                  : { borderColor: theme.colors.warning, backgroundColor: `${theme.colors.warning}20` },
+                    ? {
+                        borderColor: theme.colors.danger,
+                        backgroundColor: `${theme.colors.danger}20`,
+                      }
+                    : {
+                        borderColor: theme.colors.warning,
+                        backgroundColor: `${theme.colors.warning}20`,
+                      },
               ]}
             >
               <Text
@@ -139,8 +152,8 @@ export const HomeScreen: React.FC = () => {
                       networkStatus === 'connected'
                         ? theme.colors.success
                         : networkStatus === 'disconnected'
-                        ? theme.colors.danger
-                        : theme.colors.warning,
+                          ? theme.colors.danger
+                          : theme.colors.warning,
                   },
                 ]}
               >
@@ -171,8 +184,8 @@ export const HomeScreen: React.FC = () => {
               {networkStatus === 'connected'
                 ? '断开连接'
                 : networkStatus === 'connecting'
-                ? '正在连接...'
-                : '立即连接'}
+                  ? '正在连接...'
+                  : '立即连接'}
             </Text>
           </TouchableOpacity>
         </GlassView>

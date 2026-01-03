@@ -10,12 +10,12 @@
   --text-secondary: #64748b;
   --card-bg: rgba(255, 255, 255, 0.4);
   --border-color: rgba(255, 255, 255, 0.7);
-  
+
   --radius-lg: 24px;
   --radius-md: 16px;
   --radius-sm: 10px;
   --radius-pill: 50px;
-  
+
   --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
 
   /* Log Entry Colors */
@@ -29,7 +29,13 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   background: var(--bg-gradient);
   background-attachment: fixed;
   color: var(--text-color);
@@ -39,7 +45,8 @@ body {
 }
 
 /* Add some floating background elements for better glass effect */
-body::before, body::after {
+body::before,
+body::after {
   content: '';
   position: absolute;
   border-radius: 50%;
@@ -89,7 +96,7 @@ body::after {
   font-size: 1.4rem;
   font-weight: 800;
   color: #0369a1;
-  text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
   letter-spacing: -0.5px;
 }
 
@@ -131,7 +138,7 @@ body::after {
   font-size: 2.2rem;
   font-weight: 800;
   color: #0c4a6e;
-  text-shadow: 0 2px 4px rgba(255,255,255,0.5);
+  text-shadow: 0 2px 4px rgba(255, 255, 255, 0.5);
 }
 
 /* Cards */
@@ -142,7 +149,7 @@ body::after {
   -webkit-backdrop-filter: blur(25px);
   border-radius: var(--radius-lg);
   padding: 32px;
-  box-shadow: 
+  box-shadow:
     0 4px 24px -1px rgba(0, 0, 0, 0.05),
     inset 0 0 0 1px rgba(255, 255, 255, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -153,7 +160,7 @@ body::after {
 
 .card:hover {
   transform: translateY(-6px) scale(1.01);
-  box-shadow: 
+  box-shadow:
     0 25px 50px -12px rgba(14, 165, 233, 0.25),
     inset 0 0 0 1px rgba(255, 255, 255, 0.9);
   border: 1px solid rgba(14, 165, 233, 0.6); /* Explicitly set border on all sides */
@@ -313,12 +320,18 @@ body.dark {
   --log-container-bg: rgba(0, 0, 0, 0.2);
 }
 
-body.dark::before { background: #1e293b; opacity: 0.3; }
-body.dark::after { background: #0f172a; opacity: 0.3; }
+body.dark::before {
+  background: #1e293b;
+  opacity: 0.3;
+}
+body.dark::after {
+  background: #0f172a;
+  opacity: 0.3;
+}
 
 body.dark .sidebar-header {
   color: #38bdf8;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
 body.dark .page-title,
@@ -352,7 +365,7 @@ body.dark .card {
 body.dark .card:hover {
   background: rgba(30, 41, 59, 0.6); /* Keep original color */
   border-color: #38bdf8; /* Blue neon border */
-  box-shadow: 
+  box-shadow:
     0 0 15px rgba(56, 189, 248, 0.3),
     0 0 30px rgba(56, 189, 248, 0.1),
     inset 0 0 20px rgba(56, 189, 248, 0.05);

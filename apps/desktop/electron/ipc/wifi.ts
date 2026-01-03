@@ -9,10 +9,7 @@ import { IPC_CHANNELS } from './channels';
 /**
  * 注册 WiFi IPC 处理器
  */
-export function registerWifiIPC(
-  wifiManager: WifiManager,
-  logger: ReturnType<typeof createLogger>
-) {
+export function registerWifiIPC(wifiManager: WifiManager, logger: ReturnType<typeof createLogger>) {
   /**
    * 获取 WiFi 列表
    */

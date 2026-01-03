@@ -72,7 +72,8 @@ const electronAPI = {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_LIST),
     getCurrent: () => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_GET_CURRENT),
     add: (account: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_ADD, account),
-    update: (id: string, updates: unknown) => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_UPDATE, id, updates),
+    update: (id: string, updates: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_UPDATE, id, updates),
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_REMOVE, id),
     switch: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.ACCOUNT_SWITCH, id),
   },
@@ -81,7 +82,8 @@ const electronAPI = {
   wifi: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_LIST),
     add: (wifi: unknown) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_ADD, wifi),
-    update: (id: string, updates: unknown) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_UPDATE, id, updates),
+    update: (id: string, updates: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.WIFI_UPDATE, id, updates),
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_REMOVE, id),
   },
 
@@ -118,7 +120,8 @@ const electronAPI = {
     show: (options: { title: string; body: string; type?: string; silent?: boolean }) =>
       ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SHOW, options),
     getEnabled: () => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_GET_ENABLED),
-    setEnabled: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
+    setEnabled: (enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.NOTIFICATION_SET_ENABLED, enabled),
   },
 
   // 自动更新
@@ -132,7 +135,7 @@ const electronAPI = {
   // 事件监听
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     const validChannels = Object.values(IPC_EVENTS);
-    if (validChannels.includes(channel as typeof validChannels[number])) {
+    if (validChannels.includes(channel as (typeof validChannels)[number])) {
       const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args);
       ipcRenderer.on(channel, listener);
       return () => ipcRenderer.removeListener(channel, listener);
@@ -143,7 +146,7 @@ const electronAPI = {
   // 移除事件监听
   off: (channel: string, callback?: (...args: unknown[]) => void) => {
     const validChannels = Object.values(IPC_EVENTS);
-    if (validChannels.includes(channel as typeof validChannels[number])) {
+    if (validChannels.includes(channel as (typeof validChannels)[number])) {
       if (callback) {
         ipcRenderer.removeListener(channel, callback);
       } else {

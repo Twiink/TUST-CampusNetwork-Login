@@ -41,7 +41,9 @@ export function urldecode(str: string): string {
  * @param params 参数对象
  * @returns 查询字符串 (不包含 ?)
  */
-export function buildQueryString(params: Record<string, string | number | boolean | undefined>): string {
+export function buildQueryString(
+  params: Record<string, string | number | boolean | undefined>
+): string {
   return Object.entries(params)
     .filter(([, value]) => value !== undefined && value !== null)
     .map(([key, value]) => `${urlencode(key)}=${urlencode(String(value))}`)
@@ -61,7 +63,7 @@ export function parseQueryString(queryString: string): Record<string, string> {
   // 移除开头的 ?
   const query = queryString.startsWith('?') ? queryString.slice(1) : queryString;
 
-  query.split('&').forEach(pair => {
+  query.split('&').forEach((pair) => {
     const [key, value] = pair.split('=');
     if (key) {
       params[urldecode(key)] = value ? urldecode(value) : '';

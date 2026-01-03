@@ -37,7 +37,7 @@ export const Settings: React.FC = () => {
     username: '',
     password: '',
     serverUrl: 'http://10.10.102.50:801',
-    isp: 'campus'
+    isp: 'campus',
   });
 
   const [newWifi, setNewWifi] = useState<{
@@ -49,7 +49,7 @@ export const Settings: React.FC = () => {
     ssid: '',
     password: '',
     requiresAuth: true,
-    linkedAccountId: ''
+    linkedAccountId: '',
   });
 
   const handleAddAccount = () => {
@@ -60,22 +60,27 @@ export const Settings: React.FC = () => {
       username: newAccount.username,
       password: newAccount.password,
       serverUrl: newAccount.serverUrl,
-      isp: newAccount.isp
+      isp: newAccount.isp,
     };
 
     setConfig({
       ...config,
       accounts: [...config.accounts, account],
-      currentAccountId: config.currentAccountId || account.id
+      currentAccountId: config.currentAccountId || account.id,
     });
-    setNewAccount({ username: '', password: '', serverUrl: 'http://10.10.102.50:801', isp: 'campus' });
+    setNewAccount({
+      username: '',
+      password: '',
+      serverUrl: 'http://10.10.102.50:801',
+      isp: 'campus',
+    });
   };
 
   const handleRemoveAccount = (id: string) => {
     if (!config) return;
-    const updatedAccounts = config.accounts.filter(a => a.id !== id);
+    const updatedAccounts = config.accounts.filter((a) => a.id !== id);
     // 同时更新引用了该账号的 WiFi 配置
-    const updatedWifiList = config.wifiList.map(wifi => {
+    const updatedWifiList = config.wifiList.map((wifi) => {
       if (wifi.linkedAccountId === id) {
         return { ...wifi, linkedAccountId: undefined };
       }
@@ -85,9 +90,12 @@ export const Settings: React.FC = () => {
       ...config,
       accounts: updatedAccounts,
       wifiList: updatedWifiList,
-      currentAccountId: config.currentAccountId === id
-        ? (updatedAccounts.length > 0 ? updatedAccounts[0].id : null)
-        : config.currentAccountId
+      currentAccountId:
+        config.currentAccountId === id
+          ? updatedAccounts.length > 0
+            ? updatedAccounts[0].id
+            : null
+          : config.currentAccountId,
     });
   };
 
@@ -105,12 +113,12 @@ export const Settings: React.FC = () => {
       autoConnect: true,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
-      priority: config.wifiList.length
+      priority: config.wifiList.length,
     };
 
     setConfig({
       ...config,
-      wifiList: [...config.wifiList, wifi]
+      wifiList: [...config.wifiList, wifi],
     });
     setNewWifi({ ssid: '', password: '', requiresAuth: true, linkedAccountId: '' });
   };
@@ -119,7 +127,7 @@ export const Settings: React.FC = () => {
     if (!config) return;
     setConfig({
       ...config,
-      wifiList: config.wifiList.filter(w => w.id !== id)
+      wifiList: config.wifiList.filter((w) => w.id !== id),
     });
   };
 
@@ -127,22 +135,25 @@ export const Settings: React.FC = () => {
     if (!config) return;
     setConfig({
       ...config,
-      settings: { ...config.settings, [key]: value }
+      settings: { ...config.settings, [key]: value },
     });
   };
 
   const getISPLabel = (isp: ISP) => {
-    return ISP_OPTIONS.find(opt => opt.value === isp)?.label || isp;
+    return ISP_OPTIONS.find((opt) => opt.value === isp)?.label || isp;
   };
 
   const getLinkedAccount = (accountId?: string) => {
     if (!accountId || !config) return null;
-    return config.accounts.find(acc => acc.id === accountId);
+    return config.accounts.find((acc) => acc.id === accountId);
   };
 
   return (
     <div className="page-settings">
-      <h1 className="page-title"><SettingsIcon size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />配置设置</h1>
+      <h1 className="page-title">
+        <SettingsIcon size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+        配置设置
+      </h1>
 
       {!config ? (
         <div className="card">
@@ -152,7 +163,10 @@ export const Settings: React.FC = () => {
         <>
           {/* 通用设置 */}
           <div className="card">
-            <h3><SettingsIcon size={18} style={{ marginRight: 8 }} />通用设置</h3>
+            <h3>
+              <SettingsIcon size={18} style={{ marginRight: 8 }} />
+              通用设置
+            </h3>
             <div className="form-group">
               <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                 <input
@@ -172,7 +186,14 @@ export const Settings: React.FC = () => {
                   checked={config.settings.enableHeartbeat}
                   onChange={(e) => handleSettingChange('enableHeartbeat', e.target.checked)}
                 />
-                <Heart size={16} style={{ marginRight: 6, color: config.settings.enableHeartbeat ? '#ef4444' : 'inherit' }} /> 启用心跳检测
+                <Heart
+                  size={16}
+                  style={{
+                    marginRight: 6,
+                    color: config.settings.enableHeartbeat ? '#ef4444' : 'inherit',
+                  }}
+                />{' '}
+                启用心跳检测
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 8 }}>
                   (开启后自动检测网络连接状态)
                 </span>
@@ -201,20 +222,35 @@ export const Settings: React.FC = () => {
               </label>
             </div>
             {config.settings.enableHeartbeat && (
-              <div className="form-group" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-color)' }}>
-                <label><Heart size={14} style={{ marginRight: 6 }} />心跳检测间隔 (秒)</label>
+              <div
+                className="form-group"
+                style={{
+                  marginTop: 16,
+                  paddingTop: 16,
+                  borderTop: '1px solid var(--border-color)',
+                }}
+              >
+                <label>
+                  <Heart size={14} style={{ marginRight: 6 }} />
+                  心跳检测间隔 (秒)
+                </label>
                 <input
                   type="number"
                   className="form-control"
                   value={config.settings.pollingInterval}
                   min={5}
                   onWheel={(e) => e.currentTarget.blur()}
-                  onChange={(e) => handleSettingChange('pollingInterval', parseInt(e.target.value) || 30)}
+                  onChange={(e) =>
+                    handleSettingChange('pollingInterval', parseInt(e.target.value) || 30)
+                  }
                 />
               </div>
             )}
             <div className="form-group">
-              <label><RotateCcw size={14} style={{ marginRight: 6 }} />最大重试次数</label>
+              <label>
+                <RotateCcw size={14} style={{ marginRight: 6 }} />
+                最大重试次数
+              </label>
               <input
                 type="number"
                 className="form-control"
@@ -229,23 +265,62 @@ export const Settings: React.FC = () => {
 
           {/* 账号管理 */}
           <div className="card">
-            <h3><User size={18} style={{ marginRight: 8 }} />账号管理</h3>
+            <h3>
+              <User size={18} style={{ marginRight: 8 }} />
+              账号管理
+            </h3>
             <div style={{ marginBottom: 20 }}>
               {config.accounts.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 'var(--radius-md)' }}>
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(0,0,0,0.02)',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
                   <User size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
                   <p style={{ margin: 0 }}>暂无账号，请添加账号以使用登录功能</p>
                 </div>
               ) : (
-                config.accounts.map(acc => (
-                  <div key={acc.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                config.accounts.map((acc) => (
+                  <div
+                    key={acc.id}
+                    style={{
+                      padding: '12px 0',
+                      borderBottom: '1px solid rgba(0,0,0,0.05)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <div>
                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                         <User size={14} style={{ marginRight: 6 }} />
                         {acc.username}
-                        <span style={{fontSize: '0.8rem', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '12px', marginLeft: '8px'}}>{getISPLabel(acc.isp)}</span>
+                        <span
+                          style={{
+                            fontSize: '0.8rem',
+                            backgroundColor: '#e0f2fe',
+                            color: '#0369a1',
+                            padding: '2px 8px',
+                            borderRadius: '12px',
+                            marginLeft: '8px',
+                          }}
+                        >
+                          {getISPLabel(acc.isp)}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                          color: 'var(--text-secondary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginTop: 4,
+                        }}
+                      >
                         <Server size={12} style={{ marginRight: 4 }} />
                         {acc.serverUrl}
                       </div>
@@ -257,7 +332,14 @@ export const Settings: React.FC = () => {
                         onClick={() => setConfig({ ...config, currentAccountId: acc.id })}
                         disabled={config.currentAccountId === acc.id}
                       >
-                        {config.currentAccountId === acc.id ? <><Check size={14} style={{ marginRight: 4 }} />使用中</> : '使用此账号'}
+                        {config.currentAccountId === acc.id ? (
+                          <>
+                            <Check size={14} style={{ marginRight: 4 }} />
+                            使用中
+                          </>
+                        ) : (
+                          '使用此账号'
+                        )}
                       </button>
                       <button
                         className="btn btn-danger"
@@ -272,44 +354,63 @@ export const Settings: React.FC = () => {
               )}
             </div>
 
-            <h4 style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}><Plus size={16} style={{ marginRight: 6 }} />添加新账号</h4>
+            <h4 style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}>
+              <Plus size={16} style={{ marginRight: 6 }} />
+              添加新账号
+            </h4>
             <div className="form-group">
-              <label><User size={14} style={{ marginRight: 6 }} />用户名</label>
+              <label>
+                <User size={14} style={{ marginRight: 6 }} />
+                用户名
+              </label>
               <input
                 className="form-control"
                 placeholder="请输入学号/用户名"
                 value={newAccount.username}
-                onChange={e => setNewAccount({...newAccount, username: e.target.value})}
+                onChange={(e) => setNewAccount({ ...newAccount, username: e.target.value })}
               />
             </div>
             <div className="form-group">
-              <label><Lock size={14} style={{ marginRight: 6 }} />密码</label>
+              <label>
+                <Lock size={14} style={{ marginRight: 6 }} />
+                密码
+              </label>
               <input
                 type="password"
                 className="form-control"
                 placeholder="请输入密码"
                 value={newAccount.password}
-                onChange={e => setNewAccount({...newAccount, password: e.target.value})}
+                onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
               />
             </div>
             <div className="form-group">
-              <label><Globe size={14} style={{ marginRight: 6 }} />服务商</label>
+              <label>
+                <Globe size={14} style={{ marginRight: 6 }} />
+                服务商
+              </label>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
-                {ISP_OPTIONS.map(opt => (
+                {ISP_OPTIONS.map((opt) => (
                   <div
                     key={opt.value}
-                    onClick={() => setNewAccount({...newAccount, isp: opt.value})}
+                    onClick={() => setNewAccount({ ...newAccount, isp: opt.value })}
                     style={{
                       padding: '12px',
                       textAlign: 'center',
                       borderRadius: 'var(--radius-md)',
                       border: '1px solid',
-                      borderColor: newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--border-color)',
-                      background: newAccount.isp === opt.value ? 'rgba(14, 165, 233, 0.1)' : 'rgba(255, 255, 255, 0.4)',
-                      color: newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--text-color)',
+                      borderColor:
+                        newAccount.isp === opt.value
+                          ? 'var(--primary-color)'
+                          : 'var(--border-color)',
+                      background:
+                        newAccount.isp === opt.value
+                          ? 'rgba(14, 165, 233, 0.1)'
+                          : 'rgba(255, 255, 255, 0.4)',
+                      color:
+                        newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--text-color)',
                       cursor: 'pointer',
                       fontWeight: newAccount.isp === opt.value ? '600' : '500',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
                     }}
                   >
                     {opt.label}
@@ -318,28 +419,47 @@ export const Settings: React.FC = () => {
               </div>
             </div>
             <div className="form-group">
-              <label><Server size={14} style={{ marginRight: 6 }} />登录服务器地址</label>
+              <label>
+                <Server size={14} style={{ marginRight: 6 }} />
+                登录服务器地址
+              </label>
               <input
                 className="form-control"
                 value={newAccount.serverUrl}
-                onChange={e => setNewAccount({...newAccount, serverUrl: e.target.value})}
+                onChange={(e) => setNewAccount({ ...newAccount, serverUrl: e.target.value })}
               />
             </div>
-            <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleAddAccount}>
-              <Plus size={16} style={{ marginRight: 6 }} />保存并添加账号
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              onClick={handleAddAccount}
+            >
+              <Plus size={16} style={{ marginRight: 6 }} />
+              保存并添加账号
             </button>
           </div>
 
           {/* WiFi 配置 */}
           <div className="card">
-            <h3><Wifi size={18} style={{ marginRight: 8 }} />WiFi 配置</h3>
+            <h3>
+              <Wifi size={18} style={{ marginRight: 8 }} />
+              WiFi 配置
+            </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 16 }}>
               配置需要自动连接的 WiFi 网络。启用心跳检测后，断线时会按优先级尝试切换网络。
             </p>
 
             <div style={{ marginBottom: 20 }}>
               {config.wifiList.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: 'var(--radius-md)' }}>
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(0,0,0,0.02)',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
                   <Wifi size={32} style={{ marginBottom: 8, opacity: 0.5 }} />
                   <p style={{ margin: 0 }}>暂无 WiFi 配置</p>
                 </div>
@@ -347,33 +467,62 @@ export const Settings: React.FC = () => {
                 config.wifiList.map((wifi, index) => {
                   const linkedAccount = getLinkedAccount(wifi.linkedAccountId);
                   return (
-                    <div key={wifi.id} style={{ padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div
+                      key={wifi.id}
+                      style={{
+                        padding: '12px 0',
+                        borderBottom: '1px solid rgba(0,0,0,0.05)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
                       <div>
-                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                        <div
+                          style={{
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 4,
+                          }}
+                        >
                           <Wifi size={14} style={{ marginRight: 6 }} />
                           {wifi.ssid}
-                          <span style={{
-                            fontSize: '0.75rem',
-                            backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
-                            color: wifi.requiresAuth ? '#92400e' : '#065f46',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            marginLeft: '4px'
-                          }}>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
+                              color: wifi.requiresAuth ? '#92400e' : '#065f46',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              marginLeft: '4px',
+                            }}
+                          >
                             {wifi.requiresAuth ? '需要认证' : '无需认证'}
                           </span>
-                          <span style={{
-                            fontSize: '0.75rem',
-                            backgroundColor: '#f3f4f6',
-                            color: '#6b7280',
-                            padding: '2px 8px',
-                            borderRadius: '12px'
-                          }}>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              backgroundColor: '#f3f4f6',
+                              color: '#6b7280',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                            }}
+                          >
                             优先级 {index + 1}
                           </span>
                         </div>
                         {wifi.requiresAuth && linkedAccount && (
-                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                          <div
+                            style={{
+                              fontSize: '0.85rem',
+                              color: 'var(--text-secondary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginTop: 4,
+                            }}
+                          >
                             <Link size={12} style={{ marginRight: 4 }} />
                             关联账号: {linkedAccount.username}
                             <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#0369a1' }}>
@@ -382,7 +531,15 @@ export const Settings: React.FC = () => {
                           </div>
                         )}
                         {wifi.requiresAuth && !linkedAccount && (
-                          <div style={{ fontSize: '0.85rem', color: '#ef4444', display: 'flex', alignItems: 'center', marginTop: 4 }}>
+                          <div
+                            style={{
+                              fontSize: '0.85rem',
+                              color: '#ef4444',
+                              display: 'flex',
+                              alignItems: 'center',
+                              marginTop: 4,
+                            }}
+                          >
                             <Link size={12} style={{ marginRight: 4 }} />
                             未关联账号（账号可能已删除）
                           </div>
@@ -401,24 +558,33 @@ export const Settings: React.FC = () => {
               )}
             </div>
 
-            <h4 style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}><Plus size={16} style={{ marginRight: 6 }} />添加 WiFi</h4>
+            <h4 style={{ marginBottom: 16, display: 'flex', alignItems: 'center' }}>
+              <Plus size={16} style={{ marginRight: 6 }} />
+              添加 WiFi
+            </h4>
             <div className="form-group">
-              <label><Wifi size={14} style={{ marginRight: 6 }} />WiFi 名称 (SSID)</label>
+              <label>
+                <Wifi size={14} style={{ marginRight: 6 }} />
+                WiFi 名称 (SSID)
+              </label>
               <input
                 className="form-control"
                 placeholder="请输入 WiFi 名称"
                 value={newWifi.ssid}
-                onChange={e => setNewWifi({...newWifi, ssid: e.target.value})}
+                onChange={(e) => setNewWifi({ ...newWifi, ssid: e.target.value })}
               />
             </div>
             <div className="form-group">
-              <label><Lock size={14} style={{ marginRight: 6 }} />WiFi 密码</label>
+              <label>
+                <Lock size={14} style={{ marginRight: 6 }} />
+                WiFi 密码
+              </label>
               <input
                 type="password"
                 className="form-control"
                 placeholder="请输入 WiFi 密码（可选）"
                 value={newWifi.password}
-                onChange={e => setNewWifi({...newWifi, password: e.target.value})}
+                onChange={(e) => setNewWifi({ ...newWifi, password: e.target.value })}
               />
             </div>
             <div className="form-group">
@@ -427,7 +593,9 @@ export const Settings: React.FC = () => {
                   type="checkbox"
                   style={{ marginRight: 10, width: 18, height: 18 }}
                   checked={newWifi.requiresAuth}
-                  onChange={(e) => setNewWifi({...newWifi, requiresAuth: e.target.checked, linkedAccountId: ''})}
+                  onChange={(e) =>
+                    setNewWifi({ ...newWifi, requiresAuth: e.target.checked, linkedAccountId: '' })
+                  }
                 />
                 <Server size={16} style={{ marginRight: 6 }} /> 需要校园网认证
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 8 }}>
@@ -437,54 +605,79 @@ export const Settings: React.FC = () => {
             </div>
             {newWifi.requiresAuth && (
               <div className="form-group">
-                <label><Link size={14} style={{ marginRight: 6 }} />关联账号</label>
+                <label>
+                  <Link size={14} style={{ marginRight: 6 }} />
+                  关联账号
+                </label>
                 {config.accounts.length === 0 ? (
-                  <div style={{
-                    padding: '12px',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                    borderRadius: 'var(--radius-md)',
-                    color: '#92400e',
-                    fontSize: '0.9rem'
-                  }}>
+                  <div
+                    style={{
+                      padding: '12px',
+                      backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                      border: '1px solid rgba(245, 158, 11, 0.3)',
+                      borderRadius: 'var(--radius-md)',
+                      color: '#92400e',
+                      fontSize: '0.9rem',
+                    }}
+                  >
                     请先在上方「账号管理」添加账号
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {config.accounts.map(acc => (
+                    {config.accounts.map((acc) => (
                       <div
                         key={acc.id}
-                        onClick={() => setNewWifi({...newWifi, linkedAccountId: acc.id})}
+                        onClick={() => setNewWifi({ ...newWifi, linkedAccountId: acc.id })}
                         style={{
                           padding: '12px',
                           borderRadius: 'var(--radius-md)',
                           border: '1px solid',
-                          borderColor: newWifi.linkedAccountId === acc.id ? 'var(--primary-color)' : 'var(--border-color)',
-                          background: newWifi.linkedAccountId === acc.id ? 'rgba(14, 165, 233, 0.1)' : 'rgba(255, 255, 255, 0.4)',
+                          borderColor:
+                            newWifi.linkedAccountId === acc.id
+                              ? 'var(--primary-color)'
+                              : 'var(--border-color)',
+                          background:
+                            newWifi.linkedAccountId === acc.id
+                              ? 'rgba(14, 165, 233, 0.1)'
+                              : 'rgba(255, 255, 255, 0.4)',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease'
+                          transition: 'all 0.2s ease',
                         }}
                       >
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          color: newWifi.linkedAccountId === acc.id ? 'var(--primary-color)' : 'var(--text-color)',
-                          fontWeight: newWifi.linkedAccountId === acc.id ? '600' : '500'
-                        }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            color:
+                              newWifi.linkedAccountId === acc.id
+                                ? 'var(--primary-color)'
+                                : 'var(--text-color)',
+                            fontWeight: newWifi.linkedAccountId === acc.id ? '600' : '500',
+                          }}
+                        >
                           <User size={14} style={{ marginRight: 6 }} />
                           {acc.username}
-                          <span style={{
-                            fontSize: '0.75rem',
-                            backgroundColor: '#e0f2fe',
-                            color: '#0369a1',
-                            padding: '2px 8px',
-                            borderRadius: '12px',
-                            marginLeft: '8px'
-                          }}>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              backgroundColor: '#e0f2fe',
+                              color: '#0369a1',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              marginLeft: '8px',
+                            }}
+                          >
                             {getISPLabel(acc.isp)}
                           </span>
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 4, marginLeft: 20 }}>
+                        <div
+                          style={{
+                            fontSize: '0.8rem',
+                            color: 'var(--text-secondary)',
+                            marginTop: 4,
+                            marginLeft: 20,
+                          }}
+                        >
                           {acc.serverUrl}
                         </div>
                       </div>
@@ -499,7 +692,8 @@ export const Settings: React.FC = () => {
               onClick={handleAddWifi}
               disabled={newWifi.requiresAuth && config.accounts.length === 0}
             >
-              <Plus size={16} style={{ marginRight: 6 }} />添加 WiFi
+              <Plus size={16} style={{ marginRight: 6 }} />
+              添加 WiFi
             </button>
           </div>
         </>

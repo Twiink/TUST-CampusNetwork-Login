@@ -30,7 +30,12 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 使用 hooks
-  const { status: authStatus, login: authLogin, logout: authLogout, loading: authLoading } = useAuth();
+  const {
+    status: authStatus,
+    login: authLogin,
+    logout: authLogout,
+    loading: authLoading,
+  } = useAuth();
   const { isAuthenticated, ipAddress } = useNetwork();
   const { logs, clearLogs: clearLogsAction, loading: logsLoading } = useLogs();
   const { config, updateConfig, loading: configLoading } = useConfig();
@@ -72,18 +77,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clearLogsAction();
   }, [clearLogsAction]);
 
-  const setConfig = useCallback((newConfig: AppConfig) => {
-    updateConfig(newConfig);
-  }, [updateConfig]);
+  const setConfig = useCallback(
+    (newConfig: AppConfig) => {
+      updateConfig(newConfig);
+    },
+    [updateConfig]
+  );
 
   // 转换日志格式以兼容旧接口
-  const formattedLogs: DisplayLogEntry[] = logs.map(log => ({
+  const formattedLogs: DisplayLogEntry[] = logs.map((log) => ({
     id: log.id,
     level: log.level,
     message: log.message,
-    timestamp: log.timestamp instanceof Date
-      ? log.timestamp.toLocaleTimeString()
-      : new Date(log.timestamp).toLocaleTimeString(),
+    timestamp:
+      log.timestamp instanceof Date
+        ? log.timestamp.toLocaleTimeString()
+        : new Date(log.timestamp).toLocaleTimeString(),
   }));
 
   return (

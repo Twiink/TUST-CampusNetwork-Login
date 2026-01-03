@@ -20,7 +20,16 @@ import { createAutoLaunchService, AutoLaunchService } from './services/auto-laun
 import { createNotificationService, NotificationService } from './services/notification';
 import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
-import { registerAllIPC, registerTrayIPC, registerAutoLaunchIPC, registerNotificationIPC, registerUpdaterIPC, startBackgroundServices, stopBackgroundServices, AppServices } from './ipc';
+import {
+  registerAllIPC,
+  registerTrayIPC,
+  registerAutoLaunchIPC,
+  registerNotificationIPC,
+  registerUpdaterIPC,
+  startBackgroundServices,
+  stopBackgroundServices,
+  AppServices,
+} from './ipc';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

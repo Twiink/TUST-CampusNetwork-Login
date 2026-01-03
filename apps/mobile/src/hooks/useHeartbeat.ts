@@ -46,13 +46,7 @@ const defaultStatus: NetworkStatus = {
  * 心跳检测 Hook
  */
 export function useHeartbeat(options: UseHeartbeatOptions = {}): UseHeartbeatResult {
-  const {
-    enabled = true,
-    interval = 30000,
-    onDisconnect,
-    onReconnect,
-    onStatusChange,
-  } = options;
+  const { enabled = true, interval = 30000, onDisconnect, onReconnect, onStatusChange } = options;
 
   const [status, setStatus] = useState<NetworkStatus>(defaultStatus);
   const [isChecking, setIsChecking] = useState(false);

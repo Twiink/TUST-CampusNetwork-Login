@@ -93,9 +93,11 @@ export class NetworkDetector {
 
     // 立即执行一次
     if (options.immediate !== false) {
-      this.getNetworkStatus().then(callback).catch(() => {
-        callback({ connected: false, authenticated: false });
-      });
+      this.getNetworkStatus()
+        .then(callback)
+        .catch(() => {
+          callback({ connected: false, authenticated: false });
+        });
     }
 
     // 定时轮询

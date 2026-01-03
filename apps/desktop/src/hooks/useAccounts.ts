@@ -28,64 +28,73 @@ export function useAccounts() {
     }
   }, []);
 
-  const addAccount = useCallback(async (account: Omit<AccountConfig, 'id'>) => {
-    setLoading(true);
-    try {
-      const newAccount = await window.electronAPI.account.add(account);
-      setAccounts(prev => [...prev, newAccount]);
-      // 如果是第一个账户，自动设为当前账户
-      if (!currentAccount) {
-        setCurrentAccount(newAccount);
+  const addAccount = useCallback(
+    async (account: Omit<AccountConfig, 'id'>) => {
+      setLoading(true);
+      try {
+        const newAccount = await window.electronAPI.account.add(account);
+        setAccounts((prev) => [...prev, newAccount]);
+        // 如果是第一个账户，自动设为当前账户
+        if (!currentAccount) {
+          setCurrentAccount(newAccount);
+        }
+        setError(null);
+        return newAccount;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '添加账户失败';
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
       }
-      setError(null);
-      return newAccount;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '添加账户失败';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentAccount]);
+    },
+    [currentAccount]
+  );
 
-  const updateAccount = useCallback(async (id: string, updates: Partial<AccountConfig>) => {
-    setLoading(true);
-    try {
-      const updated = await window.electronAPI.account.update(id, updates);
-      setAccounts(prev => prev.map(a => a.id === id ? updated : a));
-      if (currentAccount?.id === id) {
-        setCurrentAccount(updated);
+  const updateAccount = useCallback(
+    async (id: string, updates: Partial<AccountConfig>) => {
+      setLoading(true);
+      try {
+        const updated = await window.electronAPI.account.update(id, updates);
+        setAccounts((prev) => prev.map((a) => (a.id === id ? updated : a)));
+        if (currentAccount?.id === id) {
+          setCurrentAccount(updated);
+        }
+        setError(null);
+        return updated;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '更新账户失败';
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
       }
-      setError(null);
-      return updated;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '更新账户失败';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentAccount]);
+    },
+    [currentAccount]
+  );
 
-  const removeAccount = useCallback(async (id: string) => {
-    setLoading(true);
-    try {
-      await window.electronAPI.account.remove(id);
-      setAccounts(prev => prev.filter(a => a.id !== id));
-      if (currentAccount?.id === id) {
-        // 切换到第一个账户
-        const remaining = accounts.filter(a => a.id !== id);
-        setCurrentAccount(remaining.length > 0 ? remaining[0] : null);
+  const removeAccount = useCallback(
+    async (id: string) => {
+      setLoading(true);
+      try {
+        await window.electronAPI.account.remove(id);
+        setAccounts((prev) => prev.filter((a) => a.id !== id));
+        if (currentAccount?.id === id) {
+          // 切换到第一个账户
+          const remaining = accounts.filter((a) => a.id !== id);
+          setCurrentAccount(remaining.length > 0 ? remaining[0] : null);
+        }
+        setError(null);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '删除账户失败';
+        setError(message);
+        throw new Error(message);
+      } finally {
+        setLoading(false);
       }
-      setError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '删除账户失败';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, [currentAccount, accounts]);
+    },
+    [currentAccount, accounts]
+  );
 
   const switchAccount = useCallback(async (id: string) => {
     setLoading(true);

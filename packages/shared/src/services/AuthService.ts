@@ -13,10 +13,10 @@ import { ErrorCode, AppError } from '../constants/errors';
  * ISP 到账号前缀的映射
  */
 const ISP_PREFIX_MAP: Record<ISP, string> = {
-  campus: '',      // 校园网无前缀
-  cmcc: '@cmcc',   // 中国移动
-  cucc: '@cucc',   // 中国联通
-  ctcc: '@ctcc',   // 中国电信
+  campus: '', // 校园网无前缀
+  cmcc: '@cmcc', // 中国移动
+  cucc: '@cucc', // 中国联通
+  ctcc: '@ctcc', // 中国电信
 };
 
 /**
@@ -130,16 +130,9 @@ export class AuthService {
       return this.parseLoginResponse(response.rawText);
     } catch (error) {
       if (error instanceof HttpError) {
-        throw new AppError(
-          ErrorCode.NETWORK_ERROR,
-          error.message,
-          { originalError: error }
-        );
+        throw new AppError(ErrorCode.NETWORK_ERROR, error.message, { originalError: error });
       }
-      throw new AppError(
-        ErrorCode.AUTH_ERROR,
-        error instanceof Error ? error.message : '未知错误'
-      );
+      throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
   }
 
@@ -167,8 +160,7 @@ export class AuthService {
       const response = await httpGet<string>(url, { timeout: 10000 });
 
       // 简单判断登出是否成功
-      const success = response.rawText.includes('result":1') ||
-                     response.rawText.includes('成功');
+      const success = response.rawText.includes('result":1') || response.rawText.includes('成功');
 
       return {
         success,
@@ -176,15 +168,9 @@ export class AuthService {
       };
     } catch (error) {
       if (error instanceof HttpError) {
-        throw new AppError(
-          ErrorCode.NETWORK_ERROR,
-          error.message
-        );
+        throw new AppError(ErrorCode.NETWORK_ERROR, error.message);
       }
-      throw new AppError(
-        ErrorCode.AUTH_ERROR,
-        error instanceof Error ? error.message : '未知错误'
-      );
+      throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
   }
 }

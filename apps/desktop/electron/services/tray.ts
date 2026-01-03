@@ -24,7 +24,9 @@ WFhYXgATyCN/AAHsEjWIiFICh+Nru7Mybs+mBgmJn3/jczDH8oJVfxHl9/rRxghFv8xA
 c8xRXm8Qkn6GLqn4KnOMYHPEYPy5jBbXzGOXZxgAYzGGAJb/AQR5jDWWzhAu3kJg5xCf
 f4iDl00MEe3mARrzGLM+zgAm6x0SZ+4AT7OMI+VnGNHlawjUu4i0U8x3v8wC/2JTsxNV
 hJBQAAAABJRU5ErkJggg==
-`.trim().replace(/\s/g, '');
+`
+  .trim()
+  .replace(/\s/g, '');
 
 const TRAY_ICON_DISCONNECTED = `
 iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAA
@@ -34,7 +36,9 @@ LCQvAT/AT/wE+wsbOzshAEBUFyLHZ3ZjYkxgOPYZi595137szwn6SkHT7h6q+V3RrB+o
 SfuI8LLOAnTrCNLqb+KXiMI3zAI/SwihmcxV1cYBcHaDAT9fASr7CM15jFGXZwDl3sZI
 cDnOMSbuAQi3iFWZxhB+dwC+t1A6c4xj72sYprHKCHFWzjEm5jEU8xi9N44l18wQ/cxB
 4W8BpzOI7nOMU1buFW1OA+DnGEPaziBb7hJ37xG2FYOzHVHJcoAAAAAElFTkSuQmCC
-`.trim().replace(/\s/g, '');
+`
+  .trim()
+  .replace(/\s/g, '');
 
 export class TrayService {
   private tray: Tray | null = null;
@@ -107,11 +111,12 @@ export class TrayService {
     this.tray.setImage(icon);
 
     // 更新提示文字
-    const tooltip = status === 'connected'
-      ? 'NetMate - 已连接'
-      : status === 'connecting'
-        ? 'NetMate - 连接中...'
-        : 'NetMate - 未连接';
+    const tooltip =
+      status === 'connected'
+        ? 'NetMate - 已连接'
+        : status === 'connecting'
+          ? 'NetMate - 连接中...'
+          : 'NetMate - 未连接';
 
     this.tray.setToolTip(tooltip);
 

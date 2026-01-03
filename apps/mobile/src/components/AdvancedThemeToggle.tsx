@@ -47,11 +47,7 @@ export const AdvancedThemeToggle: React.FC = () => {
   };
 
   const containerAnimatedStyle = useAnimatedStyle(() => {
-    const backgroundColor = interpolate(
-      progress.value,
-      [0, 1],
-      [0x4685c0, 0x1a1e32]
-    );
+    const backgroundColor = interpolate(progress.value, [0, 1], [0x4685c0, 0x1a1e32]);
     const r = Math.floor((backgroundColor >> 16) & 255);
     const g = Math.floor((backgroundColor >> 8) & 255);
     const b = Math.floor(backgroundColor & 255);
@@ -64,12 +60,7 @@ export const AdvancedThemeToggle: React.FC = () => {
   const sunMoonAnimatedStyle = useAnimatedStyle(() => ({
     transform: [
       {
-        translateX: interpolate(
-          progress.value,
-          [0, 1],
-          [0, 55],
-          Extrapolate.CLAMP
-        ),
+        translateX: interpolate(progress.value, [0, 1], [0, 55], Extrapolate.CLAMP),
       },
     ],
   }));
@@ -114,10 +105,7 @@ export const AdvancedThemeToggle: React.FC = () => {
             ]}
           >
             <Svg width={star.size * 2} height={star.size * 2} viewBox="0 0 10 10">
-              <Path
-                d="M5,0 L5.5,4.5 L10,5 L5.5,5.5 L5,10 L4.5,5.5 L0,5 L4.5,4.5 Z"
-                fill="#fff"
-              />
+              <Path d="M5,0 L5.5,4.5 L10,5 L5.5,5.5 L5,10 L4.5,5.5 L0,5 L4.5,4.5 Z" fill="#fff" />
             </Svg>
           </View>
         ))}

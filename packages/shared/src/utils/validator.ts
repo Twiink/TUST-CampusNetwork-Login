@@ -137,7 +137,7 @@ export function validateAppConfig(config: Partial<AppConfig>): ValidationResult 
 
   // 验证当前账户 ID
   if (config.currentAccountId !== undefined && config.currentAccountId !== null) {
-    if (config.accounts && !config.accounts.find(a => a.id === config.currentAccountId)) {
+    if (config.accounts && !config.accounts.find((a) => a.id === config.currentAccountId)) {
       errors.push('当前账户 ID 无效');
     }
   }

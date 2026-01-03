@@ -27,12 +27,18 @@ export const LogsScreen: React.FC = () => {
 
   const getLogColor = (level: string) => {
     switch (level) {
-      case 'info': return theme.colors.primary;
-      case 'success': return theme.colors.success;
-      case 'warn': return theme.colors.warning;
-      case 'error': return theme.colors.danger;
-      case 'debug': return '#a855f7';
-      default: return theme.colors.primary;
+      case 'info':
+        return theme.colors.primary;
+      case 'success':
+        return theme.colors.success;
+      case 'warn':
+        return theme.colors.warning;
+      case 'error':
+        return theme.colors.danger;
+      case 'debug':
+        return '#a855f7';
+      default:
+        return theme.colors.primary;
     }
   };
 
@@ -43,9 +49,7 @@ export const LogsScreen: React.FC = () => {
       <GlassView style={styles.card}>
         {/* Filter Section */}
         <View style={styles.filterSection}>
-          <Text style={[styles.filterLabel, { color: theme.colors.textSecondary }]}>
-            筛选级别
-          </Text>
+          <Text style={[styles.filterLabel, { color: theme.colors.textSecondary }]}>筛选级别</Text>
           <View style={styles.filterContainer}>
             {LOG_LEVEL_OPTIONS.map(opt => (
               <TouchableOpacity
@@ -54,12 +58,12 @@ export const LogsScreen: React.FC = () => {
                 style={[
                   styles.filterButton,
                   {
-                    backgroundColor: filterLevel === opt.value
-                      ? getLogColor(opt.value) + '20'
-                      : 'transparent',
-                    borderColor: filterLevel === opt.value
-                      ? getLogColor(opt.value)
-                      : theme.colors.border + '60',
+                    backgroundColor:
+                      filterLevel === opt.value ? getLogColor(opt.value) + '20' : 'transparent',
+                    borderColor:
+                      filterLevel === opt.value
+                        ? getLogColor(opt.value)
+                        : theme.colors.border + '60',
                     borderWidth: filterLevel === opt.value ? 1.5 : 1,
                   },
                 ]}
@@ -70,9 +74,10 @@ export const LogsScreen: React.FC = () => {
                   style={[
                     styles.filterText,
                     {
-                      color: filterLevel === opt.value
-                        ? getLogColor(opt.value)
-                        : theme.colors.textSecondary,
+                      color:
+                        filterLevel === opt.value
+                          ? getLogColor(opt.value)
+                          : theme.colors.textSecondary,
                       fontWeight: filterLevel === opt.value ? '700' : '500',
                     },
                   ]}
@@ -85,20 +90,14 @@ export const LogsScreen: React.FC = () => {
         </View>
 
         {/* Header */}
-        <View
-          style={[styles.headerContainer, { borderBottomColor: theme.colors.border + '20' }]}
-        >
+        <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border + '20' }]}>
           <Text style={[styles.logCount, { color: theme.colors.textSecondary }]}>
-            共 {filteredLogs.length} 条
-            {filterLevel !== 'all' && ` (筛选自 ${logs.length} 条)`}
+            共 {filteredLogs.length} 条{filterLevel !== 'all' && ` (筛选自 ${logs.length} 条)`}
           </Text>
           {logs.length > 0 && (
             <TouchableOpacity
               onPress={clearLogs}
-              style={[
-                styles.clearButton,
-                { backgroundColor: theme.colors.danger + '15' },
-              ]}
+              style={[styles.clearButton, { backgroundColor: theme.colors.danger + '15' }]}
               activeOpacity={0.7}
             >
               <Text style={[styles.clearButtonText, { color: theme.colors.danger }]}>清空日志</Text>
@@ -109,7 +108,7 @@ export const LogsScreen: React.FC = () => {
         {/* Logs Content */}
         <ScrollView style={styles.logsContainer} showsVerticalScrollIndicator={false}>
           {filteredLogs.length > 0 ? (
-            filteredLogs.map((log) => (
+            filteredLogs.map(log => (
               <View
                 key={log.id}
                 style={[
@@ -117,7 +116,7 @@ export const LogsScreen: React.FC = () => {
                   {
                     backgroundColor: theme.colors.cardBg + '40',
                     borderColor: theme.colors.border + '20',
-                  }
+                  },
                 ]}
               >
                 <View style={styles.logHeader}>

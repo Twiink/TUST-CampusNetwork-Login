@@ -26,8 +26,8 @@ export const IPC_CHANNELS = {
   WIFI_ADD: 'wifi:add',
   WIFI_UPDATE: 'wifi:update',
   WIFI_REMOVE: 'wifi:remove',
-  WIFI_CURRENT_SSID: 'wifi:currentSsid',  // 获取当前 WiFi SSID
-  WIFI_FULL_INFO: 'wifi:fullInfo',        // 获取完整网络信息（含 WiFi）
+  WIFI_CURRENT_SSID: 'wifi:currentSsid', // 获取当前 WiFi SSID
+  WIFI_FULL_INFO: 'wifi:fullInfo', // 获取完整网络信息（含 WiFi）
 
   // 网络相关
   NETWORK_STATUS: 'network:status',

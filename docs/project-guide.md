@@ -22,19 +22,20 @@
 ### 1.1 是什么
 
 NetMate 是一个**跨平台校园网自动登录工具**，支持：
+
 - **Windows / macOS**: Electron 桌面应用
 - **Android**: React Native 移动应用
 
 ### 1.2 核心功能
 
-| 功能 | 描述 |
-|------|------|
-| 自动登录 | 连接 WiFi 后自动完成认证 |
-| 多账户管理 | 支持多个校园网账户 |
+| 功能         | 描述                         |
+| ------------ | ---------------------------- |
+| 自动登录     | 连接 WiFi 后自动完成认证     |
+| 多账户管理   | 支持多个校园网账户           |
 | 多 WiFi 配置 | 为不同 WiFi 配置不同认证方式 |
-| 心跳检测 | 定期检查网络连通性 |
-| 自动重连 | 断线后自动重新登录 |
-| WiFi 切换 | 按优先级自动切换网络 |
+| 心跳检测     | 定期检查网络连通性           |
+| 自动重连     | 断线后自动重新登录           |
+| WiFi 切换    | 按优先级自动切换网络         |
 
 ### 1.3 技术栈
 
@@ -126,6 +127,7 @@ TUST-CampusNetwork-Login/
 ```
 
 **优势**:
+
 - 避免代码重复
 - 统一业务逻辑
 - 便于维护和测试
@@ -247,6 +249,7 @@ packages/shared/src/
 **文件**: `packages/shared/src/services/AuthService.ts`
 
 **职责**:
+
 - 构建登录 URL
 - 解析登录响应
 - 执行登录/登出请求
@@ -289,6 +292,7 @@ class AuthService {
 ```
 
 **设计原因**:
+
 - **URL 构建分离**: 便于测试和维护
 - **ISP 前缀映射**: 支持多种运营商
 - **响应解析**: 处理特定格式的响应
@@ -298,6 +302,7 @@ class AuthService {
 **文件**: `packages/shared/src/services/NetworkDetector.ts`
 
 **职责**:
+
 - 检测网络连通性
 - 定期轮询检查
 - 回调通知状态变化
@@ -347,6 +352,7 @@ class NetworkDetector {
 **文件**: `packages/shared/src/services/AccountManager.ts`
 
 **职责**:
+
 - 账户的增删改查
 - 当前账户切换
 - 关联 WiFi 配置
@@ -368,13 +374,13 @@ class AccountManager {
 
   removeAccount(id: string): void {
     const config = this.configManager.getConfig();
-    config.accounts = config.accounts.filter(a => a.id !== id);
+    config.accounts = config.accounts.filter((a) => a.id !== id);
     this.configManager.update({ accounts: config.accounts });
   }
 
   switchAccount(id: string): AccountConfig | null {
     const config = this.configManager.getConfig();
-    const account = config.accounts.find(a => a.id === id);
+    const account = config.accounts.find((a) => a.id === id);
     if (account) {
       this.configManager.update({ currentAccountId: id });
     }
@@ -388,6 +394,7 @@ class AccountManager {
 **文件**: `packages/shared/src/services/ConfigManager.ts`
 
 **职责**:
+
 - 加载/保存配置
 - 配置更新
 - 存储适配器桥接
@@ -399,7 +406,7 @@ class ConfigManager {
   constructor(private storage: StorageAdapter) {}
 
   async load(): Promise<void> {
-    this.config = await this.storage.get<AppConfig>('config') || defaultConfig;
+    this.config = (await this.storage.get<AppConfig>('config')) || defaultConfig;
   }
 
   async save(): Promise<void> {
@@ -489,6 +496,7 @@ apps/desktop/
 **文件**: `apps/desktop/electron/main.ts`
 
 **职责**:
+
 1. 初始化所有服务
 2. 注册 IPC 处理器
 3. 创建应用窗口
@@ -521,6 +529,7 @@ app.whenReady().then(async () => {
 **为什么需要 IPC?**
 
 Electron 的主进程和渲染进程运行在不同的上下文：
+
 - **主进程**: Node.js 环境，可以访问文件系统、系统 API
 - **渲染进程**: 浏览器环境，沙箱化
 
@@ -781,6 +790,7 @@ class AutoReconnectService {
 **决策**: 整个项目使用 TypeScript
 
 **原因**:
+
 1. **类型安全**: 编译时发现错误
 2. **代码提示**: IDE 智能提示
 3. **重构方便**: 重构时更有信心
@@ -791,6 +801,7 @@ class AutoReconnectService {
 **决策**: 桌面端使用 Zustand
 
 **原因**:
+
 1. **简洁**: API 简单易用
 2. **轻量**: 包体积小
 3. **灵活**: 不强制使用特定模式
@@ -801,6 +812,7 @@ class AutoReconnectService {
 **决策**: 创建 packages/shared 包
 
 **原因**:
+
 1. **代码复用**: 桌面端和移动端共享核心逻辑
 2. **一致性**: 确保行为一致
 3. **测试便利**: 共享代码更容易测试
@@ -811,6 +823,7 @@ class AutoReconnectService {
 **决策**: 主进程和渲染进程通过 IPC 通信
 
 **原因**:
+
 1. **安全性**: 渲染进程无法直接访问系统 API
 2. **隔离性**: 一个进程崩溃不影响另一个
 3. **架构清晰**: 职责分离
@@ -820,6 +833,7 @@ class AutoReconnectService {
 **决策**: 使用事件通知状态变化
 
 **原因**:
+
 1. **解耦**: 生产者和消费者不直接依赖
 2. **灵活**: 可以有多个监听者
 3. **异步**: 非阻塞处理
@@ -840,15 +854,15 @@ window.electronAPI.onAuthStatusChanged((status) => {
 
 ### A. 关键文件速查
 
-| 文件 | 职责 |
-|------|------|
-| `packages/shared/src/services/AuthService.ts` | 登录认证核心逻辑 |
-| `packages/shared/src/services/NetworkDetector.ts` | 网络连通性检测 |
-| `packages/shared/src/services/ConfigManager.ts` | 配置管理 |
-| `apps/desktop/electron/main.ts` | 桌面端入口 |
-| `apps/desktop/electron/ipc/auth.ts` | 登录 IPC 处理 |
-| `apps/desktop/src/hooks/useAuth.ts` | 认证 Hook |
-| `apps/mobile/src/App.tsx` | 移动端入口 |
+| 文件                                              | 职责             |
+| ------------------------------------------------- | ---------------- |
+| `packages/shared/src/services/AuthService.ts`     | 登录认证核心逻辑 |
+| `packages/shared/src/services/NetworkDetector.ts` | 网络连通性检测   |
+| `packages/shared/src/services/ConfigManager.ts`   | 配置管理         |
+| `apps/desktop/electron/main.ts`                   | 桌面端入口       |
+| `apps/desktop/electron/ipc/auth.ts`               | 登录 IPC 处理    |
+| `apps/desktop/src/hooks/useAuth.ts`               | 认证 Hook        |
+| `apps/mobile/src/App.tsx`                         | 移动端入口       |
 
 ### B. 常用命令
 
@@ -868,5 +882,5 @@ pnpm format         # 格式化代码
 
 ---
 
-*文档版本: 1.0*
-*最后更新: 2026-01-02*
+_文档版本: 1.0_
+_最后更新: 2026-01-02_

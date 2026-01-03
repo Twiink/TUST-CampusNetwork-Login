@@ -26,7 +26,7 @@ export class WifiManager {
    */
   getWifiById(id: string): WifiConfig | null {
     const wifiList = this.getWifiConfigs();
-    return wifiList.find(w => w.id === id) || null;
+    return wifiList.find((w) => w.id === id) || null;
   }
 
   /**
@@ -34,7 +34,7 @@ export class WifiManager {
    */
   getWifiBySsid(ssid: string): WifiConfig | null {
     const wifiList = this.getWifiConfigs();
-    return wifiList.find(w => w.ssid === ssid) || null;
+    return wifiList.find((w) => w.ssid === ssid) || null;
   }
 
   /**
@@ -58,7 +58,7 @@ export class WifiManager {
     }
 
     // 检查是否已存在相同 SSID 的配置
-    const exists = config.wifiList.find(w => w.ssid === newWifi.ssid);
+    const exists = config.wifiList.find((w) => w.ssid === newWifi.ssid);
     if (exists) {
       throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 已存在');
     }
@@ -79,7 +79,7 @@ export class WifiManager {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
-    const index = config.wifiList.findIndex(w => w.id === id);
+    const index = config.wifiList.findIndex((w) => w.id === id);
     if (index === -1) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
     }
@@ -112,7 +112,7 @@ export class WifiManager {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
-    const updatedWifiList = config.wifiList.filter(w => w.id !== id);
+    const updatedWifiList = config.wifiList.filter((w) => w.id !== id);
 
     if (updatedWifiList.length === config.wifiList.length) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
@@ -140,7 +140,7 @@ export class WifiManager {
    * 获取所有自动连接的 WiFi
    */
   getAutoConnectWifiList(): WifiConfig[] {
-    return this.getWifiConfigs().filter(w => w.autoConnect);
+    return this.getWifiConfigs().filter((w) => w.autoConnect);
   }
 
   /**

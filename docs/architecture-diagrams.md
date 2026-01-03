@@ -832,30 +832,30 @@ flowchart TB
 
 ### A. 关键文件路径
 
-| 模块 | 路径 |
-|------|------|
-| 共享服务 | `packages/shared/src/services/` |
-| 类型定义 | `packages/shared/src/types/` |
-| 桌面端主进程 | `apps/desktop/electron/` |
-| 桌面端UI | `apps/desktop/src/` |
-| 移动端 | `apps/mobile/src/` |
-| Android原生 | `apps/mobile/android/` |
+| 模块         | 路径                            |
+| ------------ | ------------------------------- |
+| 共享服务     | `packages/shared/src/services/` |
+| 类型定义     | `packages/shared/src/types/`    |
+| 桌面端主进程 | `apps/desktop/electron/`        |
+| 桌面端UI     | `apps/desktop/src/`             |
+| 移动端       | `apps/mobile/src/`              |
+| Android原生  | `apps/mobile/android/`          |
 
 ### B. IPC 通道列表
 
-| 通道 | 功能 |
-|------|------|
-| `auth:*` | 登录/登出 |
-| `account:*` | 账户管理 |
-| `wifi:*` | WiFi 配置 |
-| `config:*` | 配置读写 |
-| `network:*` | 网络状态 |
-| `log:*` | 日志操作 |
-| `tray:*` | 托盘控制 |
-| `notify:*` | 通知管理 |
-| `updater:*` | 更新检查 |
+| 通道        | 功能      |
+| ----------- | --------- |
+| `auth:*`    | 登录/登出 |
+| `account:*` | 账户管理  |
+| `wifi:*`    | WiFi 配置 |
+| `config:*`  | 配置读写  |
+| `network:*` | 网络状态  |
+| `log:*`     | 日志操作  |
+| `tray:*`    | 托盘控制  |
+| `notify:*`  | 通知管理  |
+| `updater:*` | 更新检查  |
 
 ---
 
-*文档版本: 1.0*
-*最后更新: 2026-01-02*
+_文档版本: 1.0_
+_最后更新: 2026-01-02_

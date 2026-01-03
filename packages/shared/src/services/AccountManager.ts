@@ -29,7 +29,7 @@ export class AccountManager {
     if (!config || !config.currentAccountId) {
       return null;
     }
-    return config.accounts.find(a => a.id === config.currentAccountId) || null;
+    return config.accounts.find((a) => a.id === config.currentAccountId) || null;
   }
 
   /**
@@ -45,7 +45,7 @@ export class AccountManager {
    */
   getAccountById(id: string): AccountConfig | null {
     const accounts = this.getAccounts();
-    return accounts.find(a => a.id === id) || null;
+    return accounts.find((a) => a.id === id) || null;
   }
 
   /**
@@ -69,7 +69,7 @@ export class AccountManager {
     }
 
     // 检查是否已存在相同用户名的账户
-    const exists = config.accounts.find(a => a.username === newAccount.username);
+    const exists = config.accounts.find((a) => a.username === newAccount.username);
     if (exists) {
       throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
     }
@@ -90,13 +90,16 @@ export class AccountManager {
   /**
    * 更新账户
    */
-  async updateAccount(id: string, updates: Partial<Omit<AccountConfig, 'id'>>): Promise<AccountConfig> {
+  async updateAccount(
+    id: string,
+    updates: Partial<Omit<AccountConfig, 'id'>>
+  ): Promise<AccountConfig> {
     const config = this.configManager.getConfig();
     if (!config) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
-    const index = config.accounts.findIndex(a => a.id === id);
+    const index = config.accounts.findIndex((a) => a.id === id);
     if (index === -1) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
     }
@@ -129,7 +132,7 @@ export class AccountManager {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
-    const updatedAccounts = config.accounts.filter(a => a.id !== id);
+    const updatedAccounts = config.accounts.filter((a) => a.id !== id);
 
     if (updatedAccounts.length === config.accounts.length) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
@@ -156,7 +159,7 @@ export class AccountManager {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
-    const account = config.accounts.find(a => a.id === id);
+    const account = config.accounts.find((a) => a.id === id);
     if (!account) {
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
     }

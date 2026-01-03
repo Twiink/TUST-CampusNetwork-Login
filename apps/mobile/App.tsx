@@ -1,9 +1,5 @@
 import React, { useState } from 'react';
-import {
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AppProvider } from './src/context/AppContext';

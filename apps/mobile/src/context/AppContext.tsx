@@ -124,7 +124,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // 网络状态
-  const [networkStatus, setNetworkStatus] = useState<'connected' | 'disconnected' | 'connecting'>('disconnected');
+  const [networkStatus, setNetworkStatus] = useState<'connected' | 'disconnected' | 'connecting'>(
+    'disconnected'
+  );
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo>(defaultNetworkInfo);
   const [hasPermission, setHasPermission] = useState(false);
   const isModuleAvailable = isNativeModuleAvailable();
@@ -328,67 +330,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [networkInfo.ipv4, addLog]);
 
   // 账户管理
-  const addAccount = useCallback(async (account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
-    if (!servicesRef.current) {
-      throw new Error('服务未初始化');
-    }
+  const addAccount = useCallback(
+    async (account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
+      if (!servicesRef.current) {
+        throw new Error('服务未初始化');
+      }
 
-    const newAccount = await servicesRef.current.accountManager.addAccount(account);
-    setAccounts(prev => [...prev, newAccount]);
+      const newAccount = await servicesRef.current.accountManager.addAccount(account);
+      setAccounts(prev => [...prev, newAccount]);
 
-    // 如果是第一个账户，自动设为当前账户
-    if (accounts.length === 0) {
-      await servicesRef.current.accountManager.setCurrentAccount(newAccount.id);
-      setCurrentAccount(newAccount);
-    }
+      // 如果是第一个账户，自动设为当前账户
+      if (accounts.length === 0) {
+        await servicesRef.current.accountManager.setCurrentAccount(newAccount.id);
+        setCurrentAccount(newAccount);
+      }
 
-    addLog('success', `添加账户: ${newAccount.username}`);
-    return newAccount;
-  }, [accounts.length, addLog]);
+      addLog('success', `添加账户: ${newAccount.username}`);
+      return newAccount;
+    },
+    [accounts.length, addLog]
+  );
 
-  const updateAccount = useCallback(async (id: string, updates: Partial<AccountConfig>): Promise<AccountConfig> => {
-    if (!servicesRef.current) {
-      throw new Error('服务未初始化');
-    }
+  const updateAccount = useCallback(
+    async (id: string, updates: Partial<AccountConfig>): Promise<AccountConfig> => {
+      if (!servicesRef.current) {
+        throw new Error('服务未初始化');
+      }
 
-    const updated = await servicesRef.current.accountManager.updateAccount(id, updates);
-    setAccounts(prev => prev.map(a => a.id === id ? updated : a));
+      const updated = await servicesRef.current.accountManager.updateAccount(id, updates);
+      setAccounts(prev => prev.map(a => (a.id === id ? updated : a)));
 
-    if (currentAccount?.id === id) {
-      setCurrentAccount(updated);
-    }
+      if (currentAccount?.id === id) {
+        setCurrentAccount(updated);
+      }
 
-    addLog('info', `更新账户: ${updated.username}`);
-    return updated;
-  }, [currentAccount?.id, addLog]);
+      addLog('info', `更新账户: ${updated.username}`);
+      return updated;
+    },
+    [currentAccount?.id, addLog]
+  );
 
-  const removeAccount = useCallback(async (id: string): Promise<void> => {
-    if (!servicesRef.current) {
-      throw new Error('服务未初始化');
-    }
+  const removeAccount = useCallback(
+    async (id: string): Promise<void> => {
+      if (!servicesRef.current) {
+        throw new Error('服务未初始化');
+      }
 
-    const account = servicesRef.current.accountManager.getAccountById(id);
-    await servicesRef.current.accountManager.removeAccount(id);
-    setAccounts(prev => prev.filter(a => a.id !== id));
+      const account = servicesRef.current.accountManager.getAccountById(id);
+      await servicesRef.current.accountManager.removeAccount(id);
+      setAccounts(prev => prev.filter(a => a.id !== id));
 
-    if (currentAccount?.id === id) {
-      setCurrentAccount(null);
-    }
+      if (currentAccount?.id === id) {
+        setCurrentAccount(null);
+      }
 
-    addLog('warn', `删除账户: ${account?.username || id}`);
-  }, [currentAccount?.id, addLog]);
+      addLog('warn', `删除账户: ${account?.username || id}`);
+    },
+    [currentAccount?.id, addLog]
+  );
 
-  const switchAccount = useCallback(async (id: string): Promise<void> => {
-    if (!servicesRef.current) {
-      throw new Error('服务未初始化');
-    }
+  const switchAccount = useCallback(
+    async (id: string): Promise<void> => {
+      if (!servicesRef.current) {
+        throw new Error('服务未初始化');
+      }
 
-    await servicesRef.current.accountManager.setCurrentAccount(id);
-    const account = servicesRef.current.accountManager.getAccountById(id);
-    setCurrentAccount(account);
+      await servicesRef.current.accountManager.setCurrentAccount(id);
+      const account = servicesRef.current.accountManager.getAccountById(id);
+      setCurrentAccount(account);
 
-    addLog('info', `切换到账户: ${account?.username || id}`);
-  }, [addLog]);
+      addLog('info', `切换到账户: ${account?.username || id}`);
+    },
+    [addLog]
+  );
 
   const ipAddress = networkInfo.ipv4 || '0.0.0.0';
 

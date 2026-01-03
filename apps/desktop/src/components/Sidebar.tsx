@@ -38,8 +38,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
         <FileText size={18} style={{ marginRight: 10 }} />
         运行日志
       </div>
-      
-      <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'center', paddingBottom: '20px' }}>
+
+      <div
+        style={{
+          marginTop: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          paddingBottom: '20px',
+        }}
+      >
         <ThemeToggle value={theme} onChange={setTheme} size={1.5} />
       </div>
     </div>

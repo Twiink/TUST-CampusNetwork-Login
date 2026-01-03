@@ -59,14 +59,14 @@ export function getLocalIPv4(): string | null {
   const preferredNames = ['en0', 'eth0', 'wlan0', 'Wi-Fi', 'Ethernet'];
 
   for (const name of preferredNames) {
-    const iface = interfaces.find(i => i.name === name);
+    const iface = interfaces.find((i) => i.name === name);
     if (iface?.ipv4) {
       return iface.ipv4;
     }
   }
 
   // 返回第一个有 IPv4 的接口
-  const firstWithIpv4 = interfaces.find(i => i.ipv4);
+  const firstWithIpv4 = interfaces.find((i) => i.ipv4);
   return firstWithIpv4?.ipv4 || null;
 }
 
@@ -80,14 +80,14 @@ export function getLocalIPv6(): string | null {
   const preferredNames = ['en0', 'eth0', 'wlan0', 'Wi-Fi', 'Ethernet'];
 
   for (const name of preferredNames) {
-    const iface = interfaces.find(i => i.name === name);
+    const iface = interfaces.find((i) => i.name === name);
     if (iface?.ipv6) {
       return iface.ipv6;
     }
   }
 
   // 返回第一个有 IPv6 的接口
-  const firstWithIpv6 = interfaces.find(i => i.ipv6);
+  const firstWithIpv6 = interfaces.find((i) => i.ipv6);
   return firstWithIpv6?.ipv6 || null;
 }
 
@@ -101,14 +101,14 @@ export function getLocalMAC(): string | null {
   const preferredNames = ['en0', 'eth0', 'wlan0', 'Wi-Fi', 'Ethernet'];
 
   for (const name of preferredNames) {
-    const iface = interfaces.find(i => i.name === name);
+    const iface = interfaces.find((i) => i.name === name);
     if (iface?.mac && iface.mac !== '00:00:00:00:00:00') {
       return iface.mac.replace(/:/g, '');
     }
   }
 
   // 返回第一个有效的 MAC
-  const firstWithMac = interfaces.find(i => i.mac && i.mac !== '00:00:00:00:00:00');
+  const firstWithMac = interfaces.find((i) => i.mac && i.mac !== '00:00:00:00:00:00');
   return firstWithMac?.mac?.replace(/:/g, '') || null;
 }
 

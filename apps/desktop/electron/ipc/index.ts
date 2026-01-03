@@ -43,14 +43,8 @@ export interface AppServices {
  * 注册所有 IPC 处理器
  */
 export function registerAllIPC(services: AppServices): void {
-  const {
-    authService,
-    configManager,
-    accountManager,
-    wifiManager,
-    networkDetector,
-    logger,
-  } = services;
+  const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
+    services;
 
   registerAuthIPC(authService, configManager, accountManager, logger);
   registerConfigIPC(configManager, logger);
@@ -70,7 +64,12 @@ export function startBackgroundServices(
   pollingInterval: number = 30000,
   autoReconnectService?: AutoReconnectService
 ): void {
-  startNetworkPolling(services.networkDetector, services.logger, pollingInterval, autoReconnectService);
+  startNetworkPolling(
+    services.networkDetector,
+    services.logger,
+    pollingInterval,
+    autoReconnectService
+  );
 }
 
 /**

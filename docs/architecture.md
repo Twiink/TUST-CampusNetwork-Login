@@ -236,12 +236,12 @@ interface AuthService {
 }
 
 interface LoginConfig {
-  serverUrl: string;      // 认证服务器地址
-  userAccount: string;    // 用户账号
-  userPassword: string;   // 用户密码
-  wlanUserIp: string;     // IPv4 地址
-  wlanUserIpv6?: string;  // IPv6 地址
-  wlanUserMac?: string;   // MAC 地址
+  serverUrl: string; // 认证服务器地址
+  userAccount: string; // 用户账号
+  userPassword: string; // 用户密码
+  wlanUserIp: string; // IPv4 地址
+  wlanUserIpv6?: string; // IPv6 地址
+  wlanUserMac?: string; // MAC 地址
 }
 
 interface LoginResult {
@@ -276,11 +276,11 @@ interface NetworkDetector {
 type NetworkCallback = (status: NetworkStatus) => void;
 
 interface NetworkStatus {
-  connected: boolean;      // 网络是否连接
-  authenticated: boolean;  // 是否已认证
-  wifiConnected: boolean;  // WiFi 是否连接
-  ssid?: string;          // 当前 WiFi SSID（若已连接）
-  ip?: string;            // 当前 IP
+  connected: boolean; // 网络是否连接
+  authenticated: boolean; // 是否已认证
+  wifiConnected: boolean; // WiFi 是否连接
+  ssid?: string; // 当前 WiFi SSID（若已连接）
+  ip?: string; // 当前 IP
 }
 ```
 
@@ -291,16 +291,13 @@ interface NetworkStatus {
 ```typescript
 interface RetryPolicy {
   // 执行带重试的异步操作
-  execute<T>(
-    operation: () => Promise<T>,
-    options?: RetryOptions
-  ): Promise<T>;
+  execute<T>(operation: () => Promise<T>, options?: RetryOptions): Promise<T>;
 }
 
 interface RetryOptions {
-  maxRetries: number;      // 最大重试次数
-  delay: number;           // 重试延迟（毫秒）
-  backoff?: 'fixed' | 'exponential';  // 延迟策略
+  maxRetries: number; // 最大重试次数
+  delay: number; // 重试延迟（毫秒）
+  backoff?: 'fixed' | 'exponential'; // 延迟策略
   onRetry?: (attempt: number, error: Error) => void;
 }
 ```
@@ -366,10 +363,10 @@ interface WifiAdapter {
 }
 
 interface WifiInfo {
-  ssid: string;           // WiFi 名称
+  ssid: string; // WiFi 名称
   bssid?: string;
   signalStrength?: number;
-  connected: boolean;     // 是否已连接
+  connected: boolean; // 是否已连接
 }
 
 // Desktop: 使用系统命令 (netsh/networksetup)
@@ -446,7 +443,7 @@ User Action
 interface AppConfig {
   // 账户配置（支持多账户）
   accounts: AccountConfig[];
-  currentAccountId: string | null;  // 当前使用的账户 ID
+  currentAccountId: string | null; // 当前使用的账户 ID
 
   // WiFi 配置（支持多个）
   wifiList: WifiConfig[];
@@ -456,32 +453,32 @@ interface AppConfig {
 }
 
 interface AccountConfig {
-  id: string;               // 账户唯一标识
-  name: string;             // 账户名称（显示用）
-  username: string;         // 校园网账号
-  password: string;         // 校园网密码（加密存储）
-  serverUrl: string;        // 认证服务器地址（可自定义，有默认值）
+  id: string; // 账户唯一标识
+  name: string; // 账户名称（显示用）
+  username: string; // 校园网账号
+  password: string; // 校园网密码（加密存储）
+  serverUrl: string; // 认证服务器地址（可自定义，有默认值）
   isp: 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 服务商选择
 }
 
 interface WifiConfig {
-  id: string;               // WiFi 配置唯一标识
-  ssid: string;             // WiFi 名称
-  password: string;         // WiFi 密码（加密存储）
-  autoConnect: boolean;     // 是否自动连接
-  requiresAuth: boolean;    // 是否需要校园网认证登录
+  id: string; // WiFi 配置唯一标识
+  ssid: string; // WiFi 名称
+  password: string; // WiFi 密码（加密存储）
+  autoConnect: boolean; // 是否自动连接
+  requiresAuth: boolean; // 是否需要校园网认证登录
   linkedAccountId?: string; // 关联的账号ID（仅当 requiresAuth 为 true）
-  priority: number;         // 优先级（数字越小优先级越高）
+  priority: number; // 优先级（数字越小优先级越高）
 }
 
 interface AppSettings {
-  autoLaunch: boolean;      // 开机自启
+  autoLaunch: boolean; // 开机自启
   enableHeartbeat: boolean; // 是否启用心跳检测
-  pollingInterval: number;  // 轮询间隔（秒）
-  autoReconnect: boolean;   // 自动重连
-  maxRetries: number;       // 最大重试次数
+  pollingInterval: number; // 轮询间隔（秒）
+  autoReconnect: boolean; // 自动重连
+  maxRetries: number; // 最大重试次数
   showNotification: boolean; // 显示通知
-  autoUpdate: boolean;      // 自动检查更新
+  autoUpdate: boolean; // 自动检查更新
 }
 ```
 

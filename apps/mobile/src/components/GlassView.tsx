@@ -14,21 +14,23 @@ export const GlassView: React.FC<GlassViewProps> = ({
   style,
   children,
   intensity = 25,
-  borderRadius = 24
+  borderRadius = 24,
 }) => {
   const { theme, themeMode } = useTheme();
   const isDark = themeMode === 'dark';
 
   return (
-    <View style={[
-      styles.container,
-      {
-        borderRadius,
-        borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : theme.colors.cardBorder,
-        shadowColor: isDark ? '#000' : theme.colors.shadowColor,
-      },
-      style
-    ]}>
+    <View
+      style={[
+        styles.container,
+        {
+          borderRadius,
+          borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : theme.colors.cardBorder,
+          shadowColor: isDark ? '#000' : theme.colors.shadowColor,
+        },
+        style,
+      ]}
+    >
       {/* Blur layer */}
       <BlurView
         style={[StyleSheet.absoluteFill, { borderRadius }]}
@@ -45,10 +47,8 @@ export const GlassView: React.FC<GlassViewProps> = ({
           styles.overlay,
           {
             borderRadius,
-            backgroundColor: isDark
-              ? 'rgba(30, 41, 59, 0.4)'
-              : theme.colors.glassOverlay,
-          }
+            backgroundColor: isDark ? 'rgba(30, 41, 59, 0.4)' : theme.colors.glassOverlay,
+          },
         ]}
       />
 
@@ -58,10 +58,8 @@ export const GlassView: React.FC<GlassViewProps> = ({
           styles.innerBorder,
           {
             borderRadius,
-            borderColor: isDark
-              ? 'rgba(148, 163, 184, 0.15)'
-              : 'rgba(255, 255, 255, 0.6)',
-          }
+            borderColor: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(255, 255, 255, 0.6)',
+          },
         ]}
       />
 

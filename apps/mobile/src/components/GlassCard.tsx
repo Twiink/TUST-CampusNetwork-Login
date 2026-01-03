@@ -51,11 +51,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   };
 
   const animatedStyle = useAnimatedStyle(() => {
-    const shadowOpacity = interpolate(
-      pressed.value,
-      [0, 1],
-      [0.15, 0.08]
-    );
+    const shadowOpacity = interpolate(pressed.value, [0, 1], [0.15, 0.08]);
 
     return {
       transform: [{ scale: scale.value }],
@@ -65,11 +61,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   });
 
   const glowAnimatedStyle = useAnimatedStyle(() => {
-    const borderOpacity = interpolate(
-      pressed.value,
-      [0, 1],
-      isDark ? [0.3, 0.6] : [0.6, 0.9]
-    );
+    const borderOpacity = interpolate(pressed.value, [0, 1], isDark ? [0.3, 0.6] : [0.6, 0.9]);
 
     return {
       borderColor: isDark
@@ -81,11 +73,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
   if (!onPress || disabled) {
     // Non-interactive card
     return (
-      <GlassView
-        style={style}
-        borderRadius={borderRadius}
-        intensity={intensity}
-      >
+      <GlassView style={style} borderRadius={borderRadius} intensity={intensity}>
         {children}
       </GlassView>
     );

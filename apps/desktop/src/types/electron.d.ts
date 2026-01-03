@@ -117,7 +117,12 @@ export interface ElectronAPI {
   };
 
   notification: {
-    show: (options: { title: string; body: string; type?: string; silent?: boolean }) => Promise<boolean>;
+    show: (options: {
+      title: string;
+      body: string;
+      type?: string;
+      silent?: boolean;
+    }) => Promise<boolean>;
     getEnabled: () => Promise<boolean>;
     setEnabled: (enabled: boolean) => Promise<boolean>;
   };

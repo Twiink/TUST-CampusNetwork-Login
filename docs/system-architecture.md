@@ -600,26 +600,26 @@
 
 ### A. 关键文件路径
 
-| 模块         | 路径                                       |
-| ------------ | ------------------------------------------ |
-| 共享服务     | `packages/shared/src/services/`            |
-| 类型定义     | `packages/shared/src/types/`               |
-| 工具函数     | `packages/shared/src/utils/`               |
-| 数据模型     | `packages/shared/src/models/`              |
-| 常量定义     | `packages/shared/src/constants/`           |
-| 桌面端主进程 | `apps/desktop/electron/`                   |
-| 桌面端UI     | `apps/desktop/src/`                        |
-| 移动端       | `apps/mobile/src/`                         |
-| Android原生  | `apps/mobile/android/app/src/main/java/`   |
+| 模块         | 路径                                     |
+| ------------ | ---------------------------------------- |
+| 共享服务     | `packages/shared/src/services/`          |
+| 类型定义     | `packages/shared/src/types/`             |
+| 工具函数     | `packages/shared/src/utils/`             |
+| 数据模型     | `packages/shared/src/models/`            |
+| 常量定义     | `packages/shared/src/constants/`         |
+| 桌面端主进程 | `apps/desktop/electron/`                 |
+| 桌面端UI     | `apps/desktop/src/`                      |
+| 移动端       | `apps/mobile/src/`                       |
+| Android原生  | `apps/mobile/android/app/src/main/java/` |
 
 ### B. 端口说明
 
-| 服务              | 端口 | 说明       |
-| ----------------- | ---- | ---------- |
-| Vite 开发服务器   | 5173 | 桌面端开发 |
-| Metro Bundler     | 8081 | 移动端开发 |
+| 服务            | 端口 | 说明       |
+| --------------- | ---- | ---------- |
+| Vite 开发服务器 | 5173 | 桌面端开发 |
+| Metro Bundler   | 8081 | 移动端开发 |
 
 ---
 
-*文档版本: 1.0*
-*最后更新: 2026-01-02*
+_文档版本: 1.0_
+_最后更新: 2026-01-02_

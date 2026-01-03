@@ -75,12 +75,16 @@ export class ElectronStorageAdapter implements StorageAdapter {
     if (!obj || typeof obj !== 'object') return obj;
 
     if (Array.isArray(obj)) {
-      return obj.map(item => this.encryptSensitiveData(item));
+      return obj.map((item) => this.encryptSensitiveData(item));
     }
 
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      if (SENSITIVE_FIELDS.includes(key) && typeof value === 'string' && safeStorage.isEncryptionAvailable()) {
+      if (
+        SENSITIVE_FIELDS.includes(key) &&
+        typeof value === 'string' &&
+        safeStorage.isEncryptionAvailable()
+      ) {
         // 加密敏感字段
         const encrypted = safeStorage.encryptString(value);
         result[key] = ENCRYPTED_PREFIX + encrypted.toString('base64');
@@ -100,12 +104,16 @@ export class ElectronStorageAdapter implements StorageAdapter {
     if (!obj || typeof obj !== 'object') return;
 
     if (Array.isArray(obj)) {
-      obj.forEach(item => this.decryptSensitiveData(item));
+      obj.forEach((item) => this.decryptSensitiveData(item));
       return;
     }
 
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      if (typeof value === 'string' && value.startsWith(ENCRYPTED_PREFIX) && safeStorage.isEncryptionAvailable()) {
+      if (
+        typeof value === 'string' &&
+        value.startsWith(ENCRYPTED_PREFIX) &&
+        safeStorage.isEncryptionAvailable()
+      ) {
         // 解密敏感字段
         try {
           const encrypted = Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64');

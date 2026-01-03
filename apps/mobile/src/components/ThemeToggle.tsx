@@ -55,9 +55,7 @@ export const ThemeToggle: React.FC = () => {
   }));
 
   const containerAnimatedStyle = useAnimatedStyle(() => ({
-    backgroundColor: isDark
-      ? 'rgba(30, 41, 59, 0.8)'
-      : 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: isDark ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.9)',
   }));
 
   return (
