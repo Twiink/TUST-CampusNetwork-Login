@@ -7,7 +7,7 @@
 import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
 
 /**
- * 网络信息接口
+ * 网络信息接口（扩展版）
  */
 export interface NetworkInfo {
   /** WiFi 是否已启用 */
@@ -16,12 +16,34 @@ export interface NetworkInfo {
   connected: boolean;
   /** 当前连接的 WiFi SSID */
   ssid: string | null;
+  /** 信号强度 (0-100%) */
+  signalStrength?: number | null;
+  /** RSSI (dBm) */
+  rssi?: number | null;
+  /** 连接速度 (Mbps) */
+  linkSpeed?: number | null;
+  /** BSSID (路由器 MAC 地址) */
+  bssid?: string | null;
+  /** 频段 (MHz) */
+  frequency?: number | null;
+  /** 信道 */
+  channel?: number | null;
+  /** 网络 ID */
+  networkId?: number | null;
+  /** 安全类型 */
+  security?: string | null;
   /** IPv4 地址 */
   ipv4: string | null;
   /** IPv6 地址 */
   ipv6: string | null;
   /** MAC 地址 */
   mac: string | null;
+  /** 网关地址 */
+  gateway?: string | null;
+  /** DNS 服务器列表 */
+  dns?: string[] | null;
+  /** 子网掩码 */
+  subnetMask?: string | null;
 }
 
 /**

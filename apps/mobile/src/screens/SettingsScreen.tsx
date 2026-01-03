@@ -20,6 +20,15 @@ const ISP_OPTIONS: { value: ISP; label: string }[] = [
   { value: 'ctcc', label: '中国电信' },
 ];
 
+// 根据优先级返回对应的颜色
+const getPriorityColor = (priority: number): string => {
+  if (priority <= 3) return '#ef4444'; // 红色 - 最高优先级
+  if (priority <= 6) return '#f97316'; // 橙色 - 高优先级
+  if (priority <= 10) return '#3b82f6'; // 蓝色 - 中等优先级
+  if (priority <= 20) return '#22c55e'; // 绿色 - 低优先级
+  return '#6b7280'; // 灰色 - 最低优先级
+};
+
 export const SettingsScreen: React.FC = () => {
   const { config, setConfig } = useApp();
   const { theme } = useTheme();
@@ -41,11 +50,13 @@ export const SettingsScreen: React.FC = () => {
     password: string;
     requiresAuth: boolean;
     linkedAccountId: string;
+    priority: number;
   }>({
     ssid: '',
     password: '',
     requiresAuth: true,
     linkedAccountId: '',
+    priority: 10,
   });
 
   const handleAddAccount = () => {
@@ -108,7 +119,7 @@ export const SettingsScreen: React.FC = () => {
       autoConnect: true,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
-      priority: config.wifiList.length,
+      priority: newWifi.priority,
     };
 
     setConfig({
@@ -120,6 +131,7 @@ export const SettingsScreen: React.FC = () => {
       password: '',
       requiresAuth: true,
       linkedAccountId: '',
+      priority: 10,
     });
   };
 
@@ -521,11 +533,14 @@ export const SettingsScreen: React.FC = () => {
                         <View
                           style={[
                             styles.ispBadge,
-                            { backgroundColor: '#f3f4f6', borderColor: 'transparent' },
+                            {
+                              backgroundColor: getPriorityColor(wifi.priority || 10) + '20',
+                              borderColor: 'transparent'
+                            },
                           ]}
                         >
-                          <Text style={[styles.ispBadgeText, { color: '#6b7280' }]}>
-                            优先级 {index + 1}
+                          <Text style={[styles.ispBadgeText, { color: getPriorityColor(wifi.priority || 10) }]}>
+                            ⭐ 优先级 {wifi.priority || 10}
                           </Text>
                         </View>
                       </View>
@@ -677,6 +692,34 @@ export const SettingsScreen: React.FC = () => {
               )}
             </View>
           )}
+
+          {/* 优先级配置 */}
+          <View style={styles.formGroup}>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+              优先级
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.cardBg,
+                  color: theme.colors.text,
+                  borderColor: theme.colors.border,
+                },
+              ]}
+              placeholder="请输入优先级（1-99，数字越小优先级越高）"
+              placeholderTextColor={theme.colors.textSecondary}
+              keyboardType="number-pad"
+              value={String(newWifi.priority || 10)}
+              onChangeText={text => {
+                const value = parseInt(text) || 10;
+                setNewWifi({ ...newWifi, priority: Math.min(99, Math.max(1, value)) });
+              }}
+            />
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12, marginTop: 6 }}>
+              数字越小优先级越高（1=最高，99=最低，默认=10）
+            </Text>
+          </View>
 
           <TouchableOpacity
             style={[

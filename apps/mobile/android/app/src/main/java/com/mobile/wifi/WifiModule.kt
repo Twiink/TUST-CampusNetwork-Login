@@ -165,7 +165,7 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     }
 
     /**
-     * 获取完整的网络信息
+     * 获取完整的网络信息（包含扩展 WiFi 详细信息）
      */
     @ReactMethod
     fun getNetworkInfo(promise: Promise) {
@@ -181,21 +181,101 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
             val isWifiConnected = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
             result.putBoolean("connected", isWifiConnected)
 
+            // 获取 WifiInfo 对象（包含详细信息）
+            @Suppress("DEPRECATION")
+            val wifiInfo = wifiManager.connectionInfo
+
             // SSID
-            if (hasLocationPermission() && isWifiConnected) {
-                @Suppress("DEPRECATION")
-                val wifiInfo = wifiManager.connectionInfo
-                val ssid = wifiInfo?.ssid
+            if (hasLocationPermission() && isWifiConnected && wifiInfo != null) {
+                val ssid = wifiInfo.ssid
                 if (ssid != null && ssid != "<unknown ssid>" && ssid != "0x") {
                     result.putString("ssid", ssid.replace("\"", ""))
                 } else {
                     result.putNull("ssid")
                 }
+
+                // 信号强度 (RSSI to percentage: -100 to -40 dBm -> 0-100%)
+                val rssi = wifiInfo.rssi
+                val signalStrength = when {
+                    rssi >= -40 -> 100
+                    rssi <= -100 -> 0
+                    else -> ((rssi + 100) * 100 / 60).coerceIn(0, 100)
+                }
+                result.putInt("signalStrength", signalStrength)
+                result.putInt("rssi", rssi)
+
+                // 连接速度 (Mbps)
+                val linkSpeed = wifiInfo.linkSpeed
+                result.putInt("linkSpeed", linkSpeed)
+
+                // BSSID (路由器 MAC 地址)
+                val bssid = wifiInfo.bssid
+                if (bssid != null && bssid != "00:00:00:00:00:00") {
+                    result.putString("bssid", bssid)
+                } else {
+                    result.putNull("bssid")
+                }
+
+                // 频段 (通过信道判断，API 23+ 可获取 frequency)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    @Suppress("DEPRECATION")
+                    val frequency = wifiInfo.frequency
+                    result.putInt("frequency", frequency)
+
+                    // 根据频率判断信道
+                    val channel = when {
+                        frequency in 2412..2484 -> (frequency - 2412) / 5 + 1
+                        frequency == 2484 -> 14
+                        frequency in 5170..5825 -> (frequency - 5170) / 5 + 34
+                        else -> 0
+                    }
+                    result.putInt("channel", channel)
+                } else {
+                    result.putNull("frequency")
+                    result.putNull("channel")
+                }
+
+                // Network ID (配置的网络 ID)
+                val networkId = wifiInfo.networkId
+                result.putInt("networkId", networkId)
+
+                // 尝试获取安全类型（需要扫描配置的网络列表）
+                try {
+                    @Suppress("DEPRECATION")
+                    val configuredNetworks = wifiManager.configuredNetworks
+                    val currentConfig = configuredNetworks?.find { it.networkId == networkId }
+                    if (currentConfig != null) {
+                        val allowedKeyManagement = currentConfig.allowedKeyManagement
+                        val security = when {
+                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK) -> "WPA-PSK"
+                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_EAP) -> "WPA-EAP"
+                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.IEEE8021X) -> "IEEE8021X"
+                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.NONE) -> {
+                                if (currentConfig.wepKeys[0] != null) "WEP" else "Open"
+                            }
+                            else -> "Unknown"
+                        }
+                        result.putString("security", security)
+                    } else {
+                        result.putNull("security")
+                    }
+                } catch (e: Exception) {
+                    // Android 10+ 不允许访问 configuredNetworks
+                    result.putNull("security")
+                }
             } else {
                 result.putNull("ssid")
+                result.putNull("signalStrength")
+                result.putNull("rssi")
+                result.putNull("linkSpeed")
+                result.putNull("bssid")
+                result.putNull("frequency")
+                result.putNull("channel")
+                result.putNull("networkId")
+                result.putNull("security")
             }
 
-            // IPv4 地址
+            // IPv4/IPv6/MAC 地址
             var ipv4: String? = null
             var ipv6: String? = null
             var mac: String? = null
@@ -231,6 +311,74 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
             if (ipv4 != null) result.putString("ipv4", ipv4) else result.putNull("ipv4")
             if (ipv6 != null) result.putString("ipv6", ipv6) else result.putNull("ipv6")
             if (mac != null) result.putString("mac", mac) else result.putNull("mac")
+
+            // 获取网关地址（需要使用 DhcpInfo）
+            try {
+                @Suppress("DEPRECATION")
+                val dhcpInfo = wifiManager.dhcpInfo
+                if (dhcpInfo != null) {
+                    // 转换 IP 地址格式 (int to String)
+                    val gateway = String.format(
+                        "%d.%d.%d.%d",
+                        dhcpInfo.gateway and 0xff,
+                        dhcpInfo.gateway shr 8 and 0xff,
+                        dhcpInfo.gateway shr 16 and 0xff,
+                        dhcpInfo.gateway shr 24 and 0xff
+                    )
+                    if (gateway != "0.0.0.0") {
+                        result.putString("gateway", gateway)
+                    } else {
+                        result.putNull("gateway")
+                    }
+
+                    // DNS 服务器
+                    val dns1 = String.format(
+                        "%d.%d.%d.%d",
+                        dhcpInfo.dns1 and 0xff,
+                        dhcpInfo.dns1 shr 8 and 0xff,
+                        dhcpInfo.dns1 shr 16 and 0xff,
+                        dhcpInfo.dns1 shr 24 and 0xff
+                    )
+                    val dns2 = String.format(
+                        "%d.%d.%d.%d",
+                        dhcpInfo.dns2 and 0xff,
+                        dhcpInfo.dns2 shr 8 and 0xff,
+                        dhcpInfo.dns2 shr 16 and 0xff,
+                        dhcpInfo.dns2 shr 24 and 0xff
+                    )
+
+                    val dnsList = Arguments.createArray()
+                    if (dns1 != "0.0.0.0") dnsList.pushString(dns1)
+                    if (dns2 != "0.0.0.0") dnsList.pushString(dns2)
+                    if (dnsList.size() > 0) {
+                        result.putArray("dns", dnsList)
+                    } else {
+                        result.putNull("dns")
+                    }
+
+                    // 子网掩码
+                    val netmask = String.format(
+                        "%d.%d.%d.%d",
+                        dhcpInfo.netmask and 0xff,
+                        dhcpInfo.netmask shr 8 and 0xff,
+                        dhcpInfo.netmask shr 16 and 0xff,
+                        dhcpInfo.netmask shr 24 and 0xff
+                    )
+                    if (netmask != "0.0.0.0") {
+                        result.putString("subnetMask", netmask)
+                    } else {
+                        result.putNull("subnetMask")
+                    }
+                } else {
+                    result.putNull("gateway")
+                    result.putNull("dns")
+                    result.putNull("subnetMask")
+                }
+            } catch (e: Exception) {
+                result.putNull("gateway")
+                result.putNull("dns")
+                result.putNull("subnetMask")
+            }
 
             promise.resolve(result)
         } catch (e: Exception) {

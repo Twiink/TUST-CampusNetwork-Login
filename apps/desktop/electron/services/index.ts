@@ -5,6 +5,7 @@
 export * from './store';
 export * from './network';
 export * from './wifi-detector';
+export * from './wifi-adapter';
 export * from './tray';
 export * from './auto-reconnect';
 export * from './auto-launch';

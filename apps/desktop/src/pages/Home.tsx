@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNetwork } from '../hooks/useNetwork';
+import type { NetworkStatus } from '@repo/shared';
 import {
   Wifi,
   WifiOff,
@@ -14,14 +15,362 @@ import {
   Settings,
   LogIn,
   LogOut,
+  Signal,
+  Zap,
+  Activity,
+  Network,
+  Shield,
+  RefreshCw,
 } from 'lucide-react';
+
+// 检测是否为深色模式
+const isDarkMode = () => {
+  return (
+    window.matchMedia &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+};
+
+// WiFi 信号强度图标和颜色（支持深色模式）
+const getSignalIcon = (strength: number) => {
+  const dark = isDarkMode();
+  if (strength >= 75)
+    return {
+      icon: <Signal size={16} />,
+      color: dark ? '#34d399' : '#22c55e',
+      text: '优秀',
+    };
+  if (strength >= 50)
+    return {
+      icon: <Signal size={16} />,
+      color: dark ? '#60a5fa' : '#3b82f6',
+      text: '良好',
+    };
+  if (strength >= 25)
+    return {
+      icon: <Signal size={16} />,
+      color: dark ? '#fbbf24' : '#f59e0b',
+      text: '一般',
+    };
+  return {
+    icon: <Signal size={16} />,
+    color: dark ? '#f87171' : '#ef4444',
+    text: '较差',
+  };
+};
+
+// 延迟等级和颜色（支持深色模式）
+const getLatencyStatus = (latency: number) => {
+  const dark = isDarkMode();
+  if (latency < 50) return { color: dark ? '#34d399' : '#22c55e', text: '优秀' };
+  if (latency < 100) return { color: dark ? '#60a5fa' : '#3b82f6', text: '良好' };
+  if (latency < 200) return { color: dark ? '#fbbf24' : '#f59e0b', text: '一般' };
+  if (latency < 500) return { color: dark ? '#fb923c' : '#f97316', text: '较差' };
+  return { color: dark ? '#f87171' : '#ef4444', text: '很差' };
+};
+
+// 连接速度等级和颜色（支持深色模式）
+const getLinkSpeedStatus = (speed: number) => {
+  const dark = isDarkMode();
+  if (speed >= 500) return { color: dark ? '#34d399' : '#22c55e', text: '优秀' };
+  if (speed >= 200) return { color: dark ? '#60a5fa' : '#3b82f6', text: '良好' };
+  if (speed >= 100) return { color: dark ? '#fbbf24' : '#f59e0b', text: '一般' };
+  if (speed >= 50) return { color: dark ? '#fb923c' : '#f97316', text: '较差' };
+  return { color: dark ? '#f87171' : '#ef4444', text: '很差' };
+};
+
+// WiFi 信息卡片组件
+const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => void; refreshing: boolean }> = ({
+  networkStatus,
+  onRefresh,
+  refreshing,
+}) => {
+  const { ssid, signalStrength = 0, latency, linkSpeed = 0, frequency = 0 } = networkStatus;
+
+  const signal = getSignalIcon(signalStrength);
+  const latencyValue = latency?.value || 9999;
+  const latencyStatusInfo = getLatencyStatus(latencyValue);
+  const linkSpeedStatus = getLinkSpeedStatus(linkSpeed);
+
+  return (
+    <div
+      style={{
+        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+        borderRadius: 'var(--radius-md)',
+        padding: 16,
+        marginBottom: 16,
+        position: 'relative',
+      }}
+    >
+      {/* 刷新按钮 */}
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          background: 'transparent',
+          border: 'none',
+          cursor: refreshing ? 'not-allowed' : 'pointer',
+          padding: 4,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s',
+          opacity: refreshing ? 0.5 : 1,
+        }}
+        onMouseEnter={(e) => {
+          if (!refreshing) {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.backgroundColor = 'transparent';
+        }}
+        title="刷新 WiFi 信息"
+      >
+        <RefreshCw
+          size={18}
+          color="var(--primary-color)"
+          style={{
+            animation: refreshing ? 'spin 1s linear infinite' : 'none',
+          }}
+        />
+      </button>
+
+      {/* WiFi 名称 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingRight: 30 }}>
+        <Wifi size={18} color="var(--primary-color)" />
+        <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>WiFi 名称:</span>
+        <strong style={{ color: 'var(--text-primary)', fontSize: '1.1rem' }}>{ssid}</strong>
+      </div>
+
+      {/* 网络指标 */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 12,
+        }}
+      >
+        {/* 信号强度 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: 8,
+            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <div style={{ color: signal.color }}>{signal.icon}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>信号强度</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: signal.color }}>
+              {signalStrength}% · {signal.text}
+            </div>
+          </div>
+        </div>
+
+        {/* 网络延迟 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: 8,
+            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <Activity size={16} color={latencyStatusInfo.color} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>网络延迟</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: latencyStatusInfo.color }}>
+              {latencyValue === 9999 ? '超时' : `${latencyValue}ms · ${latencyStatusInfo.text}`}
+            </div>
+          </div>
+        </div>
+
+        {/* 连接速度 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: 8,
+            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <Zap size={16} color={linkSpeedStatus.color} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接速度</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: linkSpeedStatus.color }}>
+              {linkSpeed} Mbps · {linkSpeedStatus.text}
+            </div>
+          </div>
+        </div>
+
+        {/* 频段 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: 8,
+            backgroundColor: 'rgba(255, 255, 255, 0.5)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+        >
+          <Wifi size={16} color="var(--primary-color)" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>频段</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              {frequency >= 5000 ? '5GHz' : frequency >= 2400 ? '2.4GHz' : '未知'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 扩展信息（如果有） */}
+      {(networkStatus.ip || networkStatus.mac || networkStatus.bssid || networkStatus.security) && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '1px solid rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr',
+              gap: 8,
+              fontSize: '0.85rem',
+            }}
+          >
+            {networkStatus.ip && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>IPv4:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.ip}
+                </span>
+              </div>
+            )}
+            {networkStatus.ipv6 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>IPv6:</span>
+                <span
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontFamily: 'monospace',
+                    fontSize: '0.75rem',
+                  }}
+                >
+                  {networkStatus.ipv6}
+                </span>
+              </div>
+            )}
+            {networkStatus.mac && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>MAC:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.mac}
+                </span>
+              </div>
+            )}
+            {networkStatus.gateway && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>网关:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.gateway}
+                </span>
+              </div>
+            )}
+            {networkStatus.dns && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>DNS:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.dns}
+                </span>
+              </div>
+            )}
+            {networkStatus.subnetMask && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Network size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>子网掩码:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.subnetMask}
+                </span>
+              </div>
+            )}
+            {networkStatus.bssid && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Wifi size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>BSSID:</span>
+                <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>
+                  {networkStatus.bssid}
+                </span>
+              </div>
+            )}
+            {networkStatus.channel && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Wifi size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>信道:</span>
+                <span style={{ color: 'var(--text-primary)' }}>{networkStatus.channel}</span>
+              </div>
+            )}
+            {networkStatus.security && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Shield size={14} color="var(--text-secondary)" />
+                <span style={{ color: 'var(--text-secondary)' }}>安全类型:</span>
+                <span style={{ color: 'var(--text-primary)' }}>{networkStatus.security}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const Home: React.FC = () => {
   const { networkStatus, ipAddress, login, logout, config } = useApp();
-  const { wifiConnected, wifiSSID } = useNetwork();
+  const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading } = useNetwork();
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState(0);
 
-  const currentAccount = config?.accounts.find((a) => a.id === config?.currentAccountId);
-  const hasAccounts = config?.accounts && config.accounts.length > 0;
+  // 手动刷新WiFi信息
+  const handleRefresh = async () => {
+    const now = Date.now();
+    // 防抖：2秒内不允许重复刷新
+    if (now - lastRefreshTime < 2000) {
+      return;
+    }
+
+    setRefreshing(true);
+    setLastRefreshTime(now);
+
+    try {
+      await fetchStatus();
+    } catch (error) {
+      console.error('Failed to refresh WiFi info:', error);
+    } finally {
+      // 确保至少显示1秒的加载动画
+      setTimeout(() => {
+        setRefreshing(false);
+      }, 1000);
+    }
+  };
 
   const getStatusIcon = () => {
     switch (networkStatus) {
@@ -58,8 +407,8 @@ export const Home: React.FC = () => {
     }
   };
 
-  // 未配置账户的状态
-  if (!hasAccounts) {
+  // 第一优先级：检查 WiFi 连接状态（无论是否配置账户）
+  if (!wifiConnected) {
     return (
       <div className="page-home">
         <h1 className="page-title">
@@ -68,10 +417,56 @@ export const Home: React.FC = () => {
         </h1>
 
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
-          <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>未配置账户</h2>
+          <WifiOff size={64} color="#ef4444" style={{ marginBottom: 16 }} />
+          <h2 style={{ margin: '0 0 8px 0', color: '#ef4444' }}>未连接 WiFi</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-            请先前往"配置设置"添加校园网账户，才能使用登录功能。
+            当前设备未连接到任何 WiFi 网络，请先连接 WiFi。
+          </p>
+          <div
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: 16,
+              textAlign: 'left',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              <AlertCircle size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              连接到 WiFi 后才能使用网络认证功能
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 第二优先级：检查 WiFi 是否在配置列表中
+  const wifiConfig = config?.wifiList?.find((w) => w.ssid === wifiSSID);
+
+  if (!wifiConfig) {
+    return (
+      <div className="page-home">
+        <h1 className="page-title">
+          <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          运行状态
+        </h1>
+
+        {/* WiFi 基础信息 - 必须显示 */}
+        <div className="card">
+          <h3>
+            <Wifi size={18} style={{ marginRight: 8 }} />
+            当前 WiFi
+          </h3>
+          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+        </div>
+
+        {/* WiFi 未配置警告 */}
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
+          <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>该 WiFi 未配置</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            当前连接的 WiFi "{wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。
           </p>
           <div
             style={{
@@ -84,32 +479,104 @@ export const Home: React.FC = () => {
           >
             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
               <Settings size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-              点击左侧菜单的"配置设置"添加账户
+              点击左侧菜单的"配置设置"添加 WiFi 配置
             </p>
-          </div>
-        </div>
-
-        <div className="card">
-          <h3>
-            <Wifi size={18} style={{ marginRight: 8 }} />
-            网络信息
-          </h3>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <WifiOff size={16} />
-            <span>等待配置账户...</span>
           </div>
         </div>
       </div>
     );
   }
 
+  // 第三优先级：检查是否需要认证
+  if (!wifiConfig.requiresAuth) {
+    return (
+      <div className="page-home">
+        <h1 className="page-title">
+          <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          运行状态
+        </h1>
+
+        {/* WiFi 基础信息 */}
+        <div className="card">
+          <h3>
+            <Wifi size={18} style={{ marginRight: 8 }} />
+            当前 WiFi
+          </h3>
+          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+        </div>
+
+        {/* 无需认证提示 */}
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <CheckCircle2 size={64} color="#22c55e" style={{ marginBottom: 16 }} />
+          <h2 style={{ margin: '0 0 8px 0', color: '#22c55e' }}>无需认证</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            当前 WiFi 无需校园网认证，可直接使用。
+          </p>
+          <div
+            style={{
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: 16,
+              textAlign: 'left',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              此 WiFi 已配置为"无需认证"（如家庭 WiFi、手机热点等）
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 第四优先级：检查是否有关联账户
+  const linkedAccount = config?.accounts.find((a) => a.id === wifiConfig.linkedAccountId);
+
+  if (!linkedAccount) {
+    return (
+      <div className="page-home">
+        <h1 className="page-title">
+          <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
+          运行状态
+        </h1>
+
+        {/* WiFi 基础信息 */}
+        <div className="card">
+          <h3>
+            <Wifi size={18} style={{ marginRight: 8 }} />
+            当前 WiFi
+          </h3>
+          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+        </div>
+
+        {/* 未配置账户警告 */}
+        <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
+          <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>未配置账户</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            该 WiFi 需要校园网认证，但尚未关联账户。请前往"配置设置"添加账户并关联到此 WiFi。
+          </p>
+          <div
+            style={{
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              borderRadius: 'var(--radius-md)',
+              padding: 16,
+              textAlign: 'left',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+              <Settings size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
+              点击左侧菜单的"配置设置"添加账户并关联
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 显示完整认证界面
   return (
     <div className="page-home">
       <h1 className="page-title">
@@ -215,64 +682,47 @@ export const Home: React.FC = () => {
           <User size={18} style={{ marginRight: 8 }} />
           当前账号
         </h3>
-        {currentAccount ? (
-          <div
-            style={{
-              backgroundColor: 'rgba(14, 165, 233, 0.05)',
-              borderRadius: 'var(--radius-md)',
-              padding: 16,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <User size={16} color="var(--primary-color)" />
-              <strong>{currentAccount.username}</strong>
-              <span
-                style={{
-                  fontSize: '0.75rem',
-                  backgroundColor: '#e0f2fe',
-                  color: '#0369a1',
-                  padding: '2px 8px',
-                  borderRadius: '12px',
-                }}
-              >
-                {currentAccount.isp === 'campus'
-                  ? '校园网'
-                  : currentAccount.isp === 'cmcc'
-                    ? '中国移动'
-                    : currentAccount.isp === 'cucc'
-                      ? '中国联通'
-                      : '中国电信'}
-              </span>
-            </div>
-            <div
+        <div
+          style={{
+            backgroundColor: 'rgba(14, 165, 233, 0.05)',
+            borderRadius: 'var(--radius-md)',
+            padding: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <User size={16} color="var(--primary-color)" />
+            <strong>{linkedAccount.username}</strong>
+            <span
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                color: 'var(--text-secondary)',
-                fontSize: '0.9rem',
+                fontSize: '0.75rem',
+                backgroundColor: '#e0f2fe',
+                color: '#0369a1',
+                padding: '2px 8px',
+                borderRadius: '12px',
               }}
             >
-              <Server size={14} />
-              <span>{currentAccount.serverUrl}</span>
-            </div>
+              {linkedAccount.isp === 'campus'
+                ? '校园网'
+                : linkedAccount.isp === 'cmcc'
+                  ? '中国移动'
+                  : linkedAccount.isp === 'cucc'
+                    ? '中国联通'
+                    : '中国电信'}
+            </span>
           </div>
-        ) : (
           <div
             style={{
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
-              borderRadius: 'var(--radius-md)',
-              padding: 16,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              color: '#f59e0b',
+              color: 'var(--text-secondary)',
+              fontSize: '0.9rem',
             }}
           >
-            <AlertCircle size={16} />
-            <span>尚未选择账号，请前往"配置设置"选择要使用的账号。</span>
+            <Server size={14} />
+            <span>{linkedAccount.serverUrl}</span>
           </div>
-        )}
+        </div>
       </div>
 
       {/* 心跳状态 */}

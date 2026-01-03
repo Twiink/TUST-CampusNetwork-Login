@@ -14,6 +14,7 @@ import {
 import { createElectronStorage } from './services/store';
 import { getNetworkInfo } from './services/network';
 import { getCurrentWifiSSID } from './services/wifi-detector';
+import { createDesktopWifiAdapter } from './services/wifi-adapter';
 import { createTrayService, TrayService } from './services/tray';
 import { createAutoReconnectService, AutoReconnectService } from './services/auto-reconnect';
 import { createAutoLaunchService, AutoLaunchService } from './services/auto-launch';
@@ -83,7 +84,10 @@ async function initServices(): Promise<AppServices> {
   const authService = createAuthService();
   const accountManager = createAccountManager(configManager);
   const wifiManager = createWifiManager(configManager);
-  const networkDetector = createNetworkDetector();
+
+  // 创建 WiFi 适配器
+  const wifiAdapter = createDesktopWifiAdapter();
+  const networkDetector = createNetworkDetector(wifiAdapter);
 
   return {
     authService,
@@ -102,7 +106,7 @@ function createWindow() {
     resizable: false,
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
-      preload: path.join(__dirname, 'preload.mjs'),
+      preload: path.join(MAIN_DIST, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },

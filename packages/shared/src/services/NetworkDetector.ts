@@ -2,8 +2,16 @@
  * 联网探测服务
  */
 
-import { NetworkStatus, NetworkCallback, PollingOptions } from '../types/network';
+import type {
+  NetworkStatus,
+  NetworkCallback,
+  PollingOptions,
+  LatencyResult,
+  LatencyStatus,
+  WifiDetails,
+} from '../types/network';
 import { httpGet, isUrlReachable } from '../utils/httpClient';
+import type { WifiAdapter } from './WifiAdapter';
 
 /**
  * 网络探测 URL
@@ -20,11 +28,28 @@ const CONNECTIVITY_CHECK_URLS = [
 const AUTH_CHECK_URL = 'http://10.10.102.50:801/eportal/portal/page/checkstatus';
 
 /**
+ * 默认 Ping 目标（公共 DNS）
+ */
+const DEFAULT_PING_TARGET = '8.8.8.8';
+
+/**
  * 联网探测服务类
  */
 export class NetworkDetector {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private isPolling = false;
+  private wifiAdapter?: WifiAdapter;
+
+  constructor(wifiAdapter?: WifiAdapter) {
+    this.wifiAdapter = wifiAdapter;
+  }
+
+  /**
+   * 设置 WiFi 适配器
+   */
+  setWifiAdapter(adapter: WifiAdapter): void {
+    this.wifiAdapter = adapter;
+  }
 
   /**
    * 检查网络连通性 (是否有互联网连接)
@@ -68,16 +93,185 @@ export class NetworkDetector {
   }
 
   /**
-   * 获取完整网络状态
+   * 测量网络延迟（Ping）
+   * 优先测试认证服务器，失败则测试公共 DNS
+   * @param target 测试目标（可选）
+   * @returns 延迟测试结果
    */
-  async getNetworkStatus(): Promise<NetworkStatus> {
+  async measureLatency(target?: string): Promise<LatencyResult> {
+    const startTime = Date.now();
+    const testTarget = target || AUTH_CHECK_URL;
+
+    try {
+      // 尝试 HTTP 请求来模拟 ping
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      await fetch(testTarget, {
+        method: 'HEAD',
+        signal: controller.signal,
+        cache: 'no-cache',
+      });
+
+      clearTimeout(timeout);
+      const latency = Date.now() - startTime;
+
+      return {
+        value: latency,
+        status: this.getLatencyStatus(latency),
+        target: testTarget,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      // 如果第一次失败，尝试公共 DNS
+      if (testTarget === AUTH_CHECK_URL) {
+        try {
+          const fallbackStart = Date.now();
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+
+          await fetch(`http://${DEFAULT_PING_TARGET}`, {
+            method: 'HEAD',
+            signal: controller.signal,
+            cache: 'no-cache',
+          });
+
+          clearTimeout(timeout);
+          const latency = Date.now() - fallbackStart;
+
+          return {
+            value: latency,
+            status: this.getLatencyStatus(latency),
+            target: DEFAULT_PING_TARGET,
+            timestamp: Date.now(),
+          };
+        } catch {
+          // 两次都失败，返回超时
+          return {
+            value: 9999,
+            status: 'timeout',
+            target: DEFAULT_PING_TARGET,
+            timestamp: Date.now(),
+          };
+        }
+      }
+
+      // 超时或失败
+      return {
+        value: 9999,
+        status: 'timeout',
+        target: testTarget,
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  /**
+   * 根据延迟值判断延迟等级
+   * @param latency 延迟值（毫秒）
+   * @returns 延迟等级
+   */
+  private getLatencyStatus(latency: number): LatencyStatus {
+    if (latency < 50) return 'excellent';
+    if (latency < 100) return 'good';
+    if (latency < 200) return 'fair';
+    if (latency < 500) return 'poor';
+    return 'very-poor';
+  }
+
+  /**
+   * 获取 WiFi 信号强度
+   * @returns 信号强度（0-100）
+   */
+  async getSignalStrength(): Promise<number> {
+    if (!this.wifiAdapter) {
+      throw new Error('WifiAdapter not configured');
+    }
+    return this.wifiAdapter.getSignalStrength();
+  }
+
+  /**
+   * 获取当前 WiFi 状态
+   * 启动时调用，无论是否配置账户
+   * @returns 当前 WiFi 状态
+   */
+  async getCurrentWifiStatus(): Promise<NetworkStatus> {
     const connected = await this.checkConnectivity();
     const authenticated = connected;
 
+    // 如果有 WiFi 适配器，获取 WiFi 详细信息
+    if (this.wifiAdapter) {
+      try {
+        console.log('[NetworkDetector] Getting WiFi details...');
+        // 使用 getWifiDetails() 而不是直接调用适配器，这样会包含延迟测试
+        const wifiDetails = await this.getWifiDetails();
+        console.log('[NetworkDetector] WiFi details:', wifiDetails);
+        if (wifiDetails) {
+          return {
+            connected,
+            authenticated,
+            wifiConnected: wifiDetails.connected,
+            ssid: wifiDetails.ssid,
+            signalStrength: wifiDetails.signalStrength,
+            linkSpeed: wifiDetails.linkSpeed,
+            frequency: wifiDetails.frequency,
+            latency: wifiDetails.latency,
+            ip: wifiDetails.ipv4,
+            ipv6: wifiDetails.ipv6,
+            mac: wifiDetails.mac,
+            gateway: wifiDetails.gateway,
+            dns: wifiDetails.dns?.[0],
+            subnetMask: wifiDetails.subnetMask,
+            bssid: wifiDetails.bssid,
+            channel: wifiDetails.channel,
+            security: wifiDetails.security,
+          };
+        } else {
+          console.log('[NetworkDetector] WiFi details is null, returning basic status');
+        }
+      } catch (error) {
+        console.error('[NetworkDetector] Failed to get WiFi details:', error);
+      }
+    } else {
+      console.log('[NetworkDetector] No WiFi adapter configured');
+    }
+
+    // 如果没有 WiFi 适配器或获取失败，返回基本状态
     return {
       connected,
       authenticated,
+      wifiConnected: false,
     };
+  }
+
+  /**
+   * 获取完整的 WiFi 详细信息
+   * @returns WiFi 详细信息
+   */
+  async getWifiDetails(): Promise<WifiDetails | null> {
+    if (!this.wifiAdapter) {
+      throw new Error('WifiAdapter not configured');
+    }
+
+    const details = await this.wifiAdapter.getWifiDetails();
+    if (!details) {
+      return null;
+    }
+
+    // 添加延迟测试
+    if (!details.latency) {
+      const latency = await this.measureLatency();
+      return { ...details, latency };
+    }
+
+    return details;
+  }
+
+  /**
+   * 获取完整网络状态
+   */
+  async getNetworkStatus(): Promise<NetworkStatus> {
+    return this.getCurrentWifiStatus();
   }
 
   /**
@@ -96,7 +290,7 @@ export class NetworkDetector {
       this.getNetworkStatus()
         .then(callback)
         .catch(() => {
-          callback({ connected: false, authenticated: false });
+          callback({ connected: false, authenticated: false, wifiConnected: false });
         });
     }
 
@@ -106,7 +300,7 @@ export class NetworkDetector {
         const status = await this.getNetworkStatus();
         callback(status);
       } catch {
-        callback({ connected: false, authenticated: false });
+        callback({ connected: false, authenticated: false, wifiConnected: false });
       }
     }, options.interval);
   }
@@ -140,6 +334,6 @@ export class NetworkDetector {
 /**
  * 创建网络探测服务实例
  */
-export function createNetworkDetector(): NetworkDetector {
-  return new NetworkDetector();
+export function createNetworkDetector(wifiAdapter?: WifiAdapter): NetworkDetector {
+  return new NetworkDetector(wifiAdapter);
 }

@@ -17,6 +17,7 @@ import {
   Globe,
   RotateCcw,
   Link,
+  Star,
 } from 'lucide-react';
 
 const ISP_OPTIONS: { value: ISP; label: string }[] = [
@@ -25,6 +26,15 @@ const ISP_OPTIONS: { value: ISP; label: string }[] = [
   { value: 'cucc', label: '中国联通' },
   { value: 'ctcc', label: '中国电信' },
 ];
+
+// 根据优先级返回对应的颜色
+const getPriorityColor = (priority: number): string => {
+  if (priority <= 3) return '#ef4444'; // 红色 - 最高优先级
+  if (priority <= 6) return '#f97316'; // 橙色 - 高优先级
+  if (priority <= 10) return '#3b82f6'; // 蓝色 - 中等优先级
+  if (priority <= 20) return '#22c55e'; // 绿色 - 低优先级
+  return '#6b7280'; // 灰色 - 最低优先级
+};
 
 export const Settings: React.FC = () => {
   const { config, setConfig } = useApp();
@@ -45,11 +55,13 @@ export const Settings: React.FC = () => {
     password: string;
     requiresAuth: boolean;
     linkedAccountId: string;
+    priority: number;
   }>({
     ssid: '',
     password: '',
     requiresAuth: true,
     linkedAccountId: '',
+    priority: 10,
   });
 
   const handleAddAccount = () => {
@@ -113,14 +125,14 @@ export const Settings: React.FC = () => {
       autoConnect: true,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
-      priority: config.wifiList.length,
+      priority: newWifi.priority,
     };
 
     setConfig({
       ...config,
       wifiList: [...config.wifiList, wifi],
     });
-    setNewWifi({ ssid: '', password: '', requiresAuth: true, linkedAccountId: '' });
+    setNewWifi({ ssid: '', password: '', requiresAuth: true, linkedAccountId: '', priority: 10 });
   };
 
   const handleRemoveWifi = (id: string) => {
@@ -504,13 +516,17 @@ export const Settings: React.FC = () => {
                           <span
                             style={{
                               fontSize: '0.75rem',
-                              backgroundColor: '#f3f4f6',
-                              color: '#6b7280',
+                              backgroundColor: getPriorityColor(wifi.priority || 10) + '20',
+                              color: getPriorityColor(wifi.priority || 10),
                               padding: '2px 8px',
                               borderRadius: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
                             }}
                           >
-                            优先级 {index + 1}
+                            <Star size={12} />
+                            优先级 {wifi.priority || 10}
                           </span>
                         </div>
                         {wifi.requiresAuth && linkedAccount && (
@@ -686,6 +702,37 @@ export const Settings: React.FC = () => {
                 )}
               </div>
             )}
+
+            {/* 优先级配置 */}
+            <div className="form-group">
+              <label>
+                <Star size={14} style={{ marginRight: 6 }} />
+                优先级
+              </label>
+              <input
+                type="number"
+                className="form-control"
+                placeholder="请输入优先级（1-99，数字越小优先级越高）"
+                value={newWifi.priority || 10}
+                min={1}
+                max={99}
+                onWheel={(e) => e.currentTarget.blur()}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 10;
+                  setNewWifi({ ...newWifi, priority: Math.min(99, Math.max(1, value)) });
+                }}
+              />
+              <div
+                style={{
+                  fontSize: '0.8rem',
+                  color: 'var(--text-secondary)',
+                  marginTop: 6,
+                }}
+              >
+                数字越小优先级越高（1=最高，99=最低，默认=10）
+              </div>
+            </div>
+
             <button
               className="btn btn-primary"
               style={{ width: '100%' }}
