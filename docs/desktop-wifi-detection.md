@@ -16,7 +16,7 @@ DesktopWifiAdapter (desktop/electron/services)
 系统命令执行 (execAsync)
     ↓
 Windows: netsh / ipconfig
-macOS: airport / scutil
+macOS: system_profiler / networksetup / scutil
 ```
 
 ### 核心文件
@@ -42,8 +42,14 @@ chcp 65001 >nul && ipconfig /all
 
 **获取 WiFi 基本信息**：
 ```bash
-/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I
+# 方法 1（推荐）：使用 system_profiler
+system_profiler SPAirPortDataType 2>/dev/null
+
+# 方法 2（备用）：使用 networksetup
+networksetup -getairportnetwork en0
 ```
+
+> **注意**：`airport -I` 命令已被 Apple 废弃（macOS 14.5+），仅返回警告信息而不返回实际数据。建议使用 `system_profiler` 替代。
 
 **获取网络配置**：
 - 使用 Node.js `os.networkInterfaces()` API
@@ -257,6 +263,150 @@ const wifiDetails = await this.getWifiDetails();
 
 `this.getWifiDetails()` 方法会检查延迟数据是否存在，如不存在则自动调用 `measureLatency()` 进行测试。
 
+### 问题 6：macOS airport 命令废弃导致 WiFi 检测失败
+
+#### 问题描述
+在新版 macOS 系统（14.5+）上，应用启动后显示"WiFi 未连接"，即使实际已经连接了 WiFi 网络。
+
+#### 根本原因
+1. **airport 命令被 Apple 废弃**
+   ```
+   WARNING: The airport command line tool is deprecated and will be removed in a future release.
+   For diagnosing Wi-Fi related issues, use the Wireless Diagnostics app or wdutil command line tool.
+   ```
+   - 命令只返回警告信息，不再返回实际的 WiFi 数据
+   - 原有的正则匹配 `/\s+SSID:\s*(.+)/` 无法匹配到 SSID
+
+2. **备用方案也不够可靠**
+   - `networksetup -getairportnetwork en0` 在部分系统上返回 "You are not associated with an AirPort network"
+   - 即使实际已连接 WiFi
+
+#### 解决方案
+
+**步骤 1：使用 `system_profiler` 作为主要方法**
+```typescript
+async function getMacOSWifiInfo(): Promise<WifiInfo | null> {
+  try {
+    // 使用 system_profiler（推荐，在新版 macOS 上稳定可靠）
+    const { stdout } = await execAsync(
+      'system_profiler SPAirPortDataType 2>/dev/null',
+      { timeout: 5000 }
+    );
+
+    // 解析输出获取当前网络信息
+    const lines = stdout.split('\n');
+    let inCurrentNetwork = false;
+    let ssid = '';
+    const data: Record<string, string> = {};
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // 检测 "Current Network Information:" 标记
+      if (line.includes('Current Network Information:')) {
+        inCurrentNetwork = true;
+        // 下一行通常是 SSID（以冒号结尾）
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1].trim();
+          const ssidMatch = nextLine.match(/^([^:]+):$/);
+          if (ssidMatch) {
+            ssid = ssidMatch[1].trim();
+          }
+        }
+        continue;
+      }
+
+      // 在当前网络信息块中，解析键值对
+      if (inCurrentNetwork && ssid) {
+        // 遇到 "Other Local Wi-Fi Networks" 或新的节标题时退出
+        if (line.includes('Other Local Wi-Fi Networks') || line.includes('Interfaces:')) {
+          break;
+        }
+
+        // 解析键值对: "Key: Value"
+        const match = line.match(/^\s+([^:]+):\s*(.+)$/);
+        if (match) {
+          const key = match[1].trim().toLowerCase();
+          const value = match[2].trim();
+          data[key] = value;
+        }
+      }
+    }
+
+    if (!ssid) {
+      return await getMacOSWifiFallback();
+    }
+
+    // 解析各项数据...
+    return { ssid, ... };
+  } catch (error) {
+    return await getMacOSWifiFallback();
+  }
+}
+```
+
+**步骤 2：解析 system_profiler 输出**
+
+`system_profiler SPAirPortDataType` 输出示例：
+```
+Current Network Information:
+  CU_u5MN_5G:
+    PHY Mode: 802.11ax
+    Channel: 36 (5GHz, 80MHz)
+    Country Code: CN
+    Network Type: Infrastructure
+    Security: WPA2 Personal
+    Signal / Noise: -45 dBm / -90 dBm
+    Transmit Rate: 960
+    MCS Index: 11
+```
+
+解析要点：
+- SSID 在 "Current Network Information:" 的下一行，格式为 `SSID_NAME:`
+- 信号强度从 "Signal / Noise: -45 dBm / -90 dBm" 提取第一个数字
+- 连接速度从 "Transmit Rate: 960" 提取数字
+- 信道和频段从 "Channel: 36 (5GHz, 80MHz)" 解析
+- 安全类型从 "Security: WPA2 Personal" 获取
+
+**步骤 3：保持 networksetup 作为备用方案**
+```typescript
+async function getMacOSWifiFallback(): Promise<WifiInfo | null> {
+  try {
+    const { stdout } = await execAsync('networksetup -getairportnetwork en0');
+    const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
+    if (match && match[1]) {
+      const ssid = match[1].trim();
+      return {
+        ssid,
+        connected: true,
+        signalStrength: 0,
+        linkSpeed: 0,
+        frequency: 0,
+      };
+    }
+  } catch (error) {
+    console.error('Failed to get macOS WiFi info with networksetup:', error);
+  }
+  return null;
+}
+```
+
+**步骤 4：Windows 实现完全不变**
+- Windows 仍使用 `netsh wlan show interfaces`
+- 通过 `process.platform` 判断，各平台代码完全隔离
+- 跨平台兼容性不受影响
+
+#### 优点
+1. ✅ **稳定可靠**：`system_profiler` 是 Apple 官方工具，不会被废弃
+2. ✅ **信息全面**：可获取信号强度、速度、频段等详细信息
+3. ✅ **双重保障**：主方法失败时自动降级到 `networksetup`
+4. ✅ **跨平台兼容**：Windows 代码完全不受影响
+
+#### 测试结果
+- ✅ macOS 14.5+ 正确识别 WiFi 连接状态
+- ✅ 成功解析 SSID、信号强度、连接速度等信息
+- ✅ Windows 平台功能正常
+
 ## 数据流程
 
 ### 完整数据获取流程
@@ -267,7 +417,7 @@ const wifiDetails = await this.getWifiDetails();
 
 2. **获取 WiFi 基本信息**
    - Windows: 执行 `chcp 65001 >nul && netsh wlan show interfaces`
-   - macOS: 执行 `airport -I`
+   - macOS: 执行 `system_profiler SPAirPortDataType 2>/dev/null`（降级：`networksetup -getairportnetwork en0`）
    - 解析输出获取：SSID、信号强度、连接速度、频段、信道、BSSID、安全类型
 
 3. **获取网络配置信息**
@@ -327,8 +477,8 @@ console.log('[WiFiAdapter] SSID:', ssid);
 - ✅ 支持不同语言环境的字段名
 
 ### macOS 系统
-- ✅ macOS 10.15+
-- ✅ 使用系统框架 `Apple80211.framework`
+- ✅ macOS 10.15+（包括 macOS 14.5+ 使用 system_profiler）
+- ✅ 兼容已废弃 airport 命令的新版系统
 - ✅ 支持中文 SSID（UTF-8 原生支持）
 
 ### 数据完整性
@@ -358,6 +508,6 @@ console.log('[WiFiAdapter] SSID:', ssid);
 ## 参考资料
 
 - [Windows netsh 命令文档](https://learn.microsoft.com/en-us/windows-server/networking/technologies/netsh/netsh)
-- [Apple80211 框架](https://developer.apple.com/library/archive/documentation/Networking/Conceptual/SystemConfigFrameworks/)
+- [macOS system_profiler 命令](https://ss64.com/mac/system_profiler.html)
 - [Node.js child_process](https://nodejs.org/api/child_process.html)
 - [字符编码：GBK vs UTF-8](https://en.wikipedia.org/wiki/GBK_(character_encoding))

@@ -6,6 +6,48 @@
 
 ---
 
+## [未发布] - 2026-01-04
+
+### 修复
+
+#### macOS WiFi 状态检测失效问题
+
+**问题描述**：
+- 在新版 macOS 系统上，应用启动后显示"WiFi 未连接"，即使实际已连接 WiFi
+- Windows 系统下工作正常，仅影响 macOS 平台
+
+**根本原因**：
+- macOS 上的 `airport -I` 命令已被 Apple 废弃
+- 该命令只返回废弃警告，不再返回实际的 WiFi 数据
+- 备用方案 `networksetup -getairportnetwork` 在部分系统上也无法正常工作
+
+**解决方案**：
+- 将 WiFi 检测方法替换为 `system_profiler SPAirPortDataType` 命令
+- 这是 Apple 推荐的新方法，在新版 macOS 上稳定可靠
+- 保持 `networksetup` 作为备用降级方案
+- 完全保留 Windows 实现，不影响跨平台兼容性
+
+**修改文件**：
+- `apps/desktop/electron/services/wifi-adapter.ts:157-285`
+  - 重写 `getMacOSWifiInfo()` 方法
+  - 新增 `getMacOSWifiFallback()` 备用方法
+  - 支持解析 SSID、信号强度、连接速度、信道、频段、安全类型等信息
+- `apps/desktop/electron/services/wifi-detector.ts:38-91`
+  - 重写 `getMacOSWifiSSID()` 方法
+  - 新增 `getMacOSWifiSSIDFallback()` 备用方法
+
+**测试结果**：
+- ✅ macOS WiFi 连接状态正常显示
+- ✅ Windows 平台功能完全不受影响
+- ✅ Lint 检查通过
+- ✅ 项目构建成功
+
+### 文档更新
+- ✅ `docs/desktop-wifi-detection.md` - 更新 macOS WiFi 检测方法说明
+- ✅ `CHANGELOG.md` - 本次更新日志
+
+---
+
 ## [未发布] - 2026-01-03
 
 ### 优化
