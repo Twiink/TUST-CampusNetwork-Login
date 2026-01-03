@@ -66,15 +66,38 @@ export function useNetwork() {
 
   // 监听网络状态变化
   useEffect(() => {
-    const unsubscribe = window.electronAPI.on(
+    // 监听 loading 状态
+    const unsubscribeLoading = window.electronAPI.on(
+      IPC_EVENTS.NETWORK_STATUS_LOADING,
+      (loadingData: unknown) => {
+        const data = loadingData as { loading: boolean; wifiConnected: boolean; ssid: string | null };
+        setLoading(data.loading);
+        setWifiStatus({
+          connected: data.wifiConnected,
+          ssid: data.ssid,
+        });
+        setInitialCheckDone(false);
+      }
+    );
+
+    // 监听完整网络状态更新
+    const unsubscribeStatus = window.electronAPI.on(
       IPC_EVENTS.NETWORK_STATUS_CHANGED,
       (newStatus: unknown) => {
-        setStatus(newStatus as NetworkStatus);
+        const networkStatus = newStatus as NetworkStatus;
+        setStatus(networkStatus);
+        setWifiStatus({
+          connected: networkStatus.wifiConnected || false,
+          ssid: networkStatus.ssid || null,
+        });
+        setLoading(false);
+        setInitialCheckDone(true);
       }
     );
 
     return () => {
-      unsubscribe();
+      unsubscribeLoading();
+      unsubscribeStatus();
     };
   }, []);
 

@@ -2609,8 +2609,3 @@ const request = protocol.buildLoginRequest(config);
 - 数据存储 (P4-009)
 
 ---
-
-_文档版本: 2.0_
-_最后更新: 2026-01-02_
-_作者: Claude_
-_问题总数: 58 个_

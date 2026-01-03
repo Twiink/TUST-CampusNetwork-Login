@@ -552,8 +552,8 @@ export const Home: React.FC = () => {
     }
   };
 
-  // 优先级 0：如果还在初始检测，显示加载状态
-  if (!initialCheckDone || (wifiConnected && loading)) {
+  // 优先级 0：如果还在初始检测或正在加载，显示加载状态
+  if (!initialCheckDone || loading) {
     return (
       <div className="page-home">
         <h1 className="page-title">

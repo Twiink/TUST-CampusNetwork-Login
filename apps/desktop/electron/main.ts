@@ -21,6 +21,7 @@ import { createAutoLaunchService, AutoLaunchService } from './services/auto-laun
 import { createNotificationService, NotificationService } from './services/notification';
 import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
+import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
 import {
   registerAllIPC,
   registerTrayIPC,
@@ -62,32 +63,44 @@ let autoLaunchService: AutoLaunchService | null = null;
 let notificationService: NotificationService | null = null;
 let updaterService: UpdaterService | null = null;
 let wifiSwitcherService: WifiSwitcherService | null = null;
+let wifiEventListener: WifiEventListener | null = null;
 let forceQuit = false;
 
 /**
  * 初始化服务
  */
 async function initServices(): Promise<AppServices> {
-  // 创建日志服务
-  const logger = createLogger(500);
-  logger.info('应用启动');
+  // 创建日志服务（保留7天，最多500条）
+  const logger = createLogger(500, 7);
+  logger.info('===== NetMate 应用启动 =====');
+  logger.info(`运行平台: ${process.platform}`);
+  logger.info(`应用版本: ${app.getVersion()}`);
 
   // 创建存储适配器
   const storage = createElectronStorage();
+  logger.info('存储服务初始化完成');
 
   // 创建配置管理器
-  const configManager = createConfigManager(storage);
+  const configManager = createConfigManager(storage, logger);
   await configManager.load();
-  logger.info('配置加载完成');
+  const config = configManager.getConfig();
+  logger.info('配置加载完成', {
+    账户数量: config.accounts.length,
+    WiFi配置数量: config.wifiList.length,
+    心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
+    自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
+  });
 
   // 创建其他服务
-  const authService = createAuthService();
-  const accountManager = createAccountManager(configManager);
-  const wifiManager = createWifiManager(configManager);
+  const authService = createAuthService(undefined, logger);
+  const accountManager = createAccountManager(configManager, logger);
+  const wifiManager = createWifiManager(configManager, logger);
+  logger.info('核心服务初始化完成');
 
   // 创建 WiFi 适配器
   const wifiAdapter = createDesktopWifiAdapter();
-  const networkDetector = createNetworkDetector(wifiAdapter);
+  const networkDetector = createNetworkDetector(wifiAdapter, logger);
+  logger.info('网络检测服务初始化完成');
 
   return {
     authService,
@@ -163,6 +176,10 @@ app.on('activate', () => {
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+    // 更新 WiFi 事件监听器的窗口引用
+    if (wifiEventListener) {
+      wifiEventListener.setWindow(win);
+    }
   }
 });
 
@@ -171,6 +188,10 @@ app.on('before-quit', () => {
   if (trayService) {
     trayService.destroy();
     trayService = null;
+  }
+  if (wifiEventListener) {
+    wifiEventListener.stop();
+    wifiEventListener = null;
   }
   if (services) {
     stopBackgroundServices(services);
@@ -354,8 +375,24 @@ app.whenReady().then(async () => {
     });
     trayService.init();
     services.logger.info('托盘服务已初始化');
+
+    // 创建并启动 WiFi 事件监听器
+    // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新
+    wifiEventListener = createWifiEventListener({
+      networkDetector: services.networkDetector,
+      logger: services.logger,
+      window: win,
+      checkInterval: 3000, // 3秒检测一次 SSID 变化（轻量级检测）
+    });
+    wifiEventListener.start();
+    services.logger.info('WiFi 事件监听器已启动，检测间隔: 3秒');
+
+    services.logger.success('===== 应用初始化完成 =====');
   } catch (error) {
     console.error('Failed to initialize app:', error);
+    if (services) {
+      services.logger.error('应用初始化失败', error);
+    }
     app.quit();
   }
 });

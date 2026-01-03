@@ -4,6 +4,7 @@
 
 import type { LoginConfig, LoginResult, LogoutResult } from '../types/auth';
 import type { ISP } from '../types/config';
+import type { Logger } from '../models/Logger';
 import { httpGet, HttpError } from '../utils/httpClient';
 import { urlencode, buildQueryString } from '../utils/urlEncode';
 import { DEFAULT_SERVER_URL } from '../constants/defaults';
@@ -24,9 +25,11 @@ const ISP_PREFIX_MAP: Record<ISP, string> = {
  */
 export class AuthService {
   private serverUrl: string;
+  private logger: Logger | null;
 
-  constructor(serverUrl: string = DEFAULT_SERVER_URL) {
+  constructor(serverUrl: string = DEFAULT_SERVER_URL, logger?: Logger) {
     this.serverUrl = serverUrl;
+    this.logger = logger || null;
   }
 
   /**
@@ -34,6 +37,7 @@ export class AuthService {
    */
   setServerUrl(url: string): void {
     this.serverUrl = url;
+    this.logger?.info(`认证服务器地址已更新: ${url}`);
   }
 
   /**
@@ -123,12 +127,41 @@ export class AuthService {
    * 执行登录
    */
   async login(config: LoginConfig): Promise<LoginResult> {
+    const userAccount = this.buildUserAccount(config.userAccount, config.isp);
+    const ispName = config.isp === 'campus' ? '校园网' :
+                    config.isp === 'cmcc' ? '中国移动' :
+                    config.isp === 'cucc' ? '中国联通' : '中国电信';
+
+    this.logger?.info(`开始登录认证`, {
+      用户: userAccount,
+      运营商: ispName,
+      IP: config.wlanUserIp,
+      服务器: config.serverUrl || this.serverUrl,
+    });
+
     try {
       const url = this.buildLoginUrl(config);
-      const response = await httpGet<string>(url, { timeout: 10000 });
+      this.logger?.debug(`请求登录 URL: ${url.substring(0, 100)}...`);
 
-      return this.parseLoginResponse(response.rawText);
+      const response = await httpGet<string>(url, { timeout: 10000 });
+      const result = this.parseLoginResponse(response.rawText);
+
+      if (result.success) {
+        this.logger?.success(`登录成功: ${result.message}`, { 用户: userAccount });
+      } else {
+        this.logger?.warn(`登录失败: ${result.message}`, {
+          用户: userAccount,
+          错误码: result.code,
+        });
+      }
+
+      return result;
     } catch (error) {
+      this.logger?.error(`登录异常`, {
+        用户: userAccount,
+        错误: error instanceof Error ? error.message : String(error),
+      });
+
       if (error instanceof HttpError) {
         throw new AppError(ErrorCode.NETWORK_ERROR, error.message, { originalError: error });
       }
@@ -155,18 +188,36 @@ export class AuthService {
    * 执行登出
    */
   async logout(wlanUserIp: string): Promise<LogoutResult> {
+    this.logger?.info(`开始登出认证`, {
+      IP: wlanUserIp,
+      服务器: this.serverUrl,
+    });
+
     try {
       const url = this.buildLogoutUrl(wlanUserIp);
+      this.logger?.debug(`请求登出 URL: ${url.substring(0, 100)}...`);
+
       const response = await httpGet<string>(url, { timeout: 10000 });
 
       // 简单判断登出是否成功
       const success = response.rawText.includes('result":1') || response.rawText.includes('成功');
+
+      if (success) {
+        this.logger?.success(`登出成功`, { IP: wlanUserIp });
+      } else {
+        this.logger?.warn(`登出失败`, { IP: wlanUserIp });
+      }
 
       return {
         success,
         message: success ? '登出成功' : '登出失败',
       };
     } catch (error) {
+      this.logger?.error(`登出异常`, {
+        IP: wlanUserIp,
+        错误: error instanceof Error ? error.message : String(error),
+      });
+
       if (error instanceof HttpError) {
         throw new AppError(ErrorCode.NETWORK_ERROR, error.message);
       }
@@ -178,6 +229,6 @@ export class AuthService {
 /**
  * 创建认证服务实例
  */
-export function createAuthService(serverUrl?: string): AuthService {
-  return new AuthService(serverUrl);
+export function createAuthService(serverUrl?: string, logger?: Logger): AuthService {
+  return new AuthService(serverUrl, logger);
 }

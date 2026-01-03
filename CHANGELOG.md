@@ -8,6 +8,137 @@
 
 ## [未发布] - 2026-01-04
 
+### 新增
+
+#### 全面的应用日志系统
+
+**功能描述**：
+- 为应用所有核心服务和操作添加详细的日志记录
+- 支持多种日志级别（debug、info、success、warn、error）
+- 自动管理日志存储（7天保留期，最多500条）
+- 结构化日志记录，便于问题排查和性能分析
+
+**日志覆盖范围**：
+
+1. **核心业务服务** (`packages/shared`)
+   - `AuthService` - 登录/登出全流程，包含用户账号、运营商、IP地址、服务器URL
+   - `NetworkDetector` - 网络连通性检查、认证状态、延迟测量、WiFi状态获取
+   - `ConfigManager` - 配置加载/保存/更新，记录账户数量、WiFi配置等详细信息
+   - `AccountManager` - 账户增删改查，记录所有账户操作的完整上下文
+   - `WifiManager` - WiFi配置管理，记录SSID、优先级、自动连接等信息
+
+2. **桌面服务** (`apps/desktop/electron`)
+   - `AutoReconnectService` - 自动重连全流程，包含每次重试的详细信息
+   - `HeartbeatService` - 心跳检测状态轮询，网络状态变化监控
+   - `IPC Handlers` - 所有IPC请求/响应/错误/事件广播
+
+**日志特性**：
+- 结构化数据记录（键值对格式）
+- 自动过期清理（默认7天）
+- 每小时检查过期日志
+- 默认保留最新500条日志
+- 支持日志级别筛选（UI界面）
+
+**实现细节**：
+- `Logger` 类增加了自动清理功能 (`cleanupExpiredLogs`)
+- 每1小时检查一次过期日志 (`LOG_CLEANUP_INTERVAL`)
+- 所有服务构造函数接收可选的 `logger` 参数
+- 使用 `logger?.method()` 模式避免空指针错误
+- 错误日志包含完整的错误堆栈信息
+
+**新增文件**：
+无（基于现有日志系统增强）
+
+**修改文件**：
+- `packages/shared/src/models/Logger.ts` - 添加自动清理功能
+- `packages/shared/src/services/AuthService.ts` - 添加详细登录/登出日志
+- `packages/shared/src/services/NetworkDetector.ts` - 添加网络检测全流程日志
+- `packages/shared/src/services/ConfigManager.ts` - 添加配置管理操作日志
+- `packages/shared/src/services/AccountManager.ts` - 添加账户管理操作日志
+- `packages/shared/src/services/WifiManager.ts` - 添加WiFi配置操作日志
+- `apps/desktop/electron/services/auto-reconnect.ts` - 添加自动重连详细日志
+- `apps/desktop/electron/ipc/network.ts` - 添加心跳检测和IPC操作日志
+- `apps/desktop/electron/ipc/auth.ts` - 添加认证IPC操作日志
+- `apps/desktop/electron/main.ts` - 更新服务初始化，传递logger实例
+
+**测试结果**：
+- ✅ shared包构建成功
+- ✅ desktop应用构建成功
+- ✅ 无TypeScript错误
+- ✅ 所有服务日志集成完成
+
+**用户体验**：
+- 日志页面可查看所有操作记录
+- 便于排查登录失败、网络异常等问题
+- 开发者可通过日志了解应用运行状态
+- 自动清理避免日志文件过大
+
+---
+
+#### WiFi 连接速度初始化修复
+
+**问题描述**：
+- 从断开状态连接WiFi后，连接速度显示为 0 Mbps
+- 需要手动刷新才能显示正确的速度
+- 仅在首次连接或重新连接时出现
+
+**根本原因**：
+- macOS 上 WiFi 刚连接时，网络接口尚未完全初始化传输速率
+- `system_profiler` 命令返回的 `transmit rate` 为 0
+- 但 MCS index 已存在，说明连接已建立
+
+**解决方案**：
+- 检测到 `transmit rate` 为 0 但 `mcs index` 存在时，等待 800ms 后重试
+- 重新执行 `system_profiler` 命令获取最新速率
+- 如果重试成功，使用新的速率值
+- 保持向后兼容，不影响已正常显示速度的情况
+
+**修改文件**：
+- `apps/desktop/electron/services/wifi-adapter.ts:223-272`
+  - 在 `getMacOSWifiInfo()` 方法中添加重试逻辑
+  - 仅在特定条件下触发（linkSpeed === 0 && mcs index 存在）
+
+**测试结果**：
+- ✅ 从断开连接到已连接，速度正确显示
+- ✅ 已连接状态刷新，速度不受影响
+- ✅ Windows平台不受影响
+
+---
+
+#### WiFi 状态自动检测功能
+
+**功能描述**：
+- 应用启动后自动监听系统 WiFi 状态变化
+- 当 WiFi 连接/断开/切换时，自动更新界面显示
+- 无需依赖心跳检测轮询，降低系统资源消耗
+
+**实现方式**：
+- 使用轻量级轮询检测 SSID 变化（默认 3 秒间隔）
+- 仅检测 SSID，不获取详细信息（速度快，资源消耗低）
+- 检测到变化时才触发完整网络状态更新
+- 支持 macOS 和 Windows 双平台
+
+**使用场景**：
+- 启动应用时显示"未连接 WiFi"，连接后自动更新显示
+- WiFi 断开时立即显示断开状态
+- 切换 WiFi 时自动更新当前连接信息
+
+**技术细节**：
+- macOS: 使用 `networksetup -getairportnetwork en0` 快速获取 SSID
+- Windows: 使用 `netsh wlan show interfaces` 快速获取 SSID
+- 通过 IPC 事件 `event:network:statusChanged` 通知渲染进程
+- 与心跳检测独立运行，互不干扰
+
+**新增文件**：
+- `apps/desktop/electron/services/wifi-event-listener.ts` - WiFi 事件监听服务
+
+**修改文件**：
+- `apps/desktop/electron/main.ts` - 集成 WiFi 事件监听器
+
+**测试结果**：
+- ✅ Lint 检查通过
+- ✅ 项目构建成功
+
 ### 修复
 
 #### macOS WiFi 状态检测失效问题

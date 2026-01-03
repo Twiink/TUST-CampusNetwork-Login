@@ -76,16 +76,32 @@ export class AutoReconnectService {
     const wasConnected = this.lastStatus?.connected ?? false;
     const isDisconnected = !status.connected;
 
+    this.logger.debug('自动重连服务：检测网络状态', {
+      之前状态: wasConnected ? '已连接' : '未连接',
+      当前状态: status.connected ? '已连接' : '未连接',
+      WiFi连接: status.wifiConnected ? '是' : '否',
+      WiFi名称: status.ssid || '无',
+    });
+
     this.lastStatus = status;
 
     // 如果未启用自动重连，或者正在重连中，则跳过
-    if (!this.options.enabled || this.isReconnecting) {
+    if (!this.options.enabled) {
+      this.logger.debug('自动重连已禁用，跳过检测');
+      return;
+    }
+
+    if (this.isReconnecting) {
+      this.logger.debug('自动重连正在进行中，跳过本次检测');
       return;
     }
 
     // 如果之前是连接状态，现在断开了，触发重连
     if (wasConnected && isDisconnected) {
-      this.logger.warn('检测到网络断开，启动自动重连');
+      this.logger.warn('检测到网络断开，启动自动重连', {
+        最大重试次数: this.options.maxRetries,
+        初始延迟: `${this.options.initialDelay}ms`,
+      });
       await this.attemptReconnect();
     }
   }
@@ -100,6 +116,13 @@ export class AutoReconnectService {
       return;
     }
 
+    this.logger.info('===== 开始自动重连 =====', {
+      账户: currentAccount.username,
+      运营商: currentAccount.isp,
+      服务器: currentAccount.serverUrl,
+      最大重试: this.options.maxRetries,
+    });
+
     this.isReconnecting = true;
     this.callbacks.onReconnectStart?.();
 
@@ -109,17 +132,28 @@ export class AutoReconnectService {
       backoff: 'exponential',
       maxDelay: this.options.maxDelay,
       onRetry: (attempt, error) => {
-        this.logger.info(`自动重连第 ${attempt} 次尝试 (原因: ${error.message})`);
+        this.logger.info(`自动重连第 ${attempt} 次尝试`, {
+          失败原因: error.message,
+          最大尝试: this.options.maxRetries,
+        });
         this.callbacks.onReconnectAttempt?.(attempt, this.options.maxRetries);
       },
     });
 
     try {
       await retryPolicy.execute(async () => {
+        this.logger.debug('获取网络信息');
         const networkInfo = getNetworkInfo();
         if (!networkInfo.ipv4) {
+          this.logger.error('无法获取本机IP地址');
           throw new Error('无法获取本机 IP 地址');
         }
+
+        this.logger.debug('准备登录配置', {
+          IP: networkInfo.ipv4,
+          IPv6: networkInfo.ipv6 || '无',
+          MAC: networkInfo.mac || '无',
+        });
 
         const loginConfig: LoginConfig = {
           serverUrl: currentAccount.serverUrl,
@@ -135,20 +169,26 @@ export class AutoReconnectService {
         const result = await this.authService.login(loginConfig);
 
         if (!result.success) {
+          this.logger.warn('登录请求失败', { 消息: result.message });
           throw new Error(result.message);
         }
 
+        this.logger.success('登录请求成功', { 消息: result.message });
         return result;
       });
 
-      this.logger.success('自动重连成功');
+      this.logger.success('===== 自动重连成功 =====');
       this.callbacks.onReconnectSuccess?.();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      this.logger.error(`自动重连失败 (已尝试 ${this.options.maxRetries + 1} 次): ${errorMessage}`);
+      this.logger.error(`===== 自动重连失败 =====`, {
+        总尝试次数: this.options.maxRetries + 1,
+        失败原因: errorMessage,
+      });
       this.callbacks.onReconnectFailed?.(error instanceof Error ? error : new Error(errorMessage));
     } finally {
       this.isReconnecting = false;
+      this.logger.debug('自动重连流程结束');
     }
   }
 
@@ -156,8 +196,10 @@ export class AutoReconnectService {
    * 手动触发重连
    */
   async triggerReconnect(): Promise<boolean> {
+    this.logger.info('手动触发自动重连');
+
     if (this.isReconnecting) {
-      this.logger.warn('重连正在进行中');
+      this.logger.warn('重连正在进行中，无法手动触发');
       return false;
     }
 
@@ -169,7 +211,24 @@ export class AutoReconnectService {
    * 更新配置
    */
   setOptions(options: Partial<AutoReconnectOptions>): void {
+    const oldOptions = { ...this.options };
     this.options = { ...this.options, ...options };
+
+    this.logger.info('自动重连配置已更新', {
+      启用状态: this.options.enabled ? '已启用' : '已禁用',
+      最大重试: this.options.maxRetries,
+      初始延迟: `${this.options.initialDelay}ms`,
+      最大延迟: `${this.options.maxDelay}ms`,
+    });
+
+    // 如果启用状态发生变化，记录特别日志
+    if (oldOptions.enabled !== this.options.enabled) {
+      if (this.options.enabled) {
+        this.logger.success('自动重连已启用');
+      } else {
+        this.logger.warn('自动重连已禁用');
+      }
+    }
   }
 
   /**

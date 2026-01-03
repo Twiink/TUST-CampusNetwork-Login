@@ -23,6 +23,7 @@ macOS: system_profiler / networksetup / scutil
 
 - `packages/shared/src/services/NetworkDetector.ts` - 跨平台网络检测服务
 - `apps/desktop/electron/services/wifi-adapter.ts` - 桌面端 WiFi 适配器实现
+- `apps/desktop/electron/services/wifi-event-listener.ts` - WiFi 状态变化监听服务
 
 ## 平台差异
 
@@ -406,6 +407,161 @@ async function getMacOSWifiFallback(): Promise<WifiInfo | null> {
 - ✅ macOS 14.5+ 正确识别 WiFi 连接状态
 - ✅ 成功解析 SSID、信号强度、连接速度等信息
 - ✅ Windows 平台功能正常
+
+## WiFi 状态自动检测
+
+### 功能说明
+
+从 v1.0.1 版本开始，应用支持**自动检测 WiFi 状态变化**，无需依赖心跳检测轮询即可实时响应 WiFi 连接/断开事件。
+
+### 实现原理
+
+**设计思路**：
+- 使用**轻量级轮询**检测 SSID 变化（默认 3 秒间隔）
+- 只检测 SSID，不获取详细信息（速度快，资源消耗低）
+- 检测到变化时才触发完整网络状态更新
+- 与心跳检测独立运行，互不干扰
+
+**技术实现**：
+```typescript
+// apps/desktop/electron/services/wifi-event-listener.ts
+export class WifiEventListener {
+  private lastSsid: string | null = null;
+
+  async checkWifiChange(): Promise<void> {
+    // 1. 快速获取当前 SSID（轻量级方法）
+    const currentSsid = await this.getCurrentSsid();
+
+    // 2. 比较 SSID 是否变化
+    if (currentSsid !== this.lastSsid) {
+      this.lastSsid = currentSsid;
+
+      // 3. 触发完整网络状态更新
+      const networkStatus = await this.networkDetector.getNetworkStatus();
+
+      // 4. 通过 IPC 事件通知渲染进程
+      window.webContents.send('event:network:statusChanged', networkStatus);
+    }
+  }
+}
+```
+
+### 平台实现
+
+#### macOS 平台
+```bash
+# 使用 networksetup 快速获取 SSID（速度快）
+networksetup -getairportnetwork en0
+```
+
+**输出示例**：
+```
+Current Wi-Fi Network: CU_u5MN_5G
+```
+
+**优点**：
+- ✅ 执行速度快（< 100ms）
+- ✅ 仅返回 SSID，无冗余信息
+- ✅ 不需要 sudo 权限
+
+#### Windows 平台
+```powershell
+# 使用 netsh 快速获取 SSID
+netsh wlan show interfaces
+```
+
+**输出示例**：
+```
+    SSID                   : MyWiFi
+    ...
+```
+
+**优点**：
+- ✅ 执行速度快（< 200ms）
+- ✅ 支持中英文系统
+- ✅ 不需要管理员权限
+
+### 使用场景
+
+1. **启动时未连接 WiFi**
+   - 应用启动显示"未连接 WiFi"
+   - 连接 WiFi 后，3 秒内自动更新界面
+
+2. **WiFi 断开**
+   - WiFi 断开后，3 秒内自动显示断开状态
+   - 无需手动刷新
+
+3. **WiFi 切换**
+   - 切换到另一个 WiFi，3 秒内自动更新显示
+   - 同时更新信号强度、速度等信息
+
+### 性能特点
+
+| 项目 | 心跳检测 | WiFi 事件监听 |
+|------|---------|--------------|
+| **检测目标** | 完整网络状态 | SSID 变化 |
+| **检测间隔** | 30 秒（可配置） | 3 秒（固定） |
+| **资源消耗** | 中等（完整检测） | 低（仅检测 SSID） |
+| **响应速度** | 慢（最多 30 秒） | 快（最多 3 秒） |
+| **触发条件** | 定时触发 | 状态变化时触发 |
+
+**说明**：
+- WiFi 事件监听使用轻量级方法，资源消耗极低
+- 仅在检测到 SSID 变化时才执行完整网络状态检测
+- 与心跳检测独立运行，可同时开启
+
+### 配置说明
+
+WiFi 事件监听**默认启用**，无需配置。
+
+**高级配置**（需修改代码）：
+```typescript
+// apps/desktop/electron/main.ts
+wifiEventListener = createWifiEventListener({
+  networkDetector: services.networkDetector,
+  logger: services.logger,
+  window: win,
+  checkInterval: 3000, // 检测间隔（毫秒），默认 3000ms
+});
+```
+
+**建议值**：
+- 默认：`3000` (3 秒) - 平衡响应速度和资源消耗
+- 高响应：`1000` (1 秒) - 更快响应，资源消耗略高
+- 省资源：`5000` (5 秒) - 降低消耗，响应略慢
+
+### 日志输出
+
+WiFi 状态变化时会记录日志：
+
+```
+[INFO] WiFi 已连接: CU_u5MN_5G
+[INFO] 已推送网络状态更新到渲染进程
+
+[INFO] WiFi 已断开: CU_u5MN_5G
+[INFO] 已推送网络状态更新到渲染进程
+
+[INFO] WiFi 已切换: CU_u5MN_5G → Home_WiFi
+[INFO] 已推送网络状态更新到渲染进程
+```
+
+### 与心跳检测的关系
+
+**独立运行**：
+- WiFi 事件监听：监听 WiFi 连接状态变化
+- 心跳检测：定时检测网络连通性和认证状态
+- 两者互不干扰，可同时开启
+
+**推荐配置**：
+1. **关闭心跳检测**（默认）
+   - WiFi 事件监听自动更新连接状态
+   - 用户手动刷新获取详细信息
+   - 资源消耗最低
+
+2. **开启心跳检测**（需要自动重连）
+   - WiFi 事件监听快速响应连接变化
+   - 心跳检测监控认证状态和网络连通性
+   - 配合自动重连功能使用
 
 ## 数据流程
 

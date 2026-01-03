@@ -6,12 +6,17 @@ import { AccountConfig } from '../types/config';
 import { validateAccountConfig, createDefaultAccountConfig, generateId } from '../utils/validator';
 import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
+import type { Logger } from '../models/Logger';
 
 /**
  * 账户管理服务类
  */
 export class AccountManager {
-  constructor(private configManager: ConfigManager) {}
+  private logger: Logger | null;
+
+  constructor(private configManager: ConfigManager, logger?: Logger) {
+    this.logger = logger || null;
+  }
 
   /**
    * 获取所有账户
@@ -52,6 +57,12 @@ export class AccountManager {
    * 添加账户
    */
   async addAccount(account: Omit<AccountConfig, 'id'> & { id?: string }): Promise<AccountConfig> {
+    this.logger?.info('添加新账户', {
+      用户名: account.username,
+      运营商: account.isp,
+      服务器: account.serverUrl,
+    });
+
     const newAccount: AccountConfig = {
       ...createDefaultAccountConfig(),
       ...account,
@@ -60,17 +71,24 @@ export class AccountManager {
 
     const validation = validateAccountConfig(newAccount);
     if (!validation.valid) {
+      this.logger?.error('添加账户失败：验证失败', {
+        错误: validation.errors.join('; '),
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('添加账户失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
     // 检查是否已存在相同用户名的账户
     const exists = config.accounts.find((a) => a.username === newAccount.username);
     if (exists) {
+      this.logger?.error('添加账户失败：该用户名已存在', {
+        用户名: newAccount.username,
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
     }
 
@@ -78,10 +96,19 @@ export class AccountManager {
 
     // 如果是第一个账户，自动设为当前账户
     const currentAccountId = config.currentAccountId || newAccount.id;
+    const isFirstAccount = !config.currentAccountId;
 
     await this.configManager.update({
       accounts: updatedAccounts,
       currentAccountId,
+    });
+
+    this.logger?.success('账户添加成功', {
+      账户ID: newAccount.id,
+      用户名: newAccount.username,
+      是否首个账户: isFirstAccount ? '是' : '否',
+      是否设为当前账户: isFirstAccount ? '是' : '否',
+      账户总数: updatedAccounts.length,
     });
 
     return newAccount;
@@ -94,13 +121,20 @@ export class AccountManager {
     id: string,
     updates: Partial<Omit<AccountConfig, 'id'>>
   ): Promise<AccountConfig> {
+    this.logger?.info('更新账户', {
+      账户ID: id,
+      更新字段: Object.keys(updates).join(', '),
+    });
+
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('更新账户失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
     const index = config.accounts.findIndex((a) => a.id === id);
     if (index === -1) {
+      this.logger?.error('更新账户失败：账户不存在', { 账户ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
     }
 
@@ -112,6 +146,10 @@ export class AccountManager {
 
     const validation = validateAccountConfig(updatedAccount);
     if (!validation.valid) {
+      this.logger?.error('更新账户失败：验证失败', {
+        账户ID: id,
+        错误: validation.errors.join('; '),
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
@@ -120,6 +158,11 @@ export class AccountManager {
 
     await this.configManager.update({ accounts: updatedAccounts });
 
+    this.logger?.success('账户更新成功', {
+      账户ID: id,
+      用户名: updatedAccount.username,
+    });
+
     return updatedAccount;
   }
 
@@ -127,20 +170,26 @@ export class AccountManager {
    * 删除账户
    */
   async removeAccount(id: string): Promise<void> {
+    this.logger?.info('删除账户', { 账户ID: id });
+
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('删除账户失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
+    const accountToRemove = config.accounts.find((a) => a.id === id);
     const updatedAccounts = config.accounts.filter((a) => a.id !== id);
 
     if (updatedAccounts.length === config.accounts.length) {
+      this.logger?.error('删除账户失败：账户不存在', { 账户ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
     }
 
     // 如果删除的是当前账户，切换到第一个账户
     let currentAccountId = config.currentAccountId;
-    if (currentAccountId === id) {
+    const isCurrentAccount = currentAccountId === id;
+    if (isCurrentAccount) {
       currentAccountId = updatedAccounts.length > 0 ? updatedAccounts[0].id : null;
     }
 
@@ -148,23 +197,41 @@ export class AccountManager {
       accounts: updatedAccounts,
       currentAccountId,
     });
+
+    this.logger?.success('账户删除成功', {
+      账户ID: id,
+      用户名: accountToRemove?.username || '未知',
+      是否为当前账户: isCurrentAccount ? '是' : '否',
+      新当前账户: currentAccountId || '无',
+      剩余账户数: updatedAccounts.length,
+    });
   }
 
   /**
    * 切换当前账户
    */
   async switchAccount(id: string): Promise<AccountConfig> {
+    this.logger?.info('切换当前账户', { 目标账户ID: id });
+
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('切换账户失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
     const account = config.accounts.find((a) => a.id === id);
     if (!account) {
+      this.logger?.error('切换账户失败：账户不存在', { 账户ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
     }
 
     await this.configManager.update({ currentAccountId: id });
+
+    this.logger?.success('账户切换成功', {
+      新账户ID: id,
+      用户名: account.username,
+      运营商: account.isp,
+    });
 
     return account;
   }
@@ -187,6 +254,6 @@ export class AccountManager {
 /**
  * 创建账户管理服务实例
  */
-export function createAccountManager(configManager: ConfigManager): AccountManager {
-  return new AccountManager(configManager);
+export function createAccountManager(configManager: ConfigManager, logger?: Logger): AccountManager {
+  return new AccountManager(configManager, logger);
 }

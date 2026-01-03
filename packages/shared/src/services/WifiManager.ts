@@ -6,12 +6,17 @@ import { WifiConfig } from '../types/config';
 import { validateWifiConfig, createDefaultWifiConfig, generateId } from '../utils/validator';
 import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
+import type { Logger } from '../models/Logger';
 
 /**
  * WiFi 配置管理服务类
  */
 export class WifiManager {
-  constructor(private configManager: ConfigManager) {}
+  private logger: Logger | null;
+
+  constructor(private configManager: ConfigManager, logger?: Logger) {
+    this.logger = logger || null;
+  }
 
   /**
    * 获取所有 WiFi 配置
@@ -41,6 +46,12 @@ export class WifiManager {
    * 添加 WiFi 配置
    */
   async addWifi(wifi: Omit<WifiConfig, 'id'> & { id?: string }): Promise<WifiConfig> {
+    this.logger?.info('添加WiFi配置', {
+      SSID: wifi.ssid,
+      优先级: wifi.priority,
+      自动连接: wifi.autoConnect ? '是' : '否',
+    });
+
     const newWifi: WifiConfig = {
       ...createDefaultWifiConfig(),
       ...wifi,
@@ -49,23 +60,36 @@ export class WifiManager {
 
     const validation = validateWifiConfig(newWifi);
     if (!validation.valid) {
+      this.logger?.error('添加WiFi配置失败：验证失败', {
+        错误: validation.errors.join('; '),
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('添加WiFi配置失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
     // 检查是否已存在相同 SSID 的配置
     const exists = config.wifiList.find((w) => w.ssid === newWifi.ssid);
     if (exists) {
+      this.logger?.error('添加WiFi配置失败：该WiFi已存在', {
+        SSID: newWifi.ssid,
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 已存在');
     }
 
     const updatedWifiList = [...config.wifiList, newWifi];
 
     await this.configManager.update({ wifiList: updatedWifiList });
+
+    this.logger?.success('WiFi配置添加成功', {
+      WiFi_ID: newWifi.id,
+      SSID: newWifi.ssid,
+      WiFi总数: updatedWifiList.length,
+    });
 
     return newWifi;
   }
@@ -74,13 +98,20 @@ export class WifiManager {
    * 更新 WiFi 配置
    */
   async updateWifi(id: string, updates: Partial<Omit<WifiConfig, 'id'>>): Promise<WifiConfig> {
+    this.logger?.info('更新WiFi配置', {
+      WiFi_ID: id,
+      更新字段: Object.keys(updates).join(', '),
+    });
+
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('更新WiFi配置失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
     const index = config.wifiList.findIndex((w) => w.id === id);
     if (index === -1) {
+      this.logger?.error('更新WiFi配置失败：配置不存在', { WiFi_ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
     }
 
@@ -92,6 +123,10 @@ export class WifiManager {
 
     const validation = validateWifiConfig(updatedWifi);
     if (!validation.valid) {
+      this.logger?.error('更新WiFi配置失败：验证失败', {
+        WiFi_ID: id,
+        错误: validation.errors.join('; '),
+      });
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
@@ -100,6 +135,11 @@ export class WifiManager {
 
     await this.configManager.update({ wifiList: updatedWifiList });
 
+    this.logger?.success('WiFi配置更新成功', {
+      WiFi_ID: id,
+      SSID: updatedWifi.ssid,
+    });
+
     return updatedWifi;
   }
 
@@ -107,18 +147,29 @@ export class WifiManager {
    * 删除 WiFi 配置
    */
   async removeWifi(id: string): Promise<void> {
+    this.logger?.info('删除WiFi配置', { WiFi_ID: id });
+
     const config = this.configManager.getConfig();
     if (!config) {
+      this.logger?.error('删除WiFi配置失败：配置未加载');
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
     }
 
+    const wifiToRemove = config.wifiList.find((w) => w.id === id);
     const updatedWifiList = config.wifiList.filter((w) => w.id !== id);
 
     if (updatedWifiList.length === config.wifiList.length) {
+      this.logger?.error('删除WiFi配置失败：配置不存在', { WiFi_ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
     }
 
     await this.configManager.update({ wifiList: updatedWifiList });
+
+    this.logger?.success('WiFi配置删除成功', {
+      WiFi_ID: id,
+      SSID: wifiToRemove?.ssid || '未知',
+      剩余WiFi数: updatedWifiList.length,
+    });
   }
 
   /**
@@ -161,6 +212,6 @@ export class WifiManager {
 /**
  * 创建 WiFi 配置管理服务实例
  */
-export function createWifiManager(configManager: ConfigManager): WifiManager {
-  return new WifiManager(configManager);
+export function createWifiManager(configManager: ConfigManager, logger?: Logger): WifiManager {
+  return new WifiManager(configManager, logger);
 }

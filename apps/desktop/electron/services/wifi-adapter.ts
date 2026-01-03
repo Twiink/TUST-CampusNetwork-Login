@@ -218,7 +218,58 @@ export class DesktopWifiAdapter implements WifiAdapter {
       }
 
       // 解析连接速度：Transmit Rate: 960
-      const linkSpeed = parseInt(data['transmit rate'] || '0');
+      let linkSpeed = parseInt(data['transmit rate'] || '0');
+
+      // 如果连接速度为 0，可能是刚连接还没初始化，等待后重试一次
+      if (linkSpeed === 0 && data['mcs index']) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        try {
+          const { stdout: retryStdout } = await execAsync(
+            'system_profiler SPAirPortDataType 2>/dev/null',
+            { timeout: 5000 }
+          );
+
+          const retryLines = retryStdout.split('\n');
+          const retryData: Record<string, string> = {};
+          let inRetryCurrentNetwork = false;
+          let retryFoundSsid = false;
+
+          for (let i = 0; i < retryLines.length; i++) {
+            const line = retryLines[i];
+            if (line.includes('Current Network Information:')) {
+              inRetryCurrentNetwork = true;
+              if (i + 1 < retryLines.length) {
+                const nextLine = retryLines[i + 1].trim();
+                const ssidMatch = nextLine.match(/^([^:]+):$/);
+                if (ssidMatch && ssidMatch[1].trim() === ssid) {
+                  retryFoundSsid = true;
+                }
+              }
+              continue;
+            }
+
+            if (inRetryCurrentNetwork && retryFoundSsid) {
+              if (line.includes('Other Local Wi-Fi Networks') || line.includes('Interfaces:')) {
+                break;
+              }
+              const match = line.match(/^\s+([^:]+):\s*(.+)$/);
+              if (match) {
+                const key = match[1].trim().toLowerCase();
+                const value = match[2].trim();
+                retryData[key] = value;
+              }
+            }
+          }
+
+          const retryLinkSpeed = parseInt(retryData['transmit rate'] || '0');
+          if (retryLinkSpeed > 0) {
+            linkSpeed = retryLinkSpeed;
+          }
+        } catch {
+          // 重试失败，使用原值
+        }
+      }
 
       // 解析信道：Channel: 36 (5GHz, 80MHz)
       let channel = 0;
