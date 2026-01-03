@@ -19,7 +19,6 @@ import {
   Zap,
   Activity,
   Network,
-  Shield,
   RefreshCw,
   Globe2,
   MonitorSmartphone,
@@ -641,7 +640,7 @@ export const Home: React.FC = () => {
           <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>该 WiFi 未配置</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-            当前连接的 WiFi "{wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。
+            当前连接的 WiFi &quot;{wifiSSID}&quot; 尚未配置，请前往&quot;配置设置&quot;添加此 WiFi 的配置。
           </p>
           <div
             style={{
@@ -654,7 +653,7 @@ export const Home: React.FC = () => {
           >
             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
               <Settings size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-              点击左侧菜单的"配置设置"添加 WiFi 配置
+              点击左侧菜单的&quot;配置设置&quot;添加 WiFi 配置
             </p>
           </div>
         </div>
@@ -697,7 +696,7 @@ export const Home: React.FC = () => {
             }}
           >
             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              此 WiFi 已配置为"无需认证"（如家庭 WiFi、手机热点等）
+              此 WiFi 已配置为&quot;无需认证&quot;（如家庭 WiFi、手机热点等）
             </p>
           </div>
         </div>
@@ -730,7 +729,7 @@ export const Home: React.FC = () => {
           <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>未配置账户</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-            该 WiFi 需要校园网认证，但尚未关联账户。请前往"配置设置"添加账户并关联到此 WiFi。
+            该 WiFi 需要校园网认证，但尚未关联账户。请前往&quot;配置设置&quot;添加账户并关联到此 WiFi。
           </p>
           <div
             style={{
@@ -743,7 +742,7 @@ export const Home: React.FC = () => {
           >
             <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
               <Settings size={14} style={{ marginRight: 6, verticalAlign: 'middle' }} />
-              点击左侧菜单的"配置设置"添加账户并关联
+              点击左侧菜单的&quot;配置设置&quot;添加账户并关联
             </p>
           </div>
         </div>

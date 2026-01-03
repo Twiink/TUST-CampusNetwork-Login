@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createRetryPolicy, type RetryPolicyConfig } from '@repo/shared';
+import { createRetryPolicy } from '@repo/shared';
 
 export interface UseAutoReconnectOptions {
   /** 是否启用自动重连 */

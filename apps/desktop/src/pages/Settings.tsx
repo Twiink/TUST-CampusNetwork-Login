@@ -476,7 +476,7 @@ export const Settings: React.FC = () => {
                   <p style={{ margin: 0 }}>暂无 WiFi 配置</p>
                 </div>
               ) : (
-                config.wifiList.map((wifi, index) => {
+                config.wifiList.map((wifi) => {
                   const linkedAccount = getLinkedAccount(wifi.linkedAccountId);
                   return (
                     <div

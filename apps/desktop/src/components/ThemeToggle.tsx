@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface ThemeToggleProps {
@@ -136,6 +137,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, on
         });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isClicked, isDark]
   );
 

@@ -6,6 +6,62 @@
 
 ---
 
+## [未发布] - 2026-01-03
+
+### 优化
+
+#### 网络延迟测试策略重构
+- 简化延迟测试逻辑，移除复杂的 WiFi 配置感知机制
+- 采用简单可靠的 Baidu → Speedtest.cn 降级策略
+- 移除了所有方法中的 `requiresAuth` 参数传递，提升代码可维护性
+- 更新了技术文档 `docs/desktop-wifi-detection.md`，说明当前实现和未来规划
+  - v1.0: 百度 + 测速网双重保障
+  - v2.0: 计划支持多服务商和用户自定义测速目标
+
+#### 代码质量提升
+- **ESLint 完全通过**：修复所有包的 124 个 ESLint 问题（20 错误 + 104 警告）
+  - `shared` 包: 0 错误, 0 警告 ✅
+  - `desktop` 包: 0 错误, 0 警告 ✅
+  - `mobile` 包: 0 错误, 0 警告 ✅（从 124 个问题降至 0）
+
+#### TypeScript 类型系统优化
+- 修复 React 类型版本冲突问题（monorepo 多版本类型定义冲突）
+- 升级 desktop 包 React 到 18.3.1 版本
+- 配置 `tsconfig.json` paths 强制使用本地类型定义
+- 修复 `wifi-adapter.ts` GBK 编码类型断言
+- 修复 `useNetwork.ts` 初始状态缺失 `wifiConnected` 属性
+
+### 技术细节
+
+#### ESLint 修复分类
+1. **未使用的导入/变量** (17 处)
+   - 移除: `mergeConfig`, `Appearance`, `Platform`, `Easing`, `GlassCard`, `NetworkStatus`, `RetryPolicyConfig`, `useColorScheme`, `withSpring` 等
+   - 未使用参数添加下划线前缀: `_ssid`, `_password`
+
+2. **React Hooks 警告** (5 处)
+   - 为有意省略的依赖项添加 `eslint-disable-next-line react-hooks/exhaustive-deps`
+
+3. **parseInt 缺少 radix** (3 处)
+   - 统一使用 `parseInt(text, 10)`
+
+4. **位运算符警告** (6 处)
+   - 为颜色插值的必要位运算添加 `eslint-disable-next-line no-bitwise`
+
+5. **React Native 内联样式** (97 处)
+   - 为需要动态主题的文件添加文件级禁用注释
+   - 说明原因：动态主题必须使用内联样式
+
+#### 代码重构
+- 重构 `HomeScreen.tsx` 的 `isDarkMode()` 函数（移除非法 Hook 调用）
+- 重构 `getSignalIcon()` 和 `getLinkSpeedStatus()` 接收 `dark` 参数
+- 更新 `WifiInfoCard` 组件直接使用 `useTheme()` Hook
+
+### 文档更新
+- ✅ `docs/desktop-wifi-detection.md` - 新增"问题 4：网络延迟测试策略"章节
+- ✅ `CHANGELOG.md` - 本次更新日志
+
+---
+
 ## [v1.0.0-beta] - 2026-01-01
 
 > **状态**: 开发完成，待测试

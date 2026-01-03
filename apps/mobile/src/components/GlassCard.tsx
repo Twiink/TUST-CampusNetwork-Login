@@ -5,7 +5,6 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  Easing,
   interpolate,
 } from 'react-native-reanimated';
 import { GlassView } from './GlassView';

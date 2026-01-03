@@ -85,7 +85,7 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}): UseHeartbeatRes
 
       prevStatusRef.current = newStatus;
       return newStatus;
-    } catch (error) {
+    } catch {
       const errorStatus = { connected: false, authenticated: false };
       setStatus(errorStatus);
 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { TouchableOpacity, StyleSheet, View, Dimensions } from 'react-native';
+import { TouchableOpacity, StyleSheet, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,7 +13,6 @@ import Svg, { Circle, Ellipse, G, Path, Defs, RadialGradient, Stop } from 'react
 import { useTheme } from '../context/ThemeContext';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
-const AnimatedG = Animated.createAnimatedComponent(G);
 
 export const AdvancedThemeToggle: React.FC = () => {
   const { themeMode, toggleTheme } = useTheme();
@@ -36,6 +35,7 @@ export const AdvancedThemeToggle: React.FC = () => {
     starsTranslateY.value = withSpring(isDark ? 0 : -20, { damping: 15 });
     cloudsOpacity.value = withTiming(isDark ? 0 : 1, { duration: 500 });
     cloudsTranslateY.value = withSpring(isDark ? 20 : 0, { damping: 15 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDark]);
 
   const handleToggle = () => {
@@ -48,8 +48,11 @@ export const AdvancedThemeToggle: React.FC = () => {
 
   const containerAnimatedStyle = useAnimatedStyle(() => {
     const backgroundColor = interpolate(progress.value, [0, 1], [0x4685c0, 0x1a1e32]);
+    // eslint-disable-next-line no-bitwise
     const r = Math.floor((backgroundColor >> 16) & 255);
+    // eslint-disable-next-line no-bitwise
     const g = Math.floor((backgroundColor >> 8) & 255);
+    // eslint-disable-next-line no-bitwise
     const b = Math.floor(backgroundColor & 255);
     return {
       backgroundColor: `rgb(${r}, ${g}, ${b})`,

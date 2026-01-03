@@ -110,6 +110,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
             style={[
               styles.tabText,
               { color: theme.colors.textSecondary },
+              // eslint-disable-next-line react-native/no-inline-styles
               activeTab === 'home' && { color: theme.colors.primary, fontWeight: '800' },
             ]}
           >
@@ -133,6 +134,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
             style={[
               styles.tabText,
               { color: theme.colors.textSecondary },
+              // eslint-disable-next-line react-native/no-inline-styles
               activeTab === 'settings' && { color: theme.colors.primary, fontWeight: '800' },
             ]}
           >
@@ -156,6 +158,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
             style={[
               styles.tabText,
               { color: theme.colors.textSecondary },
+              // eslint-disable-next-line react-native/no-inline-styles
               activeTab === 'logs' && { color: theme.colors.primary, fontWeight: '800' },
             ]}
           >

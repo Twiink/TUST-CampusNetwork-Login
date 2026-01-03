@@ -131,7 +131,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
   /**
    * 连接到指定 WiFi（暂不实现）
    */
-  async connect(ssid: string, password: string): Promise<boolean> {
+  async connect(_ssid: string, _password: string): Promise<boolean> {
     console.warn('WiFi connection not implemented on desktop');
     return false;
   }
@@ -214,7 +214,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
   private async getWindowsWifiInfo(): Promise<WifiInfo | null> {
     try {
       // 使用 chcp 65001 切换到 UTF-8 编码，避免中文乱码
-      const { stdout, stderr } = await execAsync('chcp 65001 >nul && netsh wlan show interfaces', {
+      const { stdout } = await execAsync('chcp 65001 >nul && netsh wlan show interfaces', {
         encoding: 'buffer',  // 先获取原始 buffer
       });
 
@@ -243,13 +243,14 @@ export class DesktopWifiAdapter implements WifiAdapter {
 
       // 如果 SSID 是乱码，尝试使用不带 chcp 的命令重新获取
       let finalSsid = ssid;
+      // eslint-disable-next-line no-control-regex
       if (!ssid || ssid.includes('�') || /[\x00-\x1F\x7F]/.test(ssid)) {
         try {
           // 使用 GBK 编码重新获取 SSID
           const { stdout: rawOutput } = await execAsync('netsh wlan show interfaces', {
             encoding: 'buffer',
           });
-          const gbkOutput = rawOutput.toString('gbk');
+          const gbkOutput = rawOutput.toString('gbk' as BufferEncoding);
           const ssidMatch = gbkOutput.match(/^\s*SSID\s*:\s*(.+)$/m);
           if (ssidMatch && ssidMatch[1]) {
             finalSsid = ssidMatch[1].trim();

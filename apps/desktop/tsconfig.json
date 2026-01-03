@@ -14,6 +14,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* 强制使用当前包的 React 类型 */
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

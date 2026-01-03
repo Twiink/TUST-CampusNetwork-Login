@@ -1,7 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Platform } from 'react-native';
+import { View, StyleSheet, ViewStyle } from 'react-native';
 import { BlurView } from '@react-native-community/blur';
 import { useTheme } from '../context/ThemeContext';
+
+/* eslint-disable react-native/no-inline-styles */
+// Inline styles necessary for dynamic theme-based colors
 
 interface GlassViewProps {
   style?: ViewStyle;

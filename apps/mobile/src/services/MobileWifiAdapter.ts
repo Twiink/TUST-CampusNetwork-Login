@@ -138,7 +138,7 @@ export class MobileWifiAdapter implements WifiAdapter {
   /**
    * 连接到指定 WiFi（暂不实现）
    */
-  async connect(ssid: string, password: string): Promise<boolean> {
+  async connect(_ssid: string, _password: string): Promise<boolean> {
     console.warn('WiFi connection not implemented on mobile');
     return false;
   }

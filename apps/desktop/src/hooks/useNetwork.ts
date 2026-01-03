@@ -10,6 +10,7 @@ export function useNetwork() {
   const [status, setStatus] = useState<NetworkStatus>({
     connected: false,
     authenticated: false,
+    wifiConnected: false,
   });
   const [info, setInfo] = useState<NetworkInfo>({
     ipv4: null,

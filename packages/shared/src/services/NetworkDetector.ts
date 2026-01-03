@@ -23,11 +23,6 @@ const CONNECTIVITY_CHECK_URLS = [
 ];
 
 /**
- * 校园网认证检测 URL
- */
-const AUTH_CHECK_URL = 'http://10.10.102.50:801/eportal/portal/page/checkstatus';
-
-/**
  * 默认 Ping 目标（使用百度）
  */
 const DEFAULT_PING_TARGET = 'https://www.baidu.com';
@@ -78,19 +73,8 @@ export class NetworkDetector {
    */
   async isAuthenticated(): Promise<boolean> {
     try {
-      // 方法1: 检查是否能访问互联网
+      // 检查是否能访问互联网
       const hasInternet = await this.checkConnectivity();
-      if (hasInternet) {
-        return true;
-      }
-
-      // 方法2: 检查认证服务器状态
-      // 如果能访问认证服务器但无法访问互联网，说明未认证
-      const canReachAuthServer = await isUrlReachable(AUTH_CHECK_URL, 3000);
-
-      // 如果能访问互联网，说明已认证
-      // 如果不能访问互联网但能访问认证服务器，说明未认证
-      // 如果都不能访问，可能是网络断开
       return hasInternet;
     } catch {
       return false;
@@ -151,7 +135,7 @@ export class NetworkDetector {
         source,
         timestamp: Date.now(),
       };
-    } catch (error) {
+    } catch {
       return {
         value: 9999,
         status: 'timeout',

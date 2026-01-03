@@ -86,7 +86,7 @@ export function startNetworkPolling(
   enableHeartbeat: boolean = false
 ) {
   // 定义状态处理回调
-  const statusCallback = async (status: any) => {
+  const statusCallback = async (status: NetworkStatus) => {
     // 广播给所有窗口
     BrowserWindow.getAllWindows().forEach((win) => {
       win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);

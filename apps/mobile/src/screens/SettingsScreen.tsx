@@ -13,6 +13,9 @@ import { useTheme } from '../context/ThemeContext';
 import { GlassView } from '../components/GlassView';
 import { AccountConfig, WifiConfig, ISP } from '@repo/shared';
 
+/* eslint-disable react-native/no-inline-styles */
+// Inline styles are necessary in this file for dynamic theming based on theme context
+
 const ISP_OPTIONS: { value: ISP; label: string }[] = [
   { value: 'campus', label: '校园网' },
   { value: 'cmcc', label: '中国移动' },
@@ -239,7 +242,7 @@ export const SettingsScreen: React.FC = () => {
                   ]}
                   value={String(config.settings.pollingInterval)}
                   onChangeText={text => {
-                    const value = parseInt(text) || 5;
+                    const value = parseInt(text, 10) || 5;
                     if (value >= 5 && value <= 300) {
                       toggleSetting('pollingInterval', value);
                     }
@@ -274,7 +277,7 @@ export const SettingsScreen: React.FC = () => {
                   ]}
                   value={String(config.settings.maxRetries)}
                   onChangeText={text => {
-                    const value = parseInt(text) || 0;
+                    const value = parseInt(text, 10) || 0;
                     if (value >= 0 && value <= 10) {
                       toggleSetting('maxRetries', value);
                     }
@@ -491,7 +494,7 @@ export const SettingsScreen: React.FC = () => {
                 <Text style={{ color: theme.colors.textSecondary }}>暂无 WiFi 配置</Text>
               </View>
             ) : (
-              config.wifiList.map((wifi, index) => {
+              config.wifiList.map((wifi) => {
                 const linkedAccount = config.accounts.find(a => a.id === wifi.linkedAccountId);
                 return (
                   <View
@@ -712,7 +715,7 @@ export const SettingsScreen: React.FC = () => {
               keyboardType="number-pad"
               value={String(newWifi.priority || 10)}
               onChangeText={text => {
-                const value = parseInt(text) || 10;
+                const value = parseInt(text, 10) || 10;
                 setNewWifi({ ...newWifi, priority: Math.min(99, Math.max(1, value)) });
               }}
             />

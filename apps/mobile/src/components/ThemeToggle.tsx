@@ -13,7 +13,7 @@ import { useTheme } from '../context/ThemeContext';
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 export const ThemeToggle: React.FC = () => {
-  const { themeMode, toggleTheme, theme } = useTheme();
+  const { themeMode, toggleTheme } = useTheme();
   const isDark = themeMode === 'dark';
 
   // Animation values

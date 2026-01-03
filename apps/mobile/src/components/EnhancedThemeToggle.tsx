@@ -4,12 +4,14 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSpring,
   Easing,
   withRepeat,
   withSequence,
 } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
+
+/* eslint-disable react-native/no-inline-styles */
+// Inline styles necessary for dynamic star sizing
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -60,6 +62,7 @@ export const EnhancedThemeToggle: React.FC = () => {
       -1,
       true
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDark]);
 
   const containerStyle = useAnimatedStyle(() => ({

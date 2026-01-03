@@ -4,6 +4,9 @@ import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { GlassView } from '../components/GlassView';
 
+/* eslint-disable react-native/no-inline-styles */
+// Inline styles necessary for dynamic theme-based colors
+
 type LogLevel = 'all' | 'info' | 'success' | 'warn' | 'error' | 'debug';
 
 const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string; emoji: string }[] = [

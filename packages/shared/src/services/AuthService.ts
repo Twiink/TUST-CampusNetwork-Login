@@ -110,7 +110,7 @@ export class AuthService {
         code: data.result,
         rawResponse: response,
       };
-    } catch (error) {
+    } catch {
       return {
         success: false,
         message: '解析响应失败',

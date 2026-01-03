@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,20 +10,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
-import { GlassCard } from '../components/GlassCard';
 import { GlassView } from '../components/GlassView';
-import type { NetworkStatus } from '@repo/shared';
 import * as WifiModule from '../native/WifiModule';
 
-// 检测是否为深色模式
-const isDarkMode = () => {
-  const colorScheme = useColorScheme();
-  return colorScheme === 'dark';
-};
+/* eslint-disable react-native/no-inline-styles */
+// Inline styles are necessary in this file for dynamic theming based on theme context
 
 // WiFi 信号强度图标和颜色（支持深色模式）
-const getSignalIcon = (strength: number) => {
-  const dark = isDarkMode();
+const getSignalIcon = (strength: number, dark: boolean) => {
   if (strength >= 75)
     return {
       emoji: '📶',
@@ -49,19 +43,8 @@ const getSignalIcon = (strength: number) => {
   };
 };
 
-// 延迟等级和颜色（支持深色模式）
-const getLatencyStatus = (latency: number) => {
-  const dark = isDarkMode();
-  if (latency < 50) return { color: dark ? '#34d399' : '#22c55e', text: '优秀' };
-  if (latency < 100) return { color: dark ? '#60a5fa' : '#3b82f6', text: '良好' };
-  if (latency < 200) return { color: dark ? '#fbbf24' : '#f59e0b', text: '一般' };
-  if (latency < 500) return { color: dark ? '#fb923c' : '#f97316', text: '较差' };
-  return { color: dark ? '#f87171' : '#ef4444', text: '很差' };
-};
-
 // 连接速度等级和颜色（支持深色模式）
-const getLinkSpeedStatus = (speed: number) => {
-  const dark = isDarkMode();
+const getLinkSpeedStatus = (speed: number, dark: boolean) => {
   if (speed >= 500) return { color: dark ? '#34d399' : '#22c55e', text: '优秀' };
   if (speed >= 200) return { color: dark ? '#60a5fa' : '#3b82f6', text: '良好' };
   if (speed >= 100) return { color: dark ? '#fbbf24' : '#f59e0b', text: '一般' };
@@ -76,12 +59,15 @@ const WifiInfoCard: React.FC<{
   onRefresh: () => void;
   refreshing: boolean;
 }> = ({ wifiInfo, theme, onRefresh, refreshing }) => {
+  const { themeMode } = useTheme();
+  const isDark = themeMode === 'dark';
+
   const signalStrength = wifiInfo?.signalStrength || 0;
   const linkSpeed = wifiInfo?.linkSpeed || 0;
   const frequency = wifiInfo?.frequency || 0;
 
-  const signal = getSignalIcon(signalStrength);
-  const linkSpeedStatus = getLinkSpeedStatus(linkSpeed);
+  const signal = getSignalIcon(signalStrength, isDark);
+  const linkSpeedStatus = getLinkSpeedStatus(linkSpeed, isDark);
 
   return (
     <View
@@ -402,6 +388,7 @@ export const HomeScreen: React.FC = () => {
       pulseScale.value = withTiming(1, { duration: 300 });
       pulseOpacity.value = withTiming(1, { duration: 300 });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [networkStatus]);
 
   const animatedBadgeStyle = useAnimatedStyle(() => ({

@@ -77,6 +77,7 @@ export const AppBackground: React.FC = () => {
       -1,
       true
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const animatedStyle1 = useAnimatedStyle(() => ({
@@ -122,6 +123,7 @@ export const AppBackground: React.FC = () => {
       <AnimatedView
         style={[
           styles.blob,
+          // eslint-disable-next-line react-native/no-inline-styles
           { top: -100, left: -100, width: width * 0.8, height: width * 0.8 },
           animatedStyle1,
         ]}
@@ -134,6 +136,7 @@ export const AppBackground: React.FC = () => {
       <AnimatedView
         style={[
           styles.blob,
+          // eslint-disable-next-line react-native/no-inline-styles
           { bottom: -50, right: -50, width: width * 0.9, height: width * 0.9 },
           animatedStyle2,
         ]}
