@@ -146,18 +146,16 @@ async function scanLinux(): Promise<AvailableNetwork[]> {
  * 连接到指定 WiFi 网络
  * @param ssid WiFi SSID
  * @param password WiFi 密码（可选，如果未提供则尝试连接已保存的网络）
- * @param fallbackPassword 备用密码（仅Windows，当主密码失败时尝试）
  */
 export async function connectToNetwork(
   ssid: string,
-  password?: string,
-  fallbackPassword?: string
+  password?: string
 ): Promise<boolean> {
   switch (process.platform) {
     case 'darwin':
       return await connectMacOS(ssid, password);
     case 'win32':
-      return await connectWindows(ssid, password, fallbackPassword);
+      return await connectWindows(ssid, password);
     case 'linux':
       return await connectLinux(ssid, password);
     default:
@@ -188,15 +186,7 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    // 终端输出详细错误
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[WiFi-Connect-macOS] Connection failed:`, {
-      ssid,
-      hasPassword: !!password,
-      errorMessage,
-      errorStack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString(),
-    });
     throw new Error(`连接失败: ${errorMessage}`);
   }
 }
@@ -205,210 +195,44 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
  * Windows: 连接到 WiFi
  * @param ssid WiFi SSID
  * @param password WiFi密码
- * @param fallbackPassword 备用密码（当主密码失败时尝试）
  */
 async function connectWindows(
   ssid: string,
-  password?: string,
-  fallbackPassword?: string
+  password?: string
 ): Promise<boolean> {
-  // 首先尝试使用提供的密码
-  try {
-    return await connectWindowsInternal(ssid, password);
-  } catch (error) {
-    // 调试：打印错误对象的所有属性
-    console.log(`[WiFi-Connect-Windows] Caught error, checking for password failure...`);
-    console.log(`[WiFi-Connect-Windows] Error type:`, error instanceof Error);
-    console.log(`[WiFi-Connect-Windows] Error message:`, error instanceof Error ? error.message : String(error));
-
-    // 检查是否是密码错误 - 通过错误消息判断
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const isPasswordError =
-      errorMessage.includes('指定的网络无法用于连接') ||
-      errorMessage.includes('WiFi配置文件错误') ||
-      errorMessage.includes('network profile');
-
-    console.log(`[WiFi-Connect-Windows] Is password error:`, isPasswordError);
-    console.log(`[WiFi-Connect-Windows] Has fallback password:`, !!fallbackPassword);
-    console.log(`[WiFi-Connect-Windows] Passwords different:`, fallbackPassword !== password);
-
-    // 如果是密码错误且提供了备用密码，尝试使用备用密码
-    if (isPasswordError && fallbackPassword && fallbackPassword !== password) {
-      console.log(
-        `[WiFi-Connect-Windows] Primary password failed, trying fallback password: ${fallbackPassword}`
-      );
-
-      try {
-        const result = await connectWindowsInternal(ssid, fallbackPassword);
-        console.log(
-          `[WiFi-Connect-Windows] ✅ SUCCESS with fallback password! Please update your WiFi config with password: ${fallbackPassword}`
-        );
-        return result;
-      } catch (fallbackError) {
-        console.error(
-          `[WiFi-Connect-Windows] Fallback password also failed. Both passwords are incorrect.`
-        );
-        throw fallbackError;
-      }
-    }
-
-    // 如果不是密码错误或没有备用密码，直接抛出原始错误
-    throw error;
-  }
+  return await connectWindowsInternal(ssid, password);
 }
 
 /**
  * Windows: 连接到 WiFi 的内部实现
+ * 仅使用Windows已保存的WiFi配置文件
  */
-async function connectWindowsInternal(ssid: string, password?: string): Promise<boolean> {
+async function connectWindowsInternal(ssid: string, _password?: string): Promise<boolean> {
   try {
-    // 先检查网络是否可用
-    console.log(`[WiFi-Connect-Windows] Checking network availability: ${ssid}`);
-    const networksResult = await execAsync('netsh wlan show networks', {
-      timeout: 5000,
-    });
-    const isAvailable = networksResult.stdout.includes(ssid);
-    console.log(`[WiFi-Connect-Windows] Network "${ssid}" available:`, isAvailable);
-
-    if (!isAvailable) {
-      throw new Error(`网络 "${ssid}" 不在可用范围内`);
-    }
-
     // 检查是否已有保存的配置文件
-    console.log(`[WiFi-Connect-Windows] Checking for existing profile: ${ssid}`);
     let hasProfile = false;
     try {
       const profileResult = await execAsync(`netsh wlan show profile name="${ssid}"`, {
         timeout: 3000,
       });
       hasProfile = profileResult.stdout.includes(ssid);
-      console.log(`[WiFi-Connect-Windows] Existing profile found:`, hasProfile);
     } catch {
       hasProfile = false;
-      console.log(`[WiFi-Connect-Windows] No existing profile found`);
     }
 
-    // 如果没有配置文件且提供了密码，创建新配置
-    if (!hasProfile && password) {
-      console.log(`[WiFi-Connect-Windows] Creating new profile with password`);
-      // 创建 WPA2-PSK 配置文件 XML
-      const profileXml = `<?xml version="1.0"?>
-<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
-  <name>${ssid}</name>
-  <SSIDConfig>
-    <SSID>
-      <name>${ssid}</name>
-    </SSID>
-  </SSIDConfig>
-  <connectionType>ESS</connectionType>
-  <connectionMode>auto</connectionMode>
-  <MSM>
-    <security>
-      <authEncryption>
-        <authentication>WPA2PSK</authentication>
-        <encryption>AES</encryption>
-        <useOneX>false</useOneX>
-      </authEncryption>
-      <sharedKey>
-        <keyType>passPhrase</keyType>
-        <protected>false</protected>
-        <keyMaterial>${password}</keyMaterial>
-      </sharedKey>
-    </security>
-  </MSM>
-</WLANProfile>`;
-
-      // 写入临时文件
-      const fs = await import('node:fs/promises');
-      const os = await import('node:os');
-      const path = await import('node:path');
-      const tmpFile = path.join(os.tmpdir(), `wifi_${Date.now()}.xml`);
-
-      try {
-        await fs.writeFile(tmpFile, profileXml, 'utf8');
-
-        // 添加配置文件
-        console.log(`[WiFi-Connect-Windows] Adding WiFi profile: ${ssid}`);
-        const addResult = await execAsync(`netsh wlan add profile filename="${tmpFile}"`, {
-          timeout: 10000,
-        });
-        console.log(`[WiFi-Connect-Windows] Profile add result:`, addResult.stdout || '(empty)');
-
-        // 删除临时文件
-        await fs.unlink(tmpFile).catch(() => {});
-      } catch (error) {
-        // 清理临时文件
-        await fs.unlink(tmpFile).catch(() => {});
-        throw error;
-      }
-    } else {
-      // 如果已有配置文件，直接使用（不管密码是什么）
-      // 这样可以利用Windows原生保存的WPA3等高级配置
-      console.log(`[WiFi-Connect-Windows] Using existing profile to connect (preserving WPA3/advanced settings)`);
+    // 只使用已保存的配置文件连接
+    if (hasProfile) {
+      await execAsync(`netsh wlan connect name="${ssid}"`, {
+        timeout: 30000,
+      });
+      return true;
     }
 
-    // 连接到网络
-    console.log(`[WiFi-Connect-Windows] Connecting to: ${ssid}`);
-    const connectResult = await execAsync(`netsh wlan connect name="${ssid}"`, {
-      timeout: 30000,
-    });
-    console.log(`[WiFi-Connect-Windows] Connect command stdout:`, connectResult.stdout || '(empty)');
-    console.log(`[WiFi-Connect-Windows] Connect command stderr:`, connectResult.stderr || '(none)');
-
-    return true;
+    // 没有配置文件，抛出错误提示用户手动连接
+    throw new Error(`未找到WiFi配置文件。请先在Windows系统中手动连接一次WiFi "${ssid}"，之后应用可自动重连`);
   } catch (error) {
-    // 终端输出详细错误
     const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // 提取exec错误的详细信息
-    interface ExecError extends Error {
-      code?: string | number;
-      signal?: string;
-      stdout?: Buffer | string;
-      stderr?: Buffer | string;
-    }
-    const execError = error as ExecError;
-    const errorCode = execError.code;
-    const errorSignal = execError.signal;
-    const stdout = execError.stdout ? execError.stdout.toString('utf8') : '';
-    const stderr = execError.stderr ? execError.stderr.toString('utf8') : '';
-
-    console.error(`[WiFi-Connect-Windows] Connection failed:`, {
-      ssid,
-      hasPassword: !!password,
-      errorMessage,
-      errorCode,
-      errorSignal,
-      stdout,
-      stderr,
-      errorStack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString(),
-    });
-
-    // 创建自定义错误对象，保留 stdout 用于外层检测
-    interface CustomError extends Error {
-      stdout?: string;
-      stderr?: string;
-      code?: string | number;
-    }
-
-    // 检查是否是密码错误
-    if (stdout.includes('指定的网络无法用于连接') || stdout.includes('network profile')) {
-      const customError: CustomError = new Error(
-        `连接失败: WiFi配置文件错误，请检查密码是否正确 (详情: ${stdout.trim()})`
-      );
-      customError.stdout = stdout; // 保留 stdout 供外层使用
-      customError.code = errorCode;
-      throw customError;
-    }
-
-    const customError: CustomError = new Error(
-      `连接失败: ${errorMessage}${stderr ? ` (stderr: ${stderr.trim()})` : ''}`
-    );
-    customError.stdout = stdout;
-    customError.stderr = stderr;
-    customError.code = errorCode;
-    throw customError;
+    throw new Error(errorMessage);
   }
 }
 
@@ -430,15 +254,7 @@ async function connectLinux(ssid: string, password?: string): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    // 终端输出详细错误
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`[WiFi-Connect-Linux] Connection failed:`, {
-      ssid,
-      hasPassword: !!password,
-      errorMessage,
-      errorStack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString(),
-    });
     throw new Error(`连接失败: ${errorMessage}`);
   }
 }
@@ -522,18 +338,10 @@ export class WifiSwitcherService {
   async connectToConfiguredNetwork(ssid: string): Promise<boolean> {
     const network = this.configuredNetworks.find((n) => n.ssid === ssid);
     if (!network) {
-      const error = new Error(`未找到WiFi配置: ${ssid}`);
-      console.error(`[WiFi-Switcher] Configuration not found:`, {
-        requestedSSID: ssid,
-        configuredNetworks: this.configuredNetworks.map(n => n.ssid),
-        timestamp: new Date().toISOString(),
-      });
-      throw error;
+      throw new Error(`未找到WiFi配置: ${ssid}`);
     }
 
-    // 使用硬编码的备用密码 "050423zy"
-    const FALLBACK_PASSWORD = '050423zy';
-    return await connectToNetwork(network.ssid, network.password, FALLBACK_PASSWORD);
+    return await connectToNetwork(network.ssid, network.password);
   }
 }
 

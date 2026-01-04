@@ -167,11 +167,6 @@ export class WifiEventListener {
 
     this.isReconnecting = true;
     this.logger.info(`===== 开始WiFi自动重连 =====`);
-    console.log(`[WiFi-AutoReconnect] Starting reconnection attempt`, {
-      ssid: disconnectedSsid,
-      requiresAuth: wifiConfig.requiresAuth,
-      timestamp: new Date().toISOString(),
-    });
 
     try {
       // 等待一小段时间，避免立即重连
@@ -183,27 +178,16 @@ export class WifiEventListener {
 
       if (success) {
         this.logger.success(`WiFi自动重连成功: ${disconnectedSsid}`);
-        console.log(`[WiFi-AutoReconnect] Reconnection successful:`, disconnectedSsid);
 
         // 等待WiFi连接稳定后更新网络状态
         await new Promise(resolve => setTimeout(resolve, 3000));
         await this.notifyNetworkStatusChange();
       } else {
         this.logger.warn(`WiFi自动重连失败: ${disconnectedSsid}`);
-        console.error(`[WiFi-AutoReconnect] Reconnection failed (returned false):`, disconnectedSsid);
       }
     } catch (error) {
-      // 终端输出详细错误信息
-      console.error(`[WiFi-AutoReconnect] Reconnection exception:`, {
-        ssid: disconnectedSsid,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        errorType: error instanceof Error ? error.name : 'Unknown',
-        errorStack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-      });
-
-      // 应用内日志保持简洁
-      this.logger.error(`WiFi自动重连失败: ${disconnectedSsid}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`WiFi自动重连失败: ${disconnectedSsid} - ${errorMessage}`);
     } finally {
       this.isReconnecting = false;
       this.logger.info(`===== WiFi自动重连流程结束 =====`);
