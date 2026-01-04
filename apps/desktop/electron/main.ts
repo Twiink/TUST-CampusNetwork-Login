@@ -121,7 +121,8 @@ function createWindow() {
     if (process.platform === 'win32') {
       return path.join(buildDir, 'icon.ico');
     } else if (process.platform === 'darwin') {
-      return path.join(buildDir, 'icon.icns');
+      // macOS 窗口标题栏图标使用小尺寸 PNG（32x32 或 64x64）
+      return path.join(buildDir, 'png', '32x32.png');
     } else {
       return path.join(buildDir, 'icon.png');
     }
@@ -218,6 +219,13 @@ app.on('before-quit', () => {
 
 app.whenReady().then(async () => {
   try {
+    // macOS: 设置 Dock 图标（开发模式下必需）
+    if (process.platform === 'darwin') {
+      const dockIconPath = path.join(process.env.APP_ROOT!, 'build', 'png', '512x512.png');
+      app.dock.setIcon(dockIconPath);
+      console.log('[Main] Dock icon set to:', dockIconPath);
+    }
+
     // 初始化服务
     services = await initServices();
 
