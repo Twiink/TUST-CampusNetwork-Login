@@ -310,17 +310,29 @@ export class WifiEventListener {
         return;
       }
 
+      // 如果WiFi已断开（SSID为null），立即发送断开状态，无需等待网络检测
+      if (this.lastSsid === null) {
+        this.logger.info('WiFi已断开，立即发送断开状态');
+        const disconnectedStatus = {
+          connected: false,
+          authenticated: false,
+          wifiConnected: false,
+          ssid: null,
+        };
+        this.window.webContents.send('event:network:statusChanged', disconnectedStatus);
+        return;
+      }
+
+      // WiFi已连接，获取完整网络状态
       // 立即发送 loading 状态，让 UI 显示加载动画
       this.window.webContents.send('event:network:statusLoading', {
         loading: true,
-        wifiConnected: this.lastSsid !== null,
+        wifiConnected: true,
         ssid: this.lastSsid,
       });
 
-      // 如果是 WiFi 连接变化，等待更长时间让网络接口完全初始化
-      // WiFi 断开时不需要等待太久
-      const delay = this.lastSsid !== null ? 1000 : 200;
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      // 等待网络接口完全初始化
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // 获取完整的网络状态
       this.logger.info('正在获取完整的网络状态信息...');

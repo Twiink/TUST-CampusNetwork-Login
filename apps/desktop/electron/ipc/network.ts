@@ -8,6 +8,11 @@ import { getNetworkInfo, getCurrentWifiSSID, getFullNetworkInfo } from '../servi
 import { AutoReconnectService } from '../services/auto-reconnect';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 
+// 心跳检测倒计时定时器
+let heartbeatCountdownTimer: ReturnType<typeof setInterval> | null = null;
+let heartbeatIntervalMs = 30000;
+let nextHeartbeatTime = 0;
+
 /**
  * 注册网络 IPC 处理器
  */
@@ -107,6 +112,9 @@ export function startNetworkPolling(
     自动重连: autoReconnectService ? '已配置' : '未配置',
   });
 
+  // 保存心跳间隔，用于倒计时
+  heartbeatIntervalMs = intervalMs;
+
   // 定义状态处理回调
   const statusCallback = async (status: NetworkStatus) => {
     // 广播给所有窗口
@@ -119,13 +127,25 @@ export function startNetworkPolling(
     if (autoReconnectService) {
       await autoReconnectService.handleStatusChange(status);
     }
+
+    // 更新下次心跳时间（如果启用了心跳检测）
+    if (enableHeartbeat) {
+      nextHeartbeatTime = Date.now() + intervalMs;
+    }
   };
 
   if (enableHeartbeat) {
     // 启动持续轮询
     logger.info(`启动心跳检测轮询，间隔: ${intervalMs / 1000}秒`);
+
+    // 设置下次心跳时间（首次立即执行）
+    nextHeartbeatTime = Date.now();
+
     networkDetector.startPolling(statusCallback, { interval: intervalMs, immediate: true });
     logger.success('心跳检测轮询已启动');
+
+    // 启动倒计时广播（每秒发送一次）
+    startHeartbeatCountdown(logger);
   } else {
     // 只执行一次检测
     logger.info('心跳检测已禁用，仅执行初始网络状态检测');
@@ -144,6 +164,41 @@ export function startNetworkPolling(
 }
 
 /**
+ * 启动心跳检测倒计时广播
+ */
+function startHeartbeatCountdown(logger: ReturnType<typeof createLogger>) {
+  // 清除旧的定时器
+  if (heartbeatCountdownTimer) {
+    clearInterval(heartbeatCountdownTimer);
+  }
+
+  // 每秒广播一次剩余时间
+  heartbeatCountdownTimer = setInterval(() => {
+    const now = Date.now();
+    const remainingMs = Math.max(0, nextHeartbeatTime - now);
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+
+    // 广播倒计时到所有窗口
+    const windows = BrowserWindow.getAllWindows();
+    windows.forEach((win) => {
+      if (!win.isDestroyed()) {
+        win.webContents.send(IPC_EVENTS.HEARTBEAT_COUNTDOWN, {
+          remainingSeconds,
+          totalSeconds: Math.floor(heartbeatIntervalMs / 1000),
+        });
+      }
+    });
+
+    // 如果倒计时结束，更新下次心跳时间
+    if (remainingMs <= 0) {
+      nextHeartbeatTime = now + heartbeatIntervalMs;
+    }
+  }, 1000);
+
+  logger.info('心跳检测倒计时已启动');
+}
+
+/**
  * 停止网络状态轮询
  */
 export function stopNetworkPolling(
@@ -152,5 +207,13 @@ export function stopNetworkPolling(
 ) {
   logger.info('停止网络监控服务');
   networkDetector.stopPolling();
+
+  // 停止心跳检测倒计时
+  if (heartbeatCountdownTimer) {
+    clearInterval(heartbeatCountdownTimer);
+    heartbeatCountdownTimer = null;
+    logger.info('心跳检测倒计时已停止');
+  }
+
   logger.success('网络状态轮询已停止');
 }

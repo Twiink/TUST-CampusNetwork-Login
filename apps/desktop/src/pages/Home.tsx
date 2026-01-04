@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNetwork } from '../hooks/useNetwork';
+import { useHeartbeat } from '../hooks/useHeartbeat';
 import type { NetworkStatus } from '@repo/shared';
 import {
   Wifi,
@@ -611,6 +612,7 @@ export const Home: React.FC = () => {
   const { networkStatus, ipAddress, login, logout, config } = useApp();
   const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
     useNetwork();
+  const { heartbeat, reconnectProgress } = useHeartbeat();
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -1098,18 +1100,34 @@ export const Home: React.FC = () => {
       {/* 心跳状态 */}
       {config?.settings.enableHeartbeat && (
         <div className="card">
-          <h3 style={{ display: 'flex', alignItems: 'center' }}>
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                backgroundColor: networkStatus === 'connected' ? '#22c55e' : '#ef4444',
-                marginRight: 8,
-                animation: 'pulse 2s infinite',
-              }}
-            />
-            心跳检测
+          <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: networkStatus === 'connected' ? '#22c55e' : '#ef4444',
+                  marginRight: 8,
+                  animation: 'pulse 2s infinite',
+                }}
+              />
+              心跳检测
+            </span>
+            {heartbeat.remainingSeconds > 0 && (
+              <span
+                style={{
+                  fontSize: '0.85rem',
+                  fontWeight: 'normal',
+                  color: 'var(--text-secondary)',
+                  backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                }}
+              >
+                下次检测: {heartbeat.remainingSeconds}s
+              </span>
+            )}
           </h3>
           <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
             <p style={{ margin: '0 0 8px 0' }}>
@@ -1121,6 +1139,62 @@ export const Home: React.FC = () => {
                 {networkStatus === 'connected' ? '正常' : '异常'}
               </span>
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* 重连进度提示 */}
+      {reconnectProgress.status !== 'idle' && (
+        <div
+          className="card"
+          style={{
+            backgroundColor:
+              reconnectProgress.status === 'success'
+                ? 'rgba(34, 197, 94, 0.1)'
+                : reconnectProgress.status === 'failed'
+                  ? 'rgba(239, 68, 68, 0.1)'
+                  : 'rgba(14, 165, 233, 0.1)',
+            borderColor:
+              reconnectProgress.status === 'success'
+                ? '#22c55e'
+                : reconnectProgress.status === 'failed'
+                  ? '#ef4444'
+                  : 'var(--primary-color)',
+            borderWidth: 1,
+            borderStyle: 'solid',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {reconnectProgress.status === 'reconnecting' && (
+              <Loader
+                size={20}
+                color="var(--primary-color)"
+                style={{ animation: 'spin 1s linear infinite' }}
+              />
+            )}
+            {reconnectProgress.status === 'success' && <CheckCircle2 size={20} color="#22c55e" />}
+            {reconnectProgress.status === 'failed' && <XCircle size={20} color="#ef4444" />}
+            <div style={{ flex: 1 }}>
+              <div
+                style={{
+                  fontWeight: 600,
+                  color:
+                    reconnectProgress.status === 'success'
+                      ? '#22c55e'
+                      : reconnectProgress.status === 'failed'
+                        ? '#ef4444'
+                        : 'var(--primary-color)',
+                  marginBottom: 4,
+                }}
+              >
+                {reconnectProgress.message}
+              </div>
+              {reconnectProgress.status === 'reconnecting' && (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  尝试次数: {reconnectProgress.currentAttempt}/{reconnectProgress.maxAttempts}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

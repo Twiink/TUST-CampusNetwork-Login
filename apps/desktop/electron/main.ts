@@ -284,13 +284,35 @@ app.whenReady().then(async () => {
       {
         onReconnectStart: () => {
           trayService?.setStatus('connecting');
+          // 广播重连开始事件
+          win?.webContents.send('event:reconnect:progress', {
+            status: 'reconnecting',
+            currentAttempt: 0,
+            maxAttempts: 3,
+            message: '开始自动重连',
+          });
         },
         onReconnectSuccess: () => {
           trayService?.setStatus('connected');
           notificationService?.showConnected();
+          // 广播重连成功事件
+          win?.webContents.send('event:reconnect:progress', {
+            status: 'success',
+            currentAttempt: 0,
+            maxAttempts: 3,
+            message: '自动重连成功',
+          });
         },
         onReconnectFailed: async () => {
           trayService?.setStatus('disconnected');
+
+          // 广播重连失败事件
+          win?.webContents.send('event:reconnect:progress', {
+            status: 'failed',
+            currentAttempt: 3,
+            maxAttempts: 3,
+            message: '自动重连失败',
+          });
 
           // 尝试切换到下一个可用 WiFi
           if (wifiSwitcherService && services) {
@@ -317,6 +339,13 @@ app.whenReady().then(async () => {
         },
         onReconnectAttempt: (attempt, maxAttempts) => {
           services?.logger.info(`自动重连尝试 ${attempt}/${maxAttempts}`);
+          // 广播重连进度
+          win?.webContents.send('event:reconnect:progress', {
+            status: 'reconnecting',
+            currentAttempt: attempt,
+            maxAttempts: maxAttempts,
+            message: `正在重连 (第 ${attempt}/${maxAttempts} 次)`,
+          });
         },
       }
     );

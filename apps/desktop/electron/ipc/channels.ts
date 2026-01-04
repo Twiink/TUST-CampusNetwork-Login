@@ -75,6 +75,12 @@ export const IPC_CHANNELS = {
 export const IPC_EVENTS = {
   // 网络状态变化
   NETWORK_STATUS_CHANGED: 'event:network:statusChanged',
+  // 网络状态加载中
+  NETWORK_STATUS_LOADING: 'event:network:statusLoading',
+  // 心跳检测倒计时更新
+  HEARTBEAT_COUNTDOWN: 'event:heartbeat:countdown',
+  // 自动重连进度更新
+  RECONNECT_PROGRESS: 'event:reconnect:progress',
   // 日志更新
   LOG_ADDED: 'event:log:added',
   // 认证状态变化

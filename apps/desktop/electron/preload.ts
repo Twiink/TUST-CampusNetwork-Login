@@ -48,6 +48,8 @@ const IPC_CHANNELS = {
 const IPC_EVENTS = {
   NETWORK_STATUS_CHANGED: 'event:network:statusChanged',
   NETWORK_STATUS_LOADING: 'event:network:statusLoading',
+  HEARTBEAT_COUNTDOWN: 'event:heartbeat:countdown',
+  RECONNECT_PROGRESS: 'event:reconnect:progress',
   LOG_ADDED: 'event:log:added',
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
