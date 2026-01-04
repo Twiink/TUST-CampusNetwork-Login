@@ -113,11 +113,28 @@ async function initServices(): Promise<AppServices> {
 }
 
 function createWindow() {
+  // 获取图标路径 - 兼容开发和生产环境
+  const getIconPath = () => {
+    // APP_ROOT 指向 apps/desktop 目录
+    const buildDir = path.join(process.env.APP_ROOT!, 'build');
+
+    if (process.platform === 'win32') {
+      return path.join(buildDir, 'icon.ico');
+    } else if (process.platform === 'darwin') {
+      return path.join(buildDir, 'icon.icns');
+    } else {
+      return path.join(buildDir, 'icon.png');
+    }
+  };
+
+  const iconPath = getIconPath();
+  console.log('[Main] Loading icon from:', iconPath); // 调试日志
+
   win = new BrowserWindow({
     width: 880,
     height: 670,
     resizable: false,
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(MAIN_DIST, 'preload.mjs'),
       contextIsolation: true,
@@ -230,7 +247,8 @@ app.whenReady().then(async () => {
     const settings = services.configManager.getSettings();
 
     // 创建并注册通知服务
-    const iconDir = process.env.VITE_PUBLIC || '';
+    // 使用 build 目录作为图标目录
+    const iconDir = path.join(process.env.APP_ROOT!, 'build');
     notificationService = createNotificationService(iconDir);
     notificationService.setEnabled(settings.showNotification);
     registerNotificationIPC(notificationService, services.logger);
