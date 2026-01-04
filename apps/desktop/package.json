@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "dist": "pnpm run build && electron-builder",
+    "dist:win": "pnpm run build && electron-builder --win",
+    "dist:mac": "pnpm run build && electron-builder --mac",
+    "dist:linux": "pnpm run build && electron-builder --linux",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -16,19 +19,29 @@
   "build": {
     "appId": "com.netmate.app",
     "productName": "NetMate",
+    "electronVersion": "30.0.1",
     "files": [
       "dist/**",
+      "dist-electron/**",
       "package.json"
     ],
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "mac": {
       "target": [
         "dmg"
-      ]
+      ],
+      "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png"
     }
   },
   "dependencies": {
