@@ -19,13 +19,8 @@ export function registerNetworkIPC(
    * 获取网络状态
    */
   ipcMain.handle(IPC_CHANNELS.NETWORK_STATUS, async (): Promise<NetworkStatus> => {
-    logger.debug('IPC请求：获取网络状态');
     try {
       const status = await networkDetector.getNetworkStatus();
-      logger.debug('IPC响应：网络状态获取成功', {
-        连接状态: status.connected ? '已连接' : '未连接',
-        认证状态: status.authenticated ? '已认证' : '未认证',
-      });
       return status;
     } catch (error) {
       logger.error('IPC错误：获取网络状态失败', {
@@ -39,12 +34,7 @@ export function registerNetworkIPC(
    * 获取网络信息 (IP/MAC)
    */
   ipcMain.handle(IPC_CHANNELS.NETWORK_INFO, async () => {
-    logger.debug('IPC请求：获取网络信息');
     const info = getNetworkInfo();
-    logger.debug('IPC响应：网络信息获取成功', {
-      IPv4: info.ipv4 || '无',
-      MAC: info.mac || '无',
-    });
     return info;
   });
 
@@ -52,12 +42,8 @@ export function registerNetworkIPC(
    * 检查网络连通性
    */
   ipcMain.handle(IPC_CHANNELS.NETWORK_CHECK, async (): Promise<boolean> => {
-    logger.debug('IPC请求：检查网络连通性');
     try {
       const connected = await networkDetector.checkConnectivity();
-      logger.debug('IPC响应：网络连通性检查完成', {
-        结果: connected ? '可连接' : '不可连接',
-      });
       return connected;
     } catch (error) {
       logger.error('IPC错误：检查网络连通性失败', {
@@ -71,13 +57,8 @@ export function registerNetworkIPC(
    * 获取当前 WiFi SSID
    */
   ipcMain.handle(IPC_CHANNELS.WIFI_CURRENT_SSID, async () => {
-    logger.debug('IPC请求：获取WiFi SSID');
     try {
       const wifi = await getCurrentWifiSSID();
-      logger.debug('IPC响应：WiFi SSID获取成功', {
-        连接状态: wifi.connected ? '已连接' : '未连接',
-        SSID: wifi.ssid || '无',
-      });
       return wifi;
     } catch (error) {
       logger.error('IPC错误：获取WiFi SSID失败', {
@@ -91,13 +72,8 @@ export function registerNetworkIPC(
    * 获取完整网络信息（包含 WiFi）
    */
   ipcMain.handle(IPC_CHANNELS.WIFI_FULL_INFO, async () => {
-    logger.debug('IPC请求：获取完整网络信息');
     try {
       const fullInfo = await getFullNetworkInfo();
-      logger.debug('IPC响应：完整网络信息获取成功', {
-        IPv4: fullInfo.ipv4 || '无',
-        WiFi_SSID: fullInfo.wifi?.ssid || '无',
-      });
       return fullInfo;
     } catch (error) {
       logger.error('IPC错误：获取完整网络信息失败', {
@@ -133,16 +109,8 @@ export function startNetworkPolling(
 
   // 定义状态处理回调
   const statusCallback = async (status: NetworkStatus) => {
-    logger.debug('心跳检测：网络状态更新', {
-      网络连接: status.connected ? '是' : '否',
-      已认证: status.authenticated ? '是' : '否',
-      WiFi连接: status.wifiConnected ? '是' : '否',
-      WiFi名称: status.ssid || '无',
-    });
-
     // 广播给所有窗口
     const windows = BrowserWindow.getAllWindows();
-    logger.debug(`心跳检测：向 ${windows.length} 个窗口广播网络状态`);
     windows.forEach((win) => {
       win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);
     });

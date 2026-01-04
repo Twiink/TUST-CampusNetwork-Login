@@ -88,6 +88,8 @@ iconutil -c icns icon.iconset
 - [x] icon.ico (Windows) - 353 KB
 - [x] icon.icns (macOS) - 646 KB
 - [x] icon.png (Linux) - 100 KB
+- [x] tray-icon.png (系统托盘) - 1.6 KB
+- [x] tray-icon-disconnected.png (系统托盘-断开) - 1.6 KB
 
 ✅ 所有图标文件已就位，可以正常使用！
 
@@ -95,14 +97,16 @@ iconutil -c icns icon.iconset
 
 ```
 build/
-├── icon.ico          # Windows应用图标（主文件）
-├── icon.icns         # macOS应用图标（主文件）
-├── icon.png          # Linux应用图标（主文件）
-├── win/              # Windows原始文件（备份）
+├── icon.ico                    # Windows应用图标（主文件）
+├── icon.icns                   # macOS应用图标（主文件）
+├── icon.png                    # Linux应用图标（主文件）
+├── tray-icon.png               # 系统托盘图标（连接状态）
+├── tray-icon-disconnected.png  # 系统托盘图标（断开状态）
+├── win/                        # Windows原始文件（备份）
 │   └── icon.ico
-├── mac/              # macOS原始文件（备份）
+├── mac/                        # macOS原始文件（备份）
 │   └── icon.icns
-├── png/              # 多尺寸PNG文件（备份）
+├── png/                        # 多尺寸PNG文件（备份）
 │   ├── 16x16.png
 │   ├── 24x24.png
 │   ├── 32x32.png
@@ -112,7 +116,7 @@ build/
 │   ├── 256x256.png
 │   ├── 512x512.png
 │   └── 1024x1024.png
-└── README.md         # 本文件
+└── README.md                   # 本文件
 ```
 
 ## 使用说明
@@ -133,9 +137,21 @@ pnpm -C apps/desktop dist
 
 ## 更换图标
 
-如果需要更换图标，只需替换 `build/` 根目录下的三个主文件：
-- `icon.ico`
-- `icon.icns`
-- `icon.png`
+如果需要更换图标，只需替换 `build/` 根目录下的文件：
+
+### 主图标
+- `icon.ico` - Windows应用图标
+- `icon.icns` - macOS应用图标
+- `icon.png` - Linux应用图标
+
+### 托盘图标
+- `tray-icon.png` - 系统托盘图标（连接状态）
+- `tray-icon-disconnected.png` - 系统托盘图标（断开状态）
+
+**托盘图标要求：**
+- 推荐尺寸：16x16 或 32x32
+- 格式：Windows优先使用.ico，也支持.png；macOS/Linux使用.png
+- 建议使用简单的单色或双色设计，因为托盘区域很小
+- 可选：创建 `tray-icon.ico` 和 `tray-icon-disconnected.ico`（Windows效果更好）
 
 然后重新运行 `pnpm dev:desktop` 或 `pnpm dist` 即可。

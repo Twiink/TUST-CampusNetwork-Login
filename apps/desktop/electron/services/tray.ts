@@ -76,16 +76,33 @@ export class TrayService {
    * 获取图标
    */
   private getIcon(status: 'connected' | 'disconnected'): Electron.NativeImage {
-    const iconName = status === 'connected' ? 'tray-icon.png' : 'tray-icon-disconnected.png';
-    const iconPath = path.join(this.iconDir, iconName);
+    // 根据平台选择图标文件
+    let iconFiles: string[] = [];
+
+    if (process.platform === 'win32') {
+      // Windows: 优先使用ico，其次png
+      const iconName = status === 'connected' ? 'tray-icon' : 'tray-icon-disconnected';
+      iconFiles = [
+        path.join(this.iconDir, `${iconName}.ico`),
+        path.join(this.iconDir, `${iconName}.png`),
+      ];
+    } else {
+      // macOS/Linux: 使用png
+      const iconName = status === 'connected' ? 'tray-icon.png' : 'tray-icon-disconnected.png';
+      iconFiles = [path.join(this.iconDir, iconName)];
+    }
 
     // 尝试从文件加载
-    if (fs.existsSync(iconPath)) {
-      const icon = nativeImage.createFromPath(iconPath);
-      if (process.platform === 'darwin') {
-        icon.setTemplateImage(true);
+    for (const iconPath of iconFiles) {
+      if (fs.existsSync(iconPath)) {
+        const icon = nativeImage.createFromPath(iconPath);
+        if (!icon.isEmpty()) {
+          if (process.platform === 'darwin') {
+            icon.setTemplateImage(true);
+          }
+          return icon;
+        }
       }
-      return icon;
     }
 
     // 使用内置的 base64 图标

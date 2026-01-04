@@ -8,6 +8,8 @@ dist/
 dist-ssr/
 dist-electron/
 build/
+# 但保留图标资源目录
+!apps/desktop/build/
 out/
 *.tsbuildinfo
 
