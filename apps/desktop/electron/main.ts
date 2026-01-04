@@ -84,12 +84,14 @@ async function initServices(): Promise<AppServices> {
   const configManager = createConfigManager(storage, logger);
   await configManager.load();
   const config = configManager.getConfig();
-  logger.info('配置加载完成', {
-    账户数量: config.accounts.length,
-    WiFi配置数量: config.wifiList.length,
-    心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
-    自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
-  });
+  if (config) {
+    logger.info('配置加载完成', {
+      账户数量: config.accounts.length,
+      WiFi配置数量: config.wifiList.length,
+      心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
+      自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
+    });
+  }
 
   // 创建其他服务
   const authService = createAuthService(undefined, logger);

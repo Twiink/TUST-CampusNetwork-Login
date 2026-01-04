@@ -275,8 +275,8 @@ export class Logger {
 /**
  * 创建日志服务实例
  */
-export function createLogger(maxLogs?: number): Logger {
-  return new Logger(maxLogs);
+export function createLogger(maxLogs?: number, retentionDays?: number): Logger {
+  return new Logger(maxLogs, retentionDays);
 }
 
 /**
