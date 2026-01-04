@@ -12,6 +12,7 @@ import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 let heartbeatCountdownTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatIntervalMs = 30000;
 let nextHeartbeatTime = 0;
+let lastNetworkStatus: NetworkStatus | null = null;
 
 /**
  * 注册网络 IPC 处理器
@@ -117,6 +118,9 @@ export function startNetworkPolling(
 
   // 定义状态处理回调
   const statusCallback = async (status: NetworkStatus) => {
+    // 保存最新的网络状态（用于心跳倒计时）
+    lastNetworkStatus = status;
+
     // 广播给所有窗口
     const windows = BrowserWindow.getAllWindows();
     windows.forEach((win) => {
@@ -172,19 +176,24 @@ function startHeartbeatCountdown(logger: ReturnType<typeof createLogger>) {
     clearInterval(heartbeatCountdownTimer);
   }
 
-  // 每秒广播一次剩余时间
+  // 每秒广播一次剩余时间和当前状态
   heartbeatCountdownTimer = setInterval(() => {
     const now = Date.now();
     const remainingMs = Math.max(0, nextHeartbeatTime - now);
     const remainingSeconds = Math.ceil(remainingMs / 1000);
 
-    // 广播倒计时到所有窗口
+    // 广播倒计时和详细信息到所有窗口
     const windows = BrowserWindow.getAllWindows();
     windows.forEach((win) => {
       if (!win.isDestroyed()) {
         win.webContents.send(IPC_EVENTS.HEARTBEAT_COUNTDOWN, {
           remainingSeconds,
           totalSeconds: Math.floor(heartbeatIntervalMs / 1000),
+          // 添加详细的心跳检测信息
+          connected: lastNetworkStatus?.connected ?? false,
+          authenticated: lastNetworkStatus?.authenticated ?? false,
+          latency: lastNetworkStatus?.latency ?? null,
+          lastCheckTime: lastNetworkStatus ? Date.now() : null,
         });
       }
     });

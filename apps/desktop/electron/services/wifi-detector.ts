@@ -43,7 +43,7 @@ async function getMacOSWifiSSID(): Promise<WifiStatus> {
     // 方法1: 使用 system_profiler（推荐，在新版 macOS 上稳定可靠）
     const { stdout } = await execAsync(
       'system_profiler SPAirPortDataType 2>/dev/null',
-      { timeout: 5000 }
+      { timeout: 10000 } // 增加到10秒超时
     );
 
     // 解析输出，查找当前网络信息

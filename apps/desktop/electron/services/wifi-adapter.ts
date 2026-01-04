@@ -7,7 +7,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { WifiAdapter, WifiInfo, WifiDetails, NetworkInfo } from '@repo/shared';
 import * as os from 'node:os';
-import * as iconv from 'iconv-lite';
+import iconv from 'iconv-lite';
 
 const execAsync = promisify(exec);
 
@@ -160,7 +160,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
       // 方法1: 使用 system_profiler（推荐，在新版 macOS 上稳定可靠）
       const { stdout } = await execAsync(
         'system_profiler SPAirPortDataType 2>/dev/null',
-        { timeout: 5000 }
+        { timeout: 10000 } // 增加到10秒超时
       );
 
       // 解析输出获取当前网络信息
@@ -228,7 +228,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         try {
           const { stdout: retryStdout } = await execAsync(
             'system_profiler SPAirPortDataType 2>/dev/null',
-            { timeout: 5000 }
+            { timeout: 10000 } // 增加到10秒超时
           );
 
           const retryLines = retryStdout.split('\n');

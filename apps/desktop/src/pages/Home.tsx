@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useNetwork } from '../hooks/useNetwork';
 import { useHeartbeat } from '../hooks/useHeartbeat';
+import { useWifiReconnect } from '../hooks/useWifiReconnect';
 import type { NetworkStatus } from '@repo/shared';
 import {
   Wifi,
@@ -608,11 +609,251 @@ const WifiSwitcherCard: React.FC<{
   );
 };
 
+// WiFi 重连进度卡片组件
+const WifiReconnectProgressCard: React.FC<{
+  progress: NonNullable<ReturnType<typeof useWifiReconnect>['progress']>;
+}> = ({ progress }) => {
+  const { ssid, attempt, maxAttempts, status } = progress;
+
+  // 根据状态选择颜色和图标
+  const getStatusConfig = () => {
+    switch (status) {
+      case 'connecting':
+        return {
+          bgColor: 'rgba(59, 130, 246, 0.1)',
+          borderColor: '#3b82f6',
+          icon: <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} />,
+          text: '正在连接',
+          textColor: '#3b82f6',
+        };
+      case 'success':
+        return {
+          bgColor: 'rgba(34, 197, 94, 0.1)',
+          borderColor: '#22c55e',
+          icon: <CheckCircle2 size={18} />,
+          text: '连接成功',
+          textColor: '#22c55e',
+        };
+      case 'failed':
+        return {
+          bgColor: 'rgba(239, 68, 68, 0.1)',
+          borderColor: '#ef4444',
+          icon: <XCircle size={18} />,
+          text: '连接失败',
+          textColor: '#ef4444',
+        };
+    }
+  };
+
+  const statusConfig = getStatusConfig();
+
+  return (
+    <div
+      className="card"
+      style={{
+        backgroundColor: statusConfig.bgColor,
+        border: `2px solid ${statusConfig.borderColor}`,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {statusConfig.icon}
+          WiFi 自动重连
+        </h3>
+        <span
+          style={{
+            fontSize: '0.85rem',
+            color: statusConfig.textColor,
+            fontWeight: 600,
+          }}
+        >
+          {statusConfig.text}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* WiFi名称 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Wifi size={16} color={statusConfig.textColor} />
+          <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{ssid}</span>
+        </div>
+
+        {/* 尝试次数 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>尝试进度:</span>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div
+              style={{
+                flex: 1,
+                height: 8,
+                backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                borderRadius: 4,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${(attempt / maxAttempts) * 100}%`,
+                  height: '100%',
+                  backgroundColor: statusConfig.borderColor,
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: statusConfig.textColor, minWidth: 50 }}>
+              {attempt} / {maxAttempts}
+            </span>
+          </div>
+        </div>
+
+        {/* 提示信息 */}
+        {status === 'connecting' && (
+          <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            正在尝试连接到 <strong>{ssid}</strong>，第 {attempt} 次尝试...
+          </p>
+        )}
+        {status === 'success' && (
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#22c55e' }}>
+            成功连接到 <strong>{ssid}</strong>！
+          </p>
+        )}
+        {status === 'failed' && attempt === maxAttempts && (
+          <p style={{ margin: 0, fontSize: '0.85rem', color: '#ef4444' }}>
+            <strong>{ssid}</strong> 已达到最大重试次数，正在尝试下一个WiFi...
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// WiFi 重连全部失败卡片组件
+const WifiReconnectFailedCard: React.FC<{
+  allFailed: NonNullable<ReturnType<typeof useWifiReconnect>['allFailed']>;
+  onClose: () => void;
+}> = ({ allFailed, onClose }) => {
+  const { failedList } = allFailed;
+
+  // 获取优先级颜色
+  const getPriorityColor = (priority: number) => {
+    if (priority <= 3) return '#ef4444';
+    if (priority <= 6) return '#f97316';
+    if (priority <= 10) return '#3b82f6';
+    if (priority <= 20) return '#22c55e';
+    return '#6b7280';
+  };
+
+  return (
+    <div
+      className="card"
+      style={{
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
+        border: '2px solid #ef4444',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444' }}>
+          <AlertCircle size={20} />
+          所有 WiFi 连接失败
+        </h3>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 4,
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: '50%',
+            transition: 'background 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.05)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'transparent';
+          }}
+          title="关闭"
+        >
+          <XCircle size={18} color="#ef4444" />
+        </button>
+      </div>
+
+      <p style={{ margin: '0 0 16px 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+        已尝试连接所有配置的 WiFi，但均连接失败。请检查以下WiFi的连接状态或手动连接。
+      </p>
+
+      <div style={{ display: 'grid', gap: 12 }}>
+        {failedList.map((failed, index) => (
+          <div
+            key={`${failed.ssid}-${index}`}
+            style={{
+              padding: 12,
+              backgroundColor: 'rgba(255, 255, 255, 0.6)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid rgba(239, 68, 68, 0.2)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <WifiOff size={16} color="#ef4444" />
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{failed.ssid}</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '0.75rem',
+                  backgroundColor: getPriorityColor(failed.priority),
+                  color: 'white',
+                  padding: '2px 8px',
+                  borderRadius: '12px',
+                }}
+              >
+                优先级 {failed.priority}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertCircle size={14} color="#f97316" />
+              <span style={{ fontSize: '0.85rem', color: '#f97316' }}>{failed.reason}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div
+        style={{
+          marginTop: 16,
+          padding: 12,
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          borderRadius: 'var(--radius-md)',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
+        }}
+      >
+        <AlertCircle size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
+        <div style={{ flex: 1 }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+            建议操作
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+            <li>检查WiFi密码是否正确</li>
+            <li>确认WiFi信号强度是否足够</li>
+            <li>尝试手动连接WiFi</li>
+            <li>检查路由器是否正常工作</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const Home: React.FC = () => {
   const { networkStatus, ipAddress, login, logout, config } = useApp();
   const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
     useNetwork();
   const { heartbeat, reconnectProgress } = useHeartbeat();
+  const { progress: wifiReconnectProgress, allFailed, clearAllFailed } = useWifiReconnect();
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -769,6 +1010,254 @@ export const Home: React.FC = () => {
             </p>
           </div>
         </div>
+
+        {/* WiFi 重连进度卡片 */}
+        {wifiReconnectProgress && <WifiReconnectProgressCard progress={wifiReconnectProgress} />}
+
+        {/* WiFi 重连全部失败卡片 */}
+        {allFailed && <WifiReconnectFailedCard allFailed={allFailed} onClose={clearAllFailed} />}
+
+        {/* 心跳状态 */}
+        {config?.settings.enableHeartbeat && (
+          <div className="card">
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    marginRight: 8,
+                    animation: wifiConnected ? 'pulse 2s infinite' : 'none',
+                  }}
+                />
+                心跳检测{!wifiConnected && ' (已暂停)'}
+              </span>
+              {wifiConnected && heartbeat.remainingSeconds > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 'normal',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  下次检测: {heartbeat.remainingSeconds}s
+                </span>
+              )}
+            </h3>
+
+            {/* WiFi 未连接时显示友好提示 */}
+            {!wifiConnected ? (
+              <div
+                style={{
+                  padding: 16,
+                  backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(156, 163, 175, 0.3)',
+                  textAlign: 'center',
+                }}
+              >
+                <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                  心跳检测已暂停
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  当前未连接 WiFi，心跳检测功能暂停。
+                  <br />
+                  连接到 WiFi 后将自动恢复检测。
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 心跳检测基本信息 */}
+                <div style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {/* 检测间隔 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <Activity size={16} color="var(--primary-color)" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {config.settings.pollingInterval} 秒
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 网络状态 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: heartbeat.connected
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      {heartbeat.connected ? (
+                        <CheckCircle2 size={16} color="#22c55e" />
+                      ) : (
+                        <XCircle size={16} color="#ef4444" />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: heartbeat.connected ? '#22c55e' : '#ef4444',
+                          }}
+                        >
+                          {heartbeat.connected ? '正常' : '异常'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 延迟信息 */}
+                  {heartbeat.latency && (
+                    <div
+                      style={{
+                        padding: 12,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          网络延迟详情
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          测试目标: {heartbeat.latency.source}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '1.1rem',
+                              fontWeight: 600,
+                              color: getLatencyStatus(heartbeat.latency.value).color,
+                            }}
+                          >
+                            {heartbeat.latency.value === 9999
+                              ? '超时'
+                              : `${heartbeat.latency.value}ms · ${getLatencyStatus(heartbeat.latency.value).text}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 检测URL列表 */}
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    padding: 10,
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <div style={{ marginBottom: 6, fontWeight: 600 }}>检测服务器:</div>
+                  <div style={{ lineHeight: 1.6 }}>
+                    • https://www.baidu.com (百度)
+                    <br />
+                    • https://www.speedtest.cn (测速网)
+                    <br />• http://connectivitycheck.platform.hicloud.com (华为云)
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 重连进度提示 */}
+        {reconnectProgress.status !== 'idle' && (
+          <div
+            className="card"
+            style={{
+              backgroundColor:
+                reconnectProgress.status === 'success'
+                  ? 'rgba(34, 197, 94, 0.1)'
+                  : reconnectProgress.status === 'failed'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : 'rgba(14, 165, 233, 0.1)',
+              borderColor:
+                reconnectProgress.status === 'success'
+                  ? '#22c55e'
+                  : reconnectProgress.status === 'failed'
+                    ? '#ef4444'
+                    : 'var(--primary-color)',
+              borderWidth: 1,
+              borderStyle: 'solid',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {reconnectProgress.status === 'reconnecting' && (
+                <Loader
+                  size={20}
+                  color="var(--primary-color)"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                />
+              )}
+              {reconnectProgress.status === 'success' && <CheckCircle2 size={20} color="#22c55e" />}
+              {reconnectProgress.status === 'failed' && <XCircle size={20} color="#ef4444" />}
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color:
+                      reconnectProgress.status === 'success'
+                        ? '#22c55e'
+                        : reconnectProgress.status === 'failed'
+                          ? '#ef4444'
+                          : 'var(--primary-color)',
+                    marginBottom: 4,
+                  }}
+                >
+                  {reconnectProgress.message}
+                </div>
+                {reconnectProgress.status === 'reconnecting' && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    尝试次数: {reconnectProgress.currentAttempt}/{reconnectProgress.maxAttempts}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -792,6 +1281,254 @@ export const Home: React.FC = () => {
           </h3>
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
+
+        {/* WiFi 重连进度卡片 */}
+        {wifiReconnectProgress && <WifiReconnectProgressCard progress={wifiReconnectProgress} />}
+
+        {/* WiFi 重连全部失败卡片 */}
+        {allFailed && <WifiReconnectFailedCard allFailed={allFailed} onClose={clearAllFailed} />}
+
+        {/* 心跳状态 */}
+        {config?.settings.enableHeartbeat && (
+          <div className="card">
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    marginRight: 8,
+                    animation: wifiConnected ? 'pulse 2s infinite' : 'none',
+                  }}
+                />
+                心跳检测{!wifiConnected && ' (已暂停)'}
+              </span>
+              {wifiConnected && heartbeat.remainingSeconds > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 'normal',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  下次检测: {heartbeat.remainingSeconds}s
+                </span>
+              )}
+            </h3>
+
+            {/* WiFi 未连接时显示友好提示 */}
+            {!wifiConnected ? (
+              <div
+                style={{
+                  padding: 16,
+                  backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(156, 163, 175, 0.3)',
+                  textAlign: 'center',
+                }}
+              >
+                <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                  心跳检测已暂停
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  当前未连接 WiFi，心跳检测功能暂停。
+                  <br />
+                  连接到 WiFi 后将自动恢复检测。
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 心跳检测基本信息 */}
+                <div style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {/* 检测间隔 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <Activity size={16} color="var(--primary-color)" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {config.settings.pollingInterval} 秒
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 网络状态 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: heartbeat.connected
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      {heartbeat.connected ? (
+                        <CheckCircle2 size={16} color="#22c55e" />
+                      ) : (
+                        <XCircle size={16} color="#ef4444" />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: heartbeat.connected ? '#22c55e' : '#ef4444',
+                          }}
+                        >
+                          {heartbeat.connected ? '正常' : '异常'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 延迟信息 */}
+                  {heartbeat.latency && (
+                    <div
+                      style={{
+                        padding: 12,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          网络延迟详情
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          测试目标: {heartbeat.latency.source}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '1.1rem',
+                              fontWeight: 600,
+                              color: getLatencyStatus(heartbeat.latency.value).color,
+                            }}
+                          >
+                            {heartbeat.latency.value === 9999
+                              ? '超时'
+                              : `${heartbeat.latency.value}ms · ${getLatencyStatus(heartbeat.latency.value).text}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 检测URL列表 */}
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    padding: 10,
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <div style={{ marginBottom: 6, fontWeight: 600 }}>检测服务器:</div>
+                  <div style={{ lineHeight: 1.6 }}>
+                    • https://www.baidu.com (百度)
+                    <br />
+                    • https://www.speedtest.cn (测速网)
+                    <br />• http://connectivitycheck.platform.hicloud.com (华为云)
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 重连进度提示 */}
+        {reconnectProgress.status !== 'idle' && (
+          <div
+            className="card"
+            style={{
+              backgroundColor:
+                reconnectProgress.status === 'success'
+                  ? 'rgba(34, 197, 94, 0.1)'
+                  : reconnectProgress.status === 'failed'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : 'rgba(14, 165, 233, 0.1)',
+              borderColor:
+                reconnectProgress.status === 'success'
+                  ? '#22c55e'
+                  : reconnectProgress.status === 'failed'
+                    ? '#ef4444'
+                    : 'var(--primary-color)',
+              borderWidth: 1,
+              borderStyle: 'solid',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {reconnectProgress.status === 'reconnecting' && (
+                <Loader
+                  size={20}
+                  color="var(--primary-color)"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                />
+              )}
+              {reconnectProgress.status === 'success' && <CheckCircle2 size={20} color="#22c55e" />}
+              {reconnectProgress.status === 'failed' && <XCircle size={20} color="#ef4444" />}
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color:
+                      reconnectProgress.status === 'success'
+                        ? '#22c55e'
+                        : reconnectProgress.status === 'failed'
+                          ? '#ef4444'
+                          : 'var(--primary-color)',
+                    marginBottom: 4,
+                  }}
+                >
+                  {reconnectProgress.message}
+                </div>
+                {reconnectProgress.status === 'reconnecting' && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    尝试次数: {reconnectProgress.currentAttempt}/{reconnectProgress.maxAttempts}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* WiFi 切换卡片 */}
         {config && (
@@ -847,6 +1584,254 @@ export const Home: React.FC = () => {
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
 
+        {/* WiFi 重连进度卡片 */}
+        {wifiReconnectProgress && <WifiReconnectProgressCard progress={wifiReconnectProgress} />}
+
+        {/* WiFi 重连全部失败卡片 */}
+        {allFailed && <WifiReconnectFailedCard allFailed={allFailed} onClose={clearAllFailed} />}
+
+        {/* 心跳状态 */}
+        {config?.settings.enableHeartbeat && (
+          <div className="card">
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    marginRight: 8,
+                    animation: wifiConnected ? 'pulse 2s infinite' : 'none',
+                  }}
+                />
+                心跳检测{!wifiConnected && ' (已暂停)'}
+              </span>
+              {wifiConnected && heartbeat.remainingSeconds > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 'normal',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  下次检测: {heartbeat.remainingSeconds}s
+                </span>
+              )}
+            </h3>
+
+            {/* WiFi 未连接时显示友好提示 */}
+            {!wifiConnected ? (
+              <div
+                style={{
+                  padding: 16,
+                  backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(156, 163, 175, 0.3)',
+                  textAlign: 'center',
+                }}
+              >
+                <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                  心跳检测已暂停
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  当前未连接 WiFi，心跳检测功能暂停。
+                  <br />
+                  连接到 WiFi 后将自动恢复检测。
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 心跳检测基本信息 */}
+                <div style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {/* 检测间隔 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <Activity size={16} color="var(--primary-color)" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {config.settings.pollingInterval} 秒
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 网络状态 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: heartbeat.connected
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      {heartbeat.connected ? (
+                        <CheckCircle2 size={16} color="#22c55e" />
+                      ) : (
+                        <XCircle size={16} color="#ef4444" />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: heartbeat.connected ? '#22c55e' : '#ef4444',
+                          }}
+                        >
+                          {heartbeat.connected ? '正常' : '异常'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 延迟信息 */}
+                  {heartbeat.latency && (
+                    <div
+                      style={{
+                        padding: 12,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          网络延迟详情
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          测试目标: {heartbeat.latency.source}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '1.1rem',
+                              fontWeight: 600,
+                              color: getLatencyStatus(heartbeat.latency.value).color,
+                            }}
+                          >
+                            {heartbeat.latency.value === 9999
+                              ? '超时'
+                              : `${heartbeat.latency.value}ms · ${getLatencyStatus(heartbeat.latency.value).text}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 检测URL列表 */}
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    padding: 10,
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <div style={{ marginBottom: 6, fontWeight: 600 }}>检测服务器:</div>
+                  <div style={{ lineHeight: 1.6 }}>
+                    • https://www.baidu.com (百度)
+                    <br />
+                    • https://www.speedtest.cn (测速网)
+                    <br />• http://connectivitycheck.platform.hicloud.com (华为云)
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 重连进度提示 */}
+        {reconnectProgress.status !== 'idle' && (
+          <div
+            className="card"
+            style={{
+              backgroundColor:
+                reconnectProgress.status === 'success'
+                  ? 'rgba(34, 197, 94, 0.1)'
+                  : reconnectProgress.status === 'failed'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : 'rgba(14, 165, 233, 0.1)',
+              borderColor:
+                reconnectProgress.status === 'success'
+                  ? '#22c55e'
+                  : reconnectProgress.status === 'failed'
+                    ? '#ef4444'
+                    : 'var(--primary-color)',
+              borderWidth: 1,
+              borderStyle: 'solid',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {reconnectProgress.status === 'reconnecting' && (
+                <Loader
+                  size={20}
+                  color="var(--primary-color)"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                />
+              )}
+              {reconnectProgress.status === 'success' && <CheckCircle2 size={20} color="#22c55e" />}
+              {reconnectProgress.status === 'failed' && <XCircle size={20} color="#ef4444" />}
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color:
+                      reconnectProgress.status === 'success'
+                        ? '#22c55e'
+                        : reconnectProgress.status === 'failed'
+                          ? '#ef4444'
+                          : 'var(--primary-color)',
+                    marginBottom: 4,
+                  }}
+                >
+                  {reconnectProgress.message}
+                </div>
+                {reconnectProgress.status === 'reconnecting' && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    尝试次数: {reconnectProgress.currentAttempt}/{reconnectProgress.maxAttempts}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* WiFi 切换卡片 */}
         {config && (
           <WifiSwitcherCard
@@ -901,6 +1886,254 @@ export const Home: React.FC = () => {
           </h3>
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
+
+        {/* WiFi 重连进度卡片 */}
+        {wifiReconnectProgress && <WifiReconnectProgressCard progress={wifiReconnectProgress} />}
+
+        {/* WiFi 重连全部失败卡片 */}
+        {allFailed && <WifiReconnectFailedCard allFailed={allFailed} onClose={clearAllFailed} />}
+
+        {/* 心跳状态 */}
+        {config?.settings.enableHeartbeat && (
+          <div className="card">
+            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ display: 'flex', alignItems: 'center' }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    marginRight: 8,
+                    animation: wifiConnected ? 'pulse 2s infinite' : 'none',
+                  }}
+                />
+                心跳检测{!wifiConnected && ' (已暂停)'}
+              </span>
+              {wifiConnected && heartbeat.remainingSeconds > 0 && (
+                <span
+                  style={{
+                    fontSize: '0.85rem',
+                    fontWeight: 'normal',
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'rgba(14, 165, 233, 0.1)',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                  }}
+                >
+                  下次检测: {heartbeat.remainingSeconds}s
+                </span>
+              )}
+            </h3>
+
+            {/* WiFi 未连接时显示友好提示 */}
+            {!wifiConnected ? (
+              <div
+                style={{
+                  padding: 16,
+                  backgroundColor: 'rgba(156, 163, 175, 0.1)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid rgba(156, 163, 175, 0.3)',
+                  textAlign: 'center',
+                }}
+              >
+                <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                  心跳检测已暂停
+                </p>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                  当前未连接 WiFi，心跳检测功能暂停。
+                  <br />
+                  连接到 WiFi 后将自动恢复检测。
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 心跳检测基本信息 */}
+                <div style={{ marginBottom: 16 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(2, 1fr)',
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    {/* 检测间隔 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <Activity size={16} color="var(--primary-color)" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {config.settings.pollingInterval} 秒
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 网络状态 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: 10,
+                        backgroundColor: heartbeat.connected
+                          ? 'rgba(34, 197, 94, 0.1)'
+                          : 'rgba(239, 68, 68, 0.1)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      {heartbeat.connected ? (
+                        <CheckCircle2 size={16} color="#22c55e" />
+                      ) : (
+                        <XCircle size={16} color="#ef4444" />
+                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: heartbeat.connected ? '#22c55e' : '#ef4444',
+                          }}
+                        >
+                          {heartbeat.connected ? '正常' : '异常'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 延迟信息 */}
+                  {heartbeat.latency && (
+                    <div
+                      style={{
+                        padding: 12,
+                        backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          网络延迟详情
+                        </span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          测试目标: {heartbeat.latency.source}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <div style={{ flex: 1 }}>
+                          <div
+                            style={{
+                              fontSize: '1.1rem',
+                              fontWeight: 600,
+                              color: getLatencyStatus(heartbeat.latency.value).color,
+                            }}
+                          >
+                            {heartbeat.latency.value === 9999
+                              ? '超时'
+                              : `${heartbeat.latency.value}ms · ${getLatencyStatus(heartbeat.latency.value).text}`}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 检测URL列表 */}
+                <div
+                  style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--text-secondary)',
+                    padding: 10,
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  <div style={{ marginBottom: 6, fontWeight: 600 }}>检测服务器:</div>
+                  <div style={{ lineHeight: 1.6 }}>
+                    • https://www.baidu.com (百度)
+                    <br />
+                    • https://www.speedtest.cn (测速网)
+                    <br />• http://connectivitycheck.platform.hicloud.com (华为云)
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 重连进度提示 */}
+        {reconnectProgress.status !== 'idle' && (
+          <div
+            className="card"
+            style={{
+              backgroundColor:
+                reconnectProgress.status === 'success'
+                  ? 'rgba(34, 197, 94, 0.1)'
+                  : reconnectProgress.status === 'failed'
+                    ? 'rgba(239, 68, 68, 0.1)'
+                    : 'rgba(14, 165, 233, 0.1)',
+              borderColor:
+                reconnectProgress.status === 'success'
+                  ? '#22c55e'
+                  : reconnectProgress.status === 'failed'
+                    ? '#ef4444'
+                    : 'var(--primary-color)',
+              borderWidth: 1,
+              borderStyle: 'solid',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {reconnectProgress.status === 'reconnecting' && (
+                <Loader
+                  size={20}
+                  color="var(--primary-color)"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                />
+              )}
+              {reconnectProgress.status === 'success' && <CheckCircle2 size={20} color="#22c55e" />}
+              {reconnectProgress.status === 'failed' && <XCircle size={20} color="#ef4444" />}
+              <div style={{ flex: 1 }}>
+                <div
+                  style={{
+                    fontWeight: 600,
+                    color:
+                      reconnectProgress.status === 'success'
+                        ? '#22c55e'
+                        : reconnectProgress.status === 'failed'
+                          ? '#ef4444'
+                          : 'var(--primary-color)',
+                    marginBottom: 4,
+                  }}
+                >
+                  {reconnectProgress.message}
+                </div>
+                {reconnectProgress.status === 'reconnecting' && (
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                    尝试次数: {reconnectProgress.currentAttempt}/{reconnectProgress.maxAttempts}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* WiFi 切换卡片 */}
         {config && (
@@ -1038,64 +2271,11 @@ export const Home: React.FC = () => {
         </div>
       </div>
 
-      {/* 当前账号卡片 */}
-      <div className="card">
-        <h3>
-          <User size={18} style={{ marginRight: 8 }} />
-          当前账号
-        </h3>
-        <div
-          style={{
-            backgroundColor: 'rgba(14, 165, 233, 0.05)',
-            borderRadius: 'var(--radius-md)',
-            padding: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <User size={16} color="var(--primary-color)" />
-            <strong>{linkedAccount.username}</strong>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                backgroundColor: '#e0f2fe',
-                color: '#0369a1',
-                padding: '2px 8px',
-                borderRadius: '12px',
-              }}
-            >
-              {linkedAccount.isp === 'campus'
-                ? '校园网'
-                : linkedAccount.isp === 'cmcc'
-                  ? '中国移动'
-                  : linkedAccount.isp === 'cucc'
-                    ? '中国联通'
-                    : '中国电信'}
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: 'var(--text-secondary)',
-              fontSize: '0.9rem',
-            }}
-          >
-            <Server size={14} />
-            <span>{linkedAccount.serverUrl}</span>
-          </div>
-        </div>
-      </div>
+      {/* WiFi 重连进度卡片 */}
+      {wifiReconnectProgress && <WifiReconnectProgressCard progress={wifiReconnectProgress} />}
 
-      {/* WiFi 切换卡片 */}
-      {config && (
-        <WifiSwitcherCard
-          config={config}
-          currentSsid={wifiSSID}
-          onSwitch={handleWifiSwitch}
-          switching={switching}
-        />
-      )}
+      {/* WiFi 重连全部失败卡片 */}
+      {allFailed && <WifiReconnectFailedCard allFailed={allFailed} onClose={clearAllFailed} />}
 
       {/* 心跳状态 */}
       {config?.settings.enableHeartbeat && (
@@ -1107,7 +2287,7 @@ export const Home: React.FC = () => {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  backgroundColor: networkStatus === 'connected' ? '#22c55e' : '#ef4444',
+                  backgroundColor: heartbeat.connected ? '#22c55e' : '#ef4444',
                   marginRight: 8,
                   animation: 'pulse 2s infinite',
                 }}
@@ -1129,16 +2309,131 @@ export const Home: React.FC = () => {
               </span>
             )}
           </h3>
-          <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-            <p style={{ margin: '0 0 8px 0' }}>
-              检测间隔: <strong>{config.settings.pollingInterval} 秒</strong>
-            </p>
-            <p style={{ margin: 0 }}>
-              状态:{' '}
-              <span style={{ color: networkStatus === 'connected' ? '#22c55e' : '#ef4444' }}>
-                {networkStatus === 'connected' ? '正常' : '异常'}
-              </span>
-            </p>
+
+          {/* 心跳检测基本信息 */}
+          <div style={{ marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 12,
+                marginBottom: 12,
+              }}
+            >
+              {/* 检测间隔 */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <Activity size={16} color="var(--primary-color)" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {config.settings.pollingInterval} 秒
+                  </div>
+                </div>
+              </div>
+
+              {/* 网络状态 */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: 10,
+                  backgroundColor: heartbeat.connected
+                    ? 'rgba(34, 197, 94, 0.1)'
+                    : 'rgba(239, 68, 68, 0.1)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                {heartbeat.connected ? (
+                  <CheckCircle2 size={16} color="#22c55e" />
+                ) : (
+                  <XCircle size={16} color="#ef4444" />
+                )}
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                  <div
+                    style={{
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      color: heartbeat.connected ? '#22c55e' : '#ef4444',
+                    }}
+                  >
+                    {heartbeat.connected ? '正常' : '异常'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 延迟信息 */}
+            {heartbeat.latency && (
+              <div
+                style={{
+                  padding: 12,
+                  backgroundColor: 'rgba(14, 165, 233, 0.05)',
+                  borderRadius: 'var(--radius-sm)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
+                  }}
+                >
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    网络延迟详情
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    测试目标: {heartbeat.latency.source}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                        color: getLatencyStatus(heartbeat.latency.value).color,
+                      }}
+                    >
+                      {heartbeat.latency.value === 9999
+                        ? '超时'
+                        : `${heartbeat.latency.value}ms · ${getLatencyStatus(heartbeat.latency.value).text}`}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 检测URL列表 */}
+          <div
+            style={{
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              padding: 10,
+              backgroundColor: 'rgba(0, 0, 0, 0.02)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <div style={{ marginBottom: 6, fontWeight: 600 }}>检测服务器:</div>
+            <div style={{ lineHeight: 1.6 }}>
+              • https://www.baidu.com (百度)
+              <br />
+              • https://www.speedtest.cn (测速网)
+              <br />• http://connectivitycheck.platform.hicloud.com (华为云)
+            </div>
           </div>
         </div>
       )}
@@ -1197,6 +2492,65 @@ export const Home: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 当前账号卡片 */}
+      <div className="card">
+        <h3>
+          <User size={18} style={{ marginRight: 8 }} />
+          当前账号
+        </h3>
+        <div
+          style={{
+            backgroundColor: 'rgba(14, 165, 233, 0.05)',
+            borderRadius: 'var(--radius-md)',
+            padding: 16,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <User size={16} color="var(--primary-color)" />
+            <strong>{linkedAccount.username}</strong>
+            <span
+              style={{
+                fontSize: '0.75rem',
+                backgroundColor: '#e0f2fe',
+                color: '#0369a1',
+                padding: '2px 8px',
+                borderRadius: '12px',
+              }}
+            >
+              {linkedAccount.isp === 'campus'
+                ? '校园网'
+                : linkedAccount.isp === 'cmcc'
+                  ? '中国移动'
+                  : linkedAccount.isp === 'cucc'
+                    ? '中国联通'
+                    : '中国电信'}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              color: 'var(--text-secondary)',
+              fontSize: '0.9rem',
+            }}
+          >
+            <Server size={14} />
+            <span>{linkedAccount.serverUrl}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* WiFi 切换卡片 */}
+      {config && (
+        <WifiSwitcherCard
+          config={config}
+          currentSsid={wifiSSID}
+          onSwitch={handleWifiSwitch}
+          switching={switching}
+        />
       )}
 
       {/* Toast 提示 */}

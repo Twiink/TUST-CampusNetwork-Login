@@ -23,7 +23,35 @@ export const IPC_EVENTS = {
   LOG_ADDED: 'event:log:added',
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
+  WIFI_RECONNECT_PROGRESS: 'event:wifi:reconnectProgress',
+  WIFI_ALL_RECONNECTS_FAILED: 'event:wifi:allReconnectsFailed',
 } as const;
+
+/**
+ * WiFi 重连进度
+ */
+export interface WifiReconnectProgress {
+  ssid: string;
+  attempt: number;
+  maxAttempts: number;
+  status: 'connecting' | 'failed' | 'success';
+}
+
+/**
+ * WiFi 重连失败信息
+ */
+export interface WifiReconnectFailure {
+  ssid: string;
+  priority: number;
+  reason: string;
+}
+
+/**
+ * 所有 WiFi 重连失败事件
+ */
+export interface WifiAllReconnectsFailed {
+  failedList: WifiReconnectFailure[];
+}
 
 /**
  * 网络信息
@@ -91,6 +119,8 @@ export interface ElectronAPI {
     add: (wifi: Omit<WifiConfig, 'id'>) => Promise<WifiConfig>;
     update: (id: string, updates: Partial<WifiConfig>) => Promise<WifiConfig>;
     remove: (id: string) => Promise<void>;
+    switch: (ssid: string) => Promise<boolean>;
+    scan: () => Promise<Array<{ ssid: string; signalStrength: number; security: string }>>;
   };
 
   network: {

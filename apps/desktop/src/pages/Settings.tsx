@@ -143,6 +143,17 @@ export const Settings: React.FC = () => {
     });
   };
 
+  // 切换WiFi自动重连状态
+  const handleToggleWifiAutoConnect = (id: string) => {
+    if (!config) return;
+    setConfig({
+      ...config,
+      wifiList: config.wifiList.map((w) =>
+        w.id === id ? { ...w, autoConnect: !w.autoConnect } : w
+      ),
+    });
+  };
+
   const handleSettingChange = (key: string, value: unknown) => {
     if (!config) return;
     setConfig({
@@ -458,7 +469,8 @@ export const Settings: React.FC = () => {
               WiFi 配置
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 16 }}>
-              所有添加的 WiFi 都会默认启用自动连接。启用心跳检测后，断线时会按优先级尝试切换网络。
+              配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。
+              点击 <RefreshCw size={12} style={{ verticalAlign: 'middle', display: 'inline' }} /> 按钮可切换自动重连状态。
             </p>
 
             <div style={{ marginBottom: 20 }}>
@@ -528,6 +540,21 @@ export const Settings: React.FC = () => {
                             <Star size={12} />
                             优先级 {wifi.priority || 10}
                           </span>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
+                              color: wifi.autoConnect ? '#1e40af' : '#6b7280',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <RefreshCw size={12} />
+                            {wifi.autoConnect ? '自动重连' : '手动连接'}
+                          </span>
                         </div>
                         {wifi.requiresAuth && linkedAccount && (
                           <div
@@ -561,13 +588,30 @@ export const Settings: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <button
-                        className="btn btn-danger"
-                        style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
-                        onClick={() => handleRemoveWifi(wifi.id)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          className="btn"
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '14px',
+                            height: 'auto',
+                            backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
+                            color: wifi.autoConnect ? '#1e40af' : '#6b7280',
+                            border: wifi.autoConnect ? '1px solid #93c5fd' : '1px solid #d1d5db',
+                          }}
+                          onClick={() => handleToggleWifiAutoConnect(wifi.id)}
+                          title={wifi.autoConnect ? '点击禁用WiFi自动重连' : '点击启用WiFi自动重连'}
+                        >
+                          <RefreshCw size={14} />
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
+                          onClick={() => handleRemoveWifi(wifi.id)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })

@@ -13,7 +13,6 @@ import {
 
 import { createElectronStorage } from './services/store';
 import { getNetworkInfo } from './services/network';
-import { getCurrentWifiSSID } from './services/wifi-detector';
 import { createDesktopWifiAdapter } from './services/wifi-adapter';
 import { createTrayService, TrayService } from './services/tray';
 import { createAutoReconnectService, AutoReconnectService } from './services/auto-reconnect';
@@ -72,6 +71,28 @@ let forceQuit = false;
 async function initServices(): Promise<AppServices> {
   // 创建日志服务（保留7天，最多500条）
   const logger = createLogger(500, 7);
+
+  // 添加控制台日志监听器（输出到终端）
+  logger.addListener((entry) => {
+    const timestamp = entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false });
+    const level = entry.level.toUpperCase().padEnd(7);
+    const levelColors = {
+      DEBUG: '\x1b[36m',   // Cyan
+      INFO: '\x1b[37m',    // White
+      SUCCESS: '\x1b[32m', // Green
+      WARN: '\x1b[33m',    // Yellow
+      ERROR: '\x1b[31m',   // Red
+    };
+    const color = levelColors[entry.level.toUpperCase() as keyof typeof levelColors] || '\x1b[37m';
+    const reset = '\x1b[0m';
+
+    let message = `${color}[${timestamp}] [${level}]${reset} ${entry.message}`;
+    if (entry.data) {
+      message += ` ${reset}\x1b[90m${JSON.stringify(entry.data)}\x1b[0m`;
+    }
+    console.log(message);
+  });
+
   logger.info('===== NetMate 应用启动 =====');
   logger.info(`运行平台: ${process.platform}`);
   logger.info(`应用版本: ${app.getVersion()}`);
@@ -324,28 +345,12 @@ app.whenReady().then(async () => {
             message: '自动重连失败',
           });
 
-          // 尝试切换到下一个可用 WiFi
-          if (wifiSwitcherService && services) {
-            const currentWifi = await getCurrentWifiSSID();
-            services.logger.info('重连失败，尝试切换 WiFi 网络');
+          // 显示通知
+          notificationService?.showReconnectFailed();
 
-            const result = await wifiSwitcherService.switchToNextNetwork(currentWifi.ssid);
-            if (result.success && result.ssid) {
-              services.logger.info(`已切换到 WiFi: ${result.ssid}`);
-              notificationService?.show({
-                title: 'NetMate - 已切换网络',
-                body: `已切换到 ${result.ssid}，正在重新连接...`,
-              });
-              // 触发重新连接
-              setTimeout(() => {
-                autoReconnectService?.triggerReconnect();
-              }, 3000);
-            } else {
-              notificationService?.showReconnectFailed('无可用的备选网络');
-            }
-          } else {
-            notificationService?.showReconnectFailed();
-          }
+          // 注意：不在此处切换 WiFi
+          // WiFi 切换由 wifi-event-listener 服务独立处理
+          // 保持校园网重连与 WiFi 重连完全解耦
         },
         onReconnectAttempt: (attempt, maxAttempts) => {
           services?.logger.info(`自动重连尝试 ${attempt}/${maxAttempts}`);
@@ -445,12 +450,13 @@ app.whenReady().then(async () => {
       networkDetector: services.networkDetector,
       logger: services.logger,
       window: win,
-      checkInterval: 3000, // 3秒检测一次 SSID 变化（轻量级检测）
+      checkInterval: 1000, // 1秒检测一次 SSID 变化（更快响应断开事件）
       wifiManager: services.wifiManager,
       wifiSwitcherService: wifiSwitcherService,
+      configManager: services.configManager,
     });
     wifiEventListener.start();
-    services.logger.info('WiFi 事件监听器已启动，检测间隔: 3秒（支持自动重连）');
+    services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
 
     services.logger.success('===== 应用初始化完成 =====');
   } catch (error) {

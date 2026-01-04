@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
+import type { LatencyResult } from '@repo/shared';
 
 export interface HeartbeatState {
   remainingSeconds: number;
   totalSeconds: number;
+  // 新增：心跳检测详细信息
+  connected: boolean;
+  authenticated: boolean;
+  latency: LatencyResult | null;
+  lastCheckTime: number | null;
 }
 
 export interface ReconnectProgress {
@@ -19,6 +25,10 @@ export function useHeartbeat() {
   const [heartbeat, setHeartbeat] = useState<HeartbeatState>({
     remainingSeconds: 0,
     totalSeconds: 30,
+    connected: false,
+    authenticated: false,
+    latency: null,
+    lastCheckTime: null,
   });
 
   const [reconnectProgress, setReconnectProgress] = useState<ReconnectProgress>({
