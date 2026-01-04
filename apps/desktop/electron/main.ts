@@ -204,8 +204,20 @@ app.whenReady().then(async () => {
     // 初始化服务
     services = await initServices();
 
-    // 注册 IPC 处理器
-    registerAllIPC(services);
+    // 创建 WiFi 切换服务
+    wifiSwitcherService = createWifiSwitcherService();
+    // 配置已知网络列表（包含密码和优先级）
+    const wifiConfigs = services.wifiManager.getWifiConfigs();
+    wifiSwitcherService.setConfiguredNetworks(
+      wifiConfigs.map((w) => ({
+        ssid: w.ssid,
+        password: w.password,
+        priority: w.priority || 10,
+      }))
+    );
+
+    // 注册 IPC 处理器（传递 wifiSwitcherService）
+    registerAllIPC(services, wifiSwitcherService);
 
     // 注册托盘 IPC（在托盘创建前注册，使用 getter 函数）
     registerTrayIPC(() => trayService, services.logger);
@@ -239,12 +251,6 @@ app.whenReady().then(async () => {
         });
       }, 5000);
     }
-
-    // 创建 WiFi 切换服务
-    wifiSwitcherService = createWifiSwitcherService();
-    // 配置已知网络列表（按优先级排序）
-    const wifiConfigs = services.wifiManager.getWifiConfigs();
-    wifiSwitcherService.setConfiguredNetworks(wifiConfigs.map((w) => w.ssid));
 
     // 创建自动重连服务
     autoReconnectService = createAutoReconnectService(
@@ -377,15 +383,17 @@ app.whenReady().then(async () => {
     services.logger.info('托盘服务已初始化');
 
     // 创建并启动 WiFi 事件监听器
-    // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新
+    // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连
     wifiEventListener = createWifiEventListener({
       networkDetector: services.networkDetector,
       logger: services.logger,
       window: win,
       checkInterval: 3000, // 3秒检测一次 SSID 变化（轻量级检测）
+      wifiManager: services.wifiManager,
+      wifiSwitcherService: wifiSwitcherService,
     });
     wifiEventListener.start();
-    services.logger.info('WiFi 事件监听器已启动，检测间隔: 3秒');
+    services.logger.info('WiFi 事件监听器已启动，检测间隔: 3秒（支持自动重连）');
 
     services.logger.success('===== 应用初始化完成 =====');
   } catch (error) {

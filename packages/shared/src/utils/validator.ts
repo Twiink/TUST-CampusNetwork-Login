@@ -215,8 +215,30 @@ export function createDefaultAppConfig(partial: Partial<AppConfig> = {}): AppCon
 }
 
 /**
+ * ID 生成计数器（用于同一毫秒内的唯一性）
+ */
+let idCounter = 0;
+let lastTimestamp = 0;
+
+/**
  * 生成唯一 ID
+ * 使用高精度时间戳 + 递增计数器 + 随机数确保唯一性
  */
 export function generateId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`;
+  const now = Date.now();
+
+  // 如果时间戳相同，递增计数器；否则重置计数器
+  if (now === lastTimestamp) {
+    idCounter++;
+  } else {
+    idCounter = 0;
+    lastTimestamp = now;
+  }
+
+  // 使用performance.now()的小数部分增加随机性
+  const perfNow = typeof performance !== 'undefined' ? performance.now() : 0;
+  const microPart = Math.floor((perfNow % 1) * 1000000).toString(36);
+
+  // 格式: {时间戳}-{计数器}-{微秒}-{随机数}
+  return `${now.toString(36)}-${idCounter.toString(36)}-${microPart}-${Math.random().toString(36).substring(2, 7)}`;
 }

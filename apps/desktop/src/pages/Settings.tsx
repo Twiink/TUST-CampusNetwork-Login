@@ -458,7 +458,7 @@ export const Settings: React.FC = () => {
               WiFi 配置
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 16 }}>
-              配置需要自动连接的 WiFi 网络。启用心跳检测后，断线时会按优先级尝试切换网络。
+              所有添加的 WiFi 都会默认启用自动连接。启用心跳检测后，断线时会按优先级尝试切换网络。
             </p>
 
             <div style={{ marginBottom: 20 }}>

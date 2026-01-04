@@ -22,6 +22,8 @@ const IPC_CHANNELS = {
   WIFI_REMOVE: 'wifi:remove',
   WIFI_CURRENT_SSID: 'wifi:currentSsid',
   WIFI_FULL_INFO: 'wifi:fullInfo',
+  WIFI_SWITCH: 'wifi:switch',
+  WIFI_SCAN: 'wifi:scan',
   NETWORK_STATUS: 'network:status',
   NETWORK_INFO: 'network:info',
   NETWORK_CHECK: 'network:check',
@@ -86,6 +88,8 @@ const electronAPI = {
     update: (id: string, updates: unknown) =>
       ipcRenderer.invoke(IPC_CHANNELS.WIFI_UPDATE, id, updates),
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_REMOVE, id),
+    switch: (ssid: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SWITCH, ssid),
+    scan: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SCAN),
   },
 
   // 网络

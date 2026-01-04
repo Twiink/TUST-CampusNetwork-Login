@@ -7,6 +7,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { WifiAdapter, WifiInfo, WifiDetails, NetworkInfo } from '@repo/shared';
 import * as os from 'node:os';
+import * as iconv from 'iconv-lite';
 
 const execAsync = promisify(exec);
 
@@ -377,7 +378,8 @@ export class DesktopWifiAdapter implements WifiAdapter {
           const { stdout: rawOutput } = await execAsync('netsh wlan show interfaces', {
             encoding: 'buffer',
           });
-          const gbkOutput = rawOutput.toString('gbk' as BufferEncoding);
+          // 使用 iconv-lite 解码 GBK
+          const gbkOutput = iconv.decode(rawOutput, 'gbk');
           const ssidMatch = gbkOutput.match(/^\s*SSID\s*:\s*(.+)$/m);
           if (ssidMatch && ssidMatch[1]) {
             finalSsid = ssidMatch[1].trim();

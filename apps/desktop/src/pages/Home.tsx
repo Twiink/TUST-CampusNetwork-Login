@@ -478,6 +478,135 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
   );
 };
 
+// WiFi 切换卡片组件
+const WifiSwitcherCard: React.FC<{
+  config: NonNullable<ReturnType<typeof useApp>['config']>;
+  currentSsid: string | null;
+  onSwitch: (ssid: string) => Promise<void>;
+  switching: boolean;
+}> = ({ config, currentSsid, onSwitch, switching }) => {
+  // 按优先级排序WiFi列表
+  const sortedWifiList = [...config.wifiList].sort((a, b) => (a.priority || 10) - (b.priority || 10));
+
+  // 如果只有一个或没有WiFi配置，不显示切换卡片
+  if (sortedWifiList.length <= 1) {
+    return null;
+  }
+
+  return (
+    <div className="card">
+      <h3>
+        <RefreshCw size={18} style={{ marginRight: 8 }} />
+        切换 WiFi
+      </h3>
+      <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 16 }}>
+        点击下方按钮切换到其他已配置的 WiFi 网络
+      </p>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {sortedWifiList.map((wifi) => {
+          const isCurrent = wifi.ssid === currentSsid;
+          const priorityColor = (() => {
+            const priority = wifi.priority || 10;
+            if (priority <= 3) return '#ef4444';
+            if (priority <= 6) return '#f97316';
+            if (priority <= 10) return '#3b82f6';
+            if (priority <= 20) return '#22c55e';
+            return '#6b7280';
+          })();
+
+          return (
+            <button
+              key={wifi.id}
+              onClick={() => !isCurrent && !switching && onSwitch(wifi.ssid)}
+              disabled={isCurrent || switching}
+              style={{
+                padding: 12,
+                borderRadius: 'var(--radius-md)',
+                border: isCurrent ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
+                background: isCurrent
+                  ? 'rgba(14, 165, 233, 0.1)'
+                  : switching
+                    ? 'rgba(0, 0, 0, 0.02)'
+                    : 'rgba(255, 255, 255, 0.4)',
+                cursor: isCurrent || switching ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s',
+                opacity: isCurrent || switching ? 0.7 : 1,
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Wifi
+                  size={16}
+                  color={isCurrent ? 'var(--primary-color)' : 'var(--text-secondary)'}
+                />
+                <span
+                  style={{
+                    fontSize: '0.9rem',
+                    fontWeight: isCurrent ? 600 : 500,
+                    color: isCurrent ? 'var(--primary-color)' : 'var(--text-primary)',
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {wifi.ssid}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
+                    color: wifi.requiresAuth ? '#92400e' : '#065f46',
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                  }}
+                >
+                  {wifi.requiresAuth ? '需认证' : '无需认证'}
+                </span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    backgroundColor: priorityColor + '20',
+                    color: priorityColor,
+                    padding: '2px 6px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  优先级 {wifi.priority || 10}
+                </span>
+                {isCurrent && (
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      backgroundColor: 'var(--primary-color)',
+                      color: 'white',
+                      padding: '2px 6px',
+                      borderRadius: '10px',
+                    }}
+                  >
+                    当前
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export const Home: React.FC = () => {
   const { networkStatus, ipAddress, login, logout, config } = useApp();
   const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
@@ -485,11 +614,38 @@ export const Home: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [switching, setSwitching] = useState(false);
 
   // 显示toast提示
   const showToast = (message: string, type: 'success' | 'error') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  // WiFi切换处理
+  const handleWifiSwitch = async (ssid: string) => {
+    if (switching) return;
+
+    setSwitching(true);
+    try {
+      const success = await window.electronAPI.wifi.switch(ssid);
+      if (success) {
+        showToast(`正在切换到 ${ssid}，请稍候...`, 'success');
+        // 等待WiFi连接完成后刷新状态
+        setTimeout(async () => {
+          await fetchStatus();
+        }, 3000);
+      } else {
+        showToast(`切换到 ${ssid} 失败，请重试`, 'error');
+      }
+    } catch (error) {
+      console.error('WiFi切换失败:', error);
+      showToast('WiFi切换失败，请检查网络设置', 'error');
+    } finally {
+      setTimeout(() => {
+        setSwitching(false);
+      }, 1000);
+    }
   };
 
   // 手动刷新WiFi信息
@@ -635,6 +791,16 @@ export const Home: React.FC = () => {
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
 
+        {/* WiFi 切换卡片 */}
+        {config && (
+          <WifiSwitcherCard
+            config={config}
+            currentSsid={wifiSSID}
+            onSwitch={handleWifiSwitch}
+            switching={switching}
+          />
+        )}
+
         {/* WiFi 未配置警告 */}
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
           <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
@@ -678,6 +844,16 @@ export const Home: React.FC = () => {
           </h3>
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
+
+        {/* WiFi 切换卡片 */}
+        {config && (
+          <WifiSwitcherCard
+            config={config}
+            currentSsid={wifiSSID}
+            onSwitch={handleWifiSwitch}
+            switching={switching}
+          />
+        )}
 
         {/* 无需认证提示 */}
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -723,6 +899,16 @@ export const Home: React.FC = () => {
           </h3>
           <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
         </div>
+
+        {/* WiFi 切换卡片 */}
+        {config && (
+          <WifiSwitcherCard
+            config={config}
+            currentSsid={wifiSSID}
+            onSwitch={handleWifiSwitch}
+            switching={switching}
+          />
+        )}
 
         {/* 未配置账户警告 */}
         <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
@@ -898,6 +1084,16 @@ export const Home: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* WiFi 切换卡片 */}
+      {config && (
+        <WifiSwitcherCard
+          config={config}
+          currentSsid={wifiSSID}
+          onSwitch={handleWifiSwitch}
+          switching={switching}
+        />
+      )}
 
       {/* 心跳状态 */}
       {config?.settings.enableHeartbeat && (

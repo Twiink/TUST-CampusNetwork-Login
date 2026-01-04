@@ -12,7 +12,8 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { BrowserWindow } from 'electron';
-import type { NetworkDetector, Logger } from '@repo/shared';
+import type { NetworkDetector, Logger, WifiManager } from '@repo/shared';
+import type { WifiSwitcherService } from './wifi-switcher';
 
 const execAsync = promisify(exec);
 
@@ -25,6 +26,10 @@ export interface WifiEventListenerOptions {
   logger: Logger;
   /** 主窗口实例（用于发送 IPC 事件） */
   window: BrowserWindow | null;
+  /** WiFi管理器（可选） */
+  wifiManager?: WifiManager;
+  /** WiFi切换服务（可选） */
+  wifiSwitcherService?: WifiSwitcherService;
 }
 
 /**
@@ -36,9 +41,12 @@ export class WifiEventListener {
   private networkDetector: NetworkDetector;
   private logger: Logger;
   private window: BrowserWindow | null;
+  private wifiManager?: WifiManager;
+  private wifiSwitcherService?: WifiSwitcherService;
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastSsid: string | null = null;
   private isRunning = false;
+  private isReconnecting = false; // 防止重复重连
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
@@ -46,6 +54,8 @@ export class WifiEventListener {
     this.networkDetector = options.networkDetector;
     this.logger = options.logger;
     this.window = options.window;
+    this.wifiManager = options.wifiManager;
+    this.wifiSwitcherService = options.wifiSwitcherService;
   }
 
   /**
@@ -123,6 +133,9 @@ export class WifiEventListener {
           this.logger.info(`WiFi 已连接: ${currentSsid}`);
         } else if (prevSsid && currentSsid === null) {
           this.logger.info(`WiFi 已断开: ${prevSsid}`);
+
+          // WiFi断开时尝试自动重连
+          await this.handleWifiDisconnect(prevSsid);
         } else if (prevSsid && currentSsid) {
           this.logger.info(`WiFi 已切换: ${prevSsid} → ${currentSsid}`);
         }
@@ -133,6 +146,67 @@ export class WifiEventListener {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (_error) {
       // 静默处理错误，避免日志过多
+    }
+  }
+
+  /**
+   * 处理WiFi断开事件 - 尝试自动重连
+   */
+  private async handleWifiDisconnect(disconnectedSsid: string): Promise<void> {
+    // 如果正在重连或没有配置WiFi管理器和切换服务，则跳过
+    if (this.isReconnecting || !this.wifiManager || !this.wifiSwitcherService) {
+      return;
+    }
+
+    // 检查断开的WiFi是否在配置列表中
+    const wifiConfig = this.wifiManager.getWifiBySsid(disconnectedSsid);
+    if (!wifiConfig || !wifiConfig.autoConnect) {
+      this.logger.debug(`WiFi ${disconnectedSsid} 未配置自动重连，跳过`);
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.logger.info(`===== 开始WiFi自动重连 =====`);
+    console.log(`[WiFi-AutoReconnect] Starting reconnection attempt`, {
+      ssid: disconnectedSsid,
+      requiresAuth: wifiConfig.requiresAuth,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      // 等待一小段时间，避免立即重连
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // 尝试重新连接到断开的WiFi
+      this.logger.info(`尝试重连到: ${disconnectedSsid}`);
+      const success = await this.wifiSwitcherService.connectToConfiguredNetwork(disconnectedSsid);
+
+      if (success) {
+        this.logger.success(`WiFi自动重连成功: ${disconnectedSsid}`);
+        console.log(`[WiFi-AutoReconnect] Reconnection successful:`, disconnectedSsid);
+
+        // 等待WiFi连接稳定后更新网络状态
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        await this.notifyNetworkStatusChange();
+      } else {
+        this.logger.warn(`WiFi自动重连失败: ${disconnectedSsid}`);
+        console.error(`[WiFi-AutoReconnect] Reconnection failed (returned false):`, disconnectedSsid);
+      }
+    } catch (error) {
+      // 终端输出详细错误信息
+      console.error(`[WiFi-AutoReconnect] Reconnection exception:`, {
+        ssid: disconnectedSsid,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorType: error instanceof Error ? error.name : 'Unknown',
+        errorStack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 应用内日志保持简洁
+      this.logger.error(`WiFi自动重连失败: ${disconnectedSsid}`);
+    } finally {
+      this.isReconnecting = false;
+      this.logger.info(`===== WiFi自动重连流程结束 =====`);
     }
   }
 

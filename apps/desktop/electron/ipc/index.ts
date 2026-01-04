@@ -22,6 +22,7 @@ import { registerAutoLaunchIPC } from './auto-launch';
 import { registerNotificationIPC } from './notification';
 import { registerUpdaterIPC } from './updater';
 import { AutoReconnectService } from '../services/auto-reconnect';
+import { WifiSwitcherService } from '../services/wifi-switcher';
 
 export { registerTrayIPC, registerAutoLaunchIPC, registerNotificationIPC, registerUpdaterIPC };
 
@@ -42,14 +43,14 @@ export interface AppServices {
 /**
  * 注册所有 IPC 处理器
  */
-export function registerAllIPC(services: AppServices): void {
+export function registerAllIPC(services: AppServices, wifiSwitcherService?: WifiSwitcherService): void {
   const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
     services;
 
   registerAuthIPC(authService, configManager, accountManager, logger);
   registerConfigIPC(configManager, logger);
   registerAccountIPC(accountManager, logger);
-  registerWifiIPC(wifiManager, logger);
+  registerWifiIPC(wifiManager, logger, wifiSwitcherService);
   registerNetworkIPC(networkDetector, logger);
   registerLogIPC(logger);
 
