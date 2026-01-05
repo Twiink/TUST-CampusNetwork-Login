@@ -414,28 +414,54 @@ export class WifiEventListener {
 
   /**
    * macOS: 快速获取 SSID
+   * 优先使用 airport 命令（更可靠），备用 networksetup
    */
   private async getMacOSSsid(): Promise<string | null> {
     try {
-      // 优先使用 networksetup（速度快）
-      const { stdout } = await execAsync('networksetup -getairportnetwork en0', {
-        timeout: 2000,
-      });
+      // 方法1: 使用 airport 命令（更可靠）
+      const airportPath = '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport';
+      try {
+        const { stdout } = await execAsync(`${airportPath} -I`, {
+          timeout: 2000,
+        });
 
-      const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
-      if (match && match[1]) {
-        const ssid = match[1].trim();
-        this.logger.debug(`[WiFi检测] 获取到SSID: ${ssid}`);
-        return ssid;
+        // 解析 airport 输出，查找 SSID
+        const ssidMatch = stdout.match(/^\s*SSID:\s*(.+)$/m);
+        if (ssidMatch && ssidMatch[1] && ssidMatch[1].trim() !== '') {
+          const ssid = ssidMatch[1].trim();
+          this.logger.debug(`[WiFi检测] airport获取到SSID: ${ssid}`);
+          return ssid;
+        }
+      } catch (airportError) {
+        // airport 失败，继续尝试其他方法
+        const errorMsg = airportError instanceof Error ? airportError.message : String(airportError);
+        this.logger.debug(`[WiFi检测] airport命令失败: ${errorMsg}`);
       }
 
-      // 如果没有匹配到，说明未连接WiFi，记录原始输出
-      this.logger.debug(`[WiFi检测] 未连接WiFi，networksetup输出: ${stdout.trim()}`);
-      return null;
+      // 方法2: 使用 networksetup 作为备用
+      try {
+        const { stdout } = await execAsync('networksetup -getairportnetwork en0', {
+          timeout: 2000,
+        });
+
+        const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
+        if (match && match[1]) {
+          const ssid = match[1].trim();
+          this.logger.debug(`[WiFi检测] networksetup获取到SSID: ${ssid}`);
+          return ssid;
+        }
+
+        // 如果没有匹配到，说明未连接WiFi
+        this.logger.debug(`[WiFi检测] 未连接WiFi，networksetup输出: ${stdout.trim()}`);
+        return null;
+      } catch (nsError) {
+        const errorMsg = nsError instanceof Error ? nsError.message : String(nsError);
+        this.logger.debug(`[WiFi检测] networksetup命令也失败: ${errorMsg}`);
+        return null;
+      }
     } catch (error) {
-      // networksetup失败，记录错误
       const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.debug(`[WiFi检测] networksetup命令失败: ${errorMsg}`);
+      this.logger.debug(`[WiFi检测] 获取SSID异常: ${errorMsg}`);
       return null;
     }
   }

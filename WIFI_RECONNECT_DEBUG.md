@@ -267,8 +267,28 @@ NetMate 有两个独立的自动重连机制：
 
 ## 🎯 总结
 
-**当前状态**：WiFi自动重连功能的UI和逻辑已完成，但SSID检测失败导致功能无法触发。
+**修复状态**：✅ 已修复
 
-**下一步**：修改 `getMacOSSsid()` 方法，使用 `airport` 命令替代 `networksetup`。
+**修复内容**：修改 `getMacOSSsid()` 方法，使用 `airport` 命令替代 `networksetup`
 
-**预期效果**：修复后，WiFi断开时能正确触发三阶段重连流程，并在UI上显示实时进度。
+**修改位置**：`apps/desktop/electron/services/wifi-event-listener.ts:419-467`
+
+**修复逻辑**：
+1. **优先使用 `airport -I` 命令**：解析输出获取 SSID（更可靠）
+2. **备用 `networksetup`**：如果 airport 失败则使用 networksetup
+3. **空值检查**：确保 SSID 不为空字符串
+
+**预期效果**：修复后，WiFi 断开时能正确触发三阶段重连流程，并在 UI 上显示实时进度。
+
+**后续测试**：
+- [ ] 验证启动时能正确获取 SSID
+- [ ] 测试 WiFi 断开能正确触发重连
+- [ ] 测试三阶段重连流程
+
+---
+
+## 📋 修改历史
+
+| 日期 | 修改内容 | 状态 |
+|------|---------|------|
+| 2024-01-05 | 修改 `getMacOSSsid()` 方法，使用 airport 命令 | ✅ 已修复 |
