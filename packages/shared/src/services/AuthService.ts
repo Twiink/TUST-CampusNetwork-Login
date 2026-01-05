@@ -11,13 +11,14 @@ import { DEFAULT_SERVER_URL } from '../constants/defaults';
 import { ErrorCode, AppError } from '../constants/errors';
 
 /**
- * ISP 到账号前缀的映射
+ * ISP 到账号后缀的映射
+ * 注意：根据抓包结果，运营商后缀为 unicom/cmcc/telecom
  */
-const ISP_PREFIX_MAP: Record<ISP, string> = {
-  campus: '', // 校园网无前缀
-  cmcc: '@cmcc', // 中国移动
-  cucc: '@cucc', // 中国联通
-  ctcc: '@ctcc', // 中国电信
+const ISP_SUFFIX_MAP: Record<string, string> = {
+  campus: '',       // 校园网无后缀
+  cmcc: '@cmcc',    // 中国移动
+  unicom: '@unicom', // 中国联通 (抓包显示)
+  telecom: '@telecom', // 中国电信 (抓包显示)
 };
 
 /**
@@ -48,21 +49,25 @@ export class AuthService {
   }
 
   /**
-   * 构建用户账号 (添加 ISP 前缀)
+   * 构建用户账号
+   * 格式: ",0{学号}@{运营商后缀}"
+   * 根据抓包结果，账号格式为: ,023103421 (校园网) 或 ,023103421@unicom (联通)
    */
   private buildUserAccount(username: string, isp: ISP): string {
-    const prefix = ISP_PREFIX_MAP[isp] || '';
-    return username + prefix;
+    const suffix = ISP_SUFFIX_MAP[isp] || '';
+    // 添加 ",0" 前缀
+    return `,0${username}${suffix}`;
   }
 
   /**
    * 构建登录 URL
+   * 根据抓包结果，callback 为 dr1005
    */
   buildLoginUrl(config: LoginConfig): string {
     const userAccount = this.buildUserAccount(config.userAccount, config.isp);
 
     const params: Record<string, string | number> = {
-      callback: 'dr1009',
+      callback: 'dr1005', // 抓包结果显示为 dr1005
       login_method: 1,
       user_account: userAccount,
       user_password: config.userPassword,
@@ -89,14 +94,15 @@ export class AuthService {
 
   /**
    * 解析登录响应
+   * 响应格式: dr1005({"result":0,"msg":"...","ret_code":2})
+   * 根据抓包结果，ret_code=0 或 1 表示失败，ret_code=2 表示已在线
    */
   parseLoginResponse(response: string): LoginResult {
-    // 响应格式: dr1009({"result":1,"msg":"Portal协议认证成功！"})
-    // 或者: dr1009({"result":0,"msg":"用户名或密码错误"})
+    // 响应格式: dr1005({"result":0,"msg":"用户名或密码错误","ret_code":1})
 
     try {
       // 提取 JSON 部分
-      const jsonMatch = response.match(/dr1009\((.*)\)/);
+      const jsonMatch = response.match(/dr1005\((.*)\)/);
       if (!jsonMatch || !jsonMatch[1]) {
         return {
           success: false,
@@ -106,12 +112,14 @@ export class AuthService {
       }
 
       const data = JSON.parse(jsonMatch[1]);
-      const success = data.result === 1 || data.result === '1';
+      // 根据抓包结果：ret_code=0 成功，ret_code=1 失败，ret_code=2 已在线
+      const retCode = data.ret_code;
+      const isSuccess = retCode === 0 || retCode === 2;
 
       return {
-        success,
-        message: data.msg || (success ? '登录成功' : '登录失败'),
-        code: data.result,
+        success: isSuccess,
+        message: data.msg || (isSuccess ? '登录成功' : '登录失败'),
+        code: retCode,
         rawResponse: response,
       };
     } catch {
@@ -130,7 +138,7 @@ export class AuthService {
     const userAccount = this.buildUserAccount(config.userAccount, config.isp);
     const ispName = config.isp === 'campus' ? '校园网' :
                     config.isp === 'cmcc' ? '中国移动' :
-                    config.isp === 'cucc' ? '中国联通' : '中国电信';
+                    config.isp === 'unicom' ? '中国联通' : '中国电信';
 
     this.logger?.info(`开始登录认证`, {
       用户: userAccount,
@@ -174,7 +182,7 @@ export class AuthService {
    */
   buildLogoutUrl(wlanUserIp: string): string {
     const params: Record<string, string | number> = {
-      callback: 'dr1009',
+      callback: 'dr1005', // 抓包结果显示为 dr1005
       wlan_user_ip: wlanUserIp,
       wlan_user_mac: '000000000000',
       v: Date.now(),

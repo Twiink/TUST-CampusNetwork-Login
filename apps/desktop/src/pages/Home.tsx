@@ -1856,11 +1856,25 @@ export const Home: React.FC = () => {
               borderRadius: 'var(--radius-md)',
               padding: 16,
               textAlign: 'left',
+              marginBottom: 16,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
             }}
           >
-            <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              此 WiFi 已配置为&quot;无需认证&quot;（如家庭 WiFi、手机热点等）
-            </p>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+                此 WiFi 已配置为"无需认证"
+              </p>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                如家庭 WiFi、手机热点等网络
+              </p>
+            </div>
+            <button className="btn btn-danger" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={logout}>
+              <LogOut size={16} style={{ marginRight: 6 }} />
+              断开连接
+            </button>
           </div>
         </div>
       </div>
@@ -2179,93 +2193,58 @@ export const Home: React.FC = () => {
         运行状态
       </h1>
 
-      {/* 网络状态卡片 */}
+      {/* WiFi 基础信息 */}
       <div className="card">
         <h3>
           <Wifi size={18} style={{ marginRight: 8 }} />
-          网络状态
+          当前 WiFi
         </h3>
+        <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+      </div>
 
-        {/* WiFi 连接信息 */}
+      {/* 需要认证提示 */}
+      <div className="card" style={{ textAlign: 'center', padding: '40px 20px' }}>
+        <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
+        <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>需要认证</h2>
+        <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+          当前 WiFi 需要校园网认证，请点击下方按钮进行认证。
+        </p>
         <div
           style={{
-            backgroundColor: wifiConnected ? 'rgba(14, 165, 233, 0.05)' : 'rgba(239, 68, 68, 0.05)',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            border: '1px solid rgba(245, 158, 11, 0.3)',
             borderRadius: 'var(--radius-md)',
-            padding: 12,
+            padding: 16,
+            textAlign: 'left',
             marginBottom: 16,
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'space-between',
+            gap: 16,
           }}
         >
-          {wifiConnected ? (
-            <>
-              <Wifi size={16} color="var(--primary-color)" />
-              <span style={{ color: 'var(--text-secondary)' }}>当前 WiFi:</span>
-              <strong style={{ color: 'var(--text-primary)' }}>{wifiSSID}</strong>
-            </>
-          ) : (
-            <>
-              <WifiOff size={16} color="#ef4444" />
-              <span style={{ color: '#ef4444' }}>未连接 WiFi</span>
-            </>
-          )}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            padding: '20px 0',
-          }}
-        >
-          {getStatusIcon()}
-          <div
-            style={{
-              marginTop: 16,
-              fontSize: '1.5rem',
-              fontWeight: 600,
-              color: getStatusColor(),
-            }}
-          >
-            {getStatusText(networkStatus)}
+          <div style={{ flex: 1 }}>
+            <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              此 WiFi 已配置为"需要认证"
+            </p>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              如校园网 CMCC/CUCC/CTCC
+            </p>
           </div>
-        </div>
-
-        {networkStatus === 'connected' && (
-          <div
-            style={{
-              backgroundColor: 'rgba(34, 197, 94, 0.1)',
-              borderRadius: 'var(--radius-md)',
-              padding: 16,
-              marginBottom: 20,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Globe size={16} color="#22c55e" />
-              <span style={{ color: 'var(--text-secondary)' }}>IP 地址:</span>
-              <strong style={{ color: '#22c55e' }}>{ipAddress}</strong>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 12 }}>
           {networkStatus === 'disconnected' ? (
-            <button className="btn btn-primary" style={{ flex: 1 }} onClick={login}>
+            <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={login}>
               <LogIn size={16} style={{ marginRight: 6 }} />
               立即连接
             </button>
           ) : networkStatus === 'connected' ? (
-            <button className="btn btn-danger" style={{ flex: 1 }} onClick={logout}>
+            <button className="btn btn-danger" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={logout}>
               <LogOut size={16} style={{ marginRight: 6 }} />
               断开连接
             </button>
           ) : (
-            <button className="btn btn-primary" style={{ flex: 1 }} disabled>
+            <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} disabled>
               <Loader size={16} style={{ marginRight: 6 }} className="spin" />
-              正在尝试连接...
+              正在认证...
             </button>
           )}
         </div>
@@ -2493,55 +2472,6 @@ export const Home: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* 当前账号卡片 */}
-      <div className="card">
-        <h3>
-          <User size={18} style={{ marginRight: 8 }} />
-          当前账号
-        </h3>
-        <div
-          style={{
-            backgroundColor: 'rgba(14, 165, 233, 0.05)',
-            borderRadius: 'var(--radius-md)',
-            padding: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <User size={16} color="var(--primary-color)" />
-            <strong>{linkedAccount.username}</strong>
-            <span
-              style={{
-                fontSize: '0.75rem',
-                backgroundColor: '#e0f2fe',
-                color: '#0369a1',
-                padding: '2px 8px',
-                borderRadius: '12px',
-              }}
-            >
-              {linkedAccount.isp === 'campus'
-                ? '校园网'
-                : linkedAccount.isp === 'cmcc'
-                  ? '中国移动'
-                  : linkedAccount.isp === 'cucc'
-                    ? '中国联通'
-                    : '中国电信'}
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              color: 'var(--text-secondary)',
-              fontSize: '0.9rem',
-            }}
-          >
-            <Server size={14} />
-            <span>{linkedAccount.serverUrl}</span>
-          </div>
-        </div>
-      </div>
 
       {/* WiFi 切换卡片 */}
       {config && (

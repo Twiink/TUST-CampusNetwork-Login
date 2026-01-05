@@ -16,11 +16,11 @@ import { AccountConfig, WifiConfig, ISP } from '@repo/shared';
 /* eslint-disable react-native/no-inline-styles */
 // Inline styles are necessary in this file for dynamic theming based on theme context
 
-const ISP_OPTIONS: { value: ISP; label: string }[] = [
+const ISP_OPTIONS: { value: ISP; label: string; disabled?: boolean }[] = [
   { value: 'campus', label: '校园网' },
-  { value: 'cmcc', label: '中国移动' },
-  { value: 'cucc', label: '中国联通' },
-  { value: 'ctcc', label: '中国电信' },
+  { value: 'cmcc', label: '中国移动', disabled: true }, // 暂不可用
+  { value: 'unicom', label: '中国联通' },
+  { value: 'telecom', label: '中国电信', disabled: true }, // 暂不可用
 ];
 
 // 根据优先级返回对应的颜色

@@ -43,7 +43,7 @@ export function validateAccountConfig(config: Partial<AccountConfig>): Validatio
     }
   }
 
-  const validIsps: ISP[] = ['campus', 'cmcc', 'cucc', 'ctcc'];
+  const validIsps: ISP[] = ['campus', 'cmcc', 'unicom', 'telecom'];
   if (config.isp && !validIsps.includes(config.isp)) {
     errors.push('无效的服务商类型');
   }

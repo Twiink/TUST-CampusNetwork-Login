@@ -1,4 +1,4 @@
-export type ISP = 'campus' | 'cmcc' | 'cucc' | 'ctcc'; // 校园网, 中国移动, 中国联通, 中国电信
+export type ISP = 'campus' | 'cmcc' | 'unicom' | 'telecom'; // 校园网, 中国移动, 中国联通, 中国电信
 
 export interface AccountConfig {
   id: string;

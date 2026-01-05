@@ -18,13 +18,14 @@ import {
   RotateCcw,
   Link,
   Star,
+  AlertCircle,
 } from 'lucide-react';
 
-const ISP_OPTIONS: { value: ISP; label: string }[] = [
+const ISP_OPTIONS: { value: ISP; label: string; disabled?: boolean }[] = [
   { value: 'campus', label: '校园网' },
-  { value: 'cmcc', label: '中国移动' },
-  { value: 'cucc', label: '中国联通' },
-  { value: 'ctcc', label: '中国电信' },
+  { value: 'cmcc', label: '中国移动', disabled: true }, // 暂不可用
+  { value: 'unicom', label: '中国联通' },
+  { value: 'telecom', label: '中国电信', disabled: true }, // 暂不可用
 ];
 
 // 根据优先级返回对应的颜色
@@ -415,7 +416,7 @@ export const Settings: React.FC = () => {
                 {ISP_OPTIONS.map((opt) => (
                   <div
                     key={opt.value}
-                    onClick={() => setNewAccount({ ...newAccount, isp: opt.value })}
+                    onClick={() => !opt.disabled && setNewAccount({ ...newAccount, isp: opt.value })}
                     style={{
                       padding: '12px',
                       textAlign: 'center',
@@ -428,17 +429,55 @@ export const Settings: React.FC = () => {
                       background:
                         newAccount.isp === opt.value
                           ? 'rgba(14, 165, 233, 0.1)'
-                          : 'rgba(255, 255, 255, 0.4)',
+                          : opt.disabled
+                            ? 'rgba(0, 0, 0, 0.02)'
+                            : 'rgba(255, 255, 255, 0.4)',
                       color:
-                        newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--text-color)',
-                      cursor: 'pointer',
+                        newAccount.isp === opt.value
+                          ? 'var(--primary-color)'
+                          : opt.disabled
+                            ? 'var(--text-secondary)'
+                            : 'var(--text-color)',
+                      cursor: opt.disabled ? 'not-allowed' : 'pointer',
                       fontWeight: newAccount.isp === opt.value ? '600' : '500',
                       transition: 'all 0.2s ease',
+                      opacity: opt.disabled ? 0.6 : 1,
+                      position: 'relative',
                     }}
+                    title={opt.disabled ? '该运营商暂不可用' : undefined}
                   >
                     {opt.label}
+                    {opt.disabled && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          fontSize: '0.65rem',
+                          backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                          color: '#92400e',
+                          padding: '1px 4px',
+                          borderRadius: '4px',
+                        }}
+                      >
+                        暂不可用
+                      </span>
+                    )}
                   </div>
                 ))}
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: '0.8rem',
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                <AlertCircle size={12} />
+                <span>部分运营商暂不可用，后续更新将陆续开放</span>
               </div>
             </div>
             <div className="form-group">
