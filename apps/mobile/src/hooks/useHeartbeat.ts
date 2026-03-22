@@ -40,6 +40,7 @@ export interface UseHeartbeatResult {
 const defaultStatus: NetworkStatus = {
   connected: false,
   authenticated: false,
+  wifiConnected: false,
 };
 
 /**
@@ -86,7 +87,11 @@ export function useHeartbeat(options: UseHeartbeatOptions = {}): UseHeartbeatRes
       prevStatusRef.current = newStatus;
       return newStatus;
     } catch {
-      const errorStatus = { connected: false, authenticated: false };
+      const errorStatus: NetworkStatus = {
+        connected: false,
+        authenticated: false,
+        wifiConnected: false,
+      };
       setStatus(errorStatus);
 
       if (prevStatusRef.current.connected) {

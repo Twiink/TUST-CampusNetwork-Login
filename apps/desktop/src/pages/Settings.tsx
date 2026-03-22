@@ -18,14 +18,13 @@ import {
   RotateCcw,
   Link,
   Star,
-  AlertCircle,
 } from 'lucide-react';
 
-const ISP_OPTIONS: { value: ISP; label: string; disabled?: boolean }[] = [
+const ISP_OPTIONS: { value: ISP; label: string }[] = [
   { value: 'campus', label: '校园网' },
-  { value: 'cmcc', label: '中国移动', disabled: true }, // 暂不可用
-  { value: 'unicom', label: '中国联通' },
-  { value: 'telecom', label: '中国电信', disabled: true }, // 暂不可用
+  { value: 'cmcc', label: '中国移动' },
+  { value: 'cucc', label: '中国联通' },
+  { value: 'ctcc', label: '中国电信' },
 ];
 
 // 根据优先级返回对应的颜色
@@ -55,12 +54,14 @@ export const Settings: React.FC = () => {
     ssid: string;
     password: string;
     requiresAuth: boolean;
+    autoConnect: boolean;
     linkedAccountId: string;
     priority: number;
   }>({
     ssid: '',
     password: '',
     requiresAuth: true,
+    autoConnect: true,
     linkedAccountId: '',
     priority: 10,
   });
@@ -123,7 +124,7 @@ export const Settings: React.FC = () => {
       id: Date.now().toString(),
       ssid: newWifi.ssid,
       password: newWifi.password,
-      autoConnect: true,
+      autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
       priority: newWifi.priority,
@@ -133,7 +134,7 @@ export const Settings: React.FC = () => {
       ...config,
       wifiList: [...config.wifiList, wifi],
     });
-    setNewWifi({ ssid: '', password: '', requiresAuth: true, linkedAccountId: '', priority: 10 });
+    setNewWifi({ ssid: '', password: '', requiresAuth: true, autoConnect: true, linkedAccountId: '', priority: 10 });
   };
 
   const handleRemoveWifi = (id: string) => {
@@ -279,7 +280,7 @@ export const Settings: React.FC = () => {
                 type="number"
                 className="form-control"
                 value={config.settings.maxRetries}
-                min={0}
+                min={1}
                 max={10}
                 onWheel={(e) => e.currentTarget.blur()}
                 onChange={(e) => handleSettingChange('maxRetries', parseInt(e.target.value) || 3)}
@@ -416,7 +417,7 @@ export const Settings: React.FC = () => {
                 {ISP_OPTIONS.map((opt) => (
                   <div
                     key={opt.value}
-                    onClick={() => !opt.disabled && setNewAccount({ ...newAccount, isp: opt.value })}
+                    onClick={() => setNewAccount({ ...newAccount, isp: opt.value })}
                     style={{
                       padding: '12px',
                       textAlign: 'center',
@@ -429,55 +430,19 @@ export const Settings: React.FC = () => {
                       background:
                         newAccount.isp === opt.value
                           ? 'rgba(14, 165, 233, 0.1)'
-                          : opt.disabled
-                            ? 'rgba(0, 0, 0, 0.02)'
-                            : 'rgba(255, 255, 255, 0.4)',
+                          : 'rgba(255, 255, 255, 0.4)',
                       color:
                         newAccount.isp === opt.value
                           ? 'var(--primary-color)'
-                          : opt.disabled
-                            ? 'var(--text-secondary)'
-                            : 'var(--text-color)',
-                      cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                          : 'var(--text-color)',
+                      cursor: 'pointer',
                       fontWeight: newAccount.isp === opt.value ? '600' : '500',
                       transition: 'all 0.2s ease',
-                      opacity: opt.disabled ? 0.6 : 1,
-                      position: 'relative',
                     }}
-                    title={opt.disabled ? '该运营商暂不可用' : undefined}
                   >
                     {opt.label}
-                    {opt.disabled && (
-                      <span
-                        style={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4,
-                          fontSize: '0.65rem',
-                          backgroundColor: 'rgba(245, 158, 11, 0.2)',
-                          color: '#92400e',
-                          padding: '1px 4px',
-                          borderRadius: '4px',
-                        }}
-                      >
-                        暂不可用
-                      </span>
-                    )}
                   </div>
                 ))}
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: '0.8rem',
-                  color: 'var(--text-secondary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                <AlertCircle size={12} />
-                <span>部分运营商暂不可用，后续更新将陆续开放</span>
               </div>
             </div>
             <div className="form-group">
@@ -699,6 +664,20 @@ export const Settings: React.FC = () => {
                 <Server size={16} style={{ marginRight: 6 }} /> 需要校园网认证
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 8 }}>
                   (关闭则视为家庭/热点网络)
+                </span>
+              </label>
+            </div>
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  style={{ marginRight: 10, width: 18, height: 18 }}
+                  checked={newWifi.autoConnect}
+                  onChange={(e) => setNewWifi({ ...newWifi, autoConnect: e.target.checked })}
+                />
+                <RefreshCw size={16} style={{ marginRight: 6 }} /> 断开后自动重连
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginLeft: 8 }}>
+                  (关闭后需手动连接此 WiFi)
                 </span>
               </label>
             </div>

@@ -6,7 +6,7 @@ import type { LoginConfig, LoginResult, LogoutResult } from '../types/auth';
 import type { ISP } from '../types/config';
 import type { Logger } from '../models/Logger';
 import { httpGet, HttpError } from '../utils/httpClient';
-import { urlencode, buildQueryString } from '../utils/urlEncode';
+import { buildQueryString } from '../utils/urlEncode';
 import { DEFAULT_SERVER_URL } from '../constants/defaults';
 import { ErrorCode, AppError } from '../constants/errors';
 
@@ -17,8 +17,8 @@ import { ErrorCode, AppError } from '../constants/errors';
 const ISP_SUFFIX_MAP: Record<string, string> = {
   campus: '',       // 校园网无后缀
   cmcc: '@cmcc',    // 中国移动
-  unicom: '@unicom', // 中国联通 (抓包显示)
-  telecom: '@telecom', // 中国电信 (抓包显示)
+  cucc: '@unicom',  // 中国联通 (抓包显示后缀为 unicom)
+  ctcc: '@telecom', // 中国电信 (抓包显示后缀为 telecom)
 };
 
 /**
@@ -55,8 +55,8 @@ export class AuthService {
    */
   private buildUserAccount(username: string, isp: ISP): string {
     const suffix = ISP_SUFFIX_MAP[isp] || '';
-    // 添加 ",0" 前缀
-    return `,0${username}${suffix}`;
+    // 添加 ",0," 前缀（抓包格式: %2C0%2C23103421 = ,0,23103421）
+    return `,0,${username}${suffix}`;
   }
 
   /**
@@ -73,17 +73,17 @@ export class AuthService {
       user_password: config.userPassword,
       wlan_user_ip: config.wlanUserIp,
       wlan_user_mac: config.wlanUserMac || '000000000000',
-      wlan_ac_ip: '10.10.102.49',
+      wlan_ac_ip: '',
       wlan_ac_name: '',
       jsVersion: '4.1.3',
-      terminal_type: 3,
+      terminal_type: 1,
       lang: 'zh-cn',
       v: Date.now(),
     };
 
-    // 添加 IPv6 (需要编码)
+    // 添加 IPv6（buildQueryString 会自动 URL 编码，无需手动处理）
     if (config.wlanUserIpv6) {
-      params.wlan_user_ipv6 = urlencode(config.wlanUserIpv6);
+      params.wlan_user_ipv6 = config.wlanUserIpv6;
     }
 
     const serverUrl = config.serverUrl || this.serverUrl;
@@ -138,7 +138,7 @@ export class AuthService {
     const userAccount = this.buildUserAccount(config.userAccount, config.isp);
     const ispName = config.isp === 'campus' ? '校园网' :
                     config.isp === 'cmcc' ? '中国移动' :
-                    config.isp === 'unicom' ? '中国联通' : '中国电信';
+                    config.isp === 'cucc' ? '中国联通' : '中国电信';
 
     this.logger?.info(`开始登录认证`, {
       用户: userAccount,
@@ -207,8 +207,22 @@ export class AuthService {
 
       const response = await httpGet<string>(url, { timeout: 10000 });
 
-      // 简单判断登出是否成功
-      const success = response.rawText.includes('result":1') || response.rawText.includes('成功');
+      // 解析 JSONP 响应判断登出结果
+      // 协议：result=0 表示请求被接受，ret_code=0 或无 ret_code 表示成功
+      const jsonMatch = response.rawText.match(/dr1005\((.*)\)/);
+      let success = false;
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          const data = JSON.parse(jsonMatch[1]);
+          // result=0 且无错误码，或 ret_code=0 视为成功
+          success = data.result === 0 && data.ret_code !== 1;
+        } catch {
+          // 解析失败，回退到文本匹配
+          success = response.rawText.includes('"result":0');
+        }
+      } else {
+        success = response.rawText.includes('成功');
+      }
 
       if (success) {
         this.logger?.success(`登出成功`, { IP: wlanUserIp });

@@ -87,4 +87,8 @@ export const IPC_EVENTS = {
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   // 更新状态变化
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
+  // WiFi 自动重连进度
+  WIFI_RECONNECT_PROGRESS: 'event:wifi:reconnectProgress',
+  // 所有 WiFi 重连失败
+  WIFI_ALL_RECONNECTS_FAILED: 'event:wifi:allReconnectsFailed',
 } as const;

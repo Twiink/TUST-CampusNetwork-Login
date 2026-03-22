@@ -6,6 +6,7 @@
 import {
   AuthService,
   AccountManager,
+  WifiManager,
   NetworkStatus,
   createRetryPolicy,
   createLogger,
@@ -41,6 +42,7 @@ export interface AutoReconnectCallbacks {
 export class AutoReconnectService {
   private authService: AuthService;
   private accountManager: AccountManager;
+  private wifiManager: WifiManager | null;
   private logger: ReturnType<typeof createLogger>;
   private options: AutoReconnectOptions;
   private callbacks: AutoReconnectCallbacks;
@@ -52,10 +54,12 @@ export class AutoReconnectService {
     accountManager: AccountManager,
     logger: ReturnType<typeof createLogger>,
     options: Partial<AutoReconnectOptions> = {},
-    callbacks: AutoReconnectCallbacks = {}
+    callbacks: AutoReconnectCallbacks = {},
+    wifiManager?: WifiManager
   ) {
     this.authService = authService;
     this.accountManager = accountManager;
+    this.wifiManager = wifiManager || null;
     this.logger = logger;
     this.options = {
       enabled: true,
@@ -83,22 +87,39 @@ export class AutoReconnectService {
       WiFi名称: status.ssid || '无',
     });
 
-    this.lastStatus = status;
-
     // 如果未启用自动重连，或者正在重连中，则跳过
     if (!this.options.enabled) {
       this.logger.debug('自动重连已禁用，跳过检测');
+      this.lastStatus = status;
       return;
     }
 
     if (this.isReconnecting) {
       this.logger.debug('自动重连正在进行中，跳过本次检测');
+      this.lastStatus = status;
       return;
     }
 
-    // 如果之前是连接状态，现在断开了，触发重连
-    if (wasConnected && isDisconnected) {
+    // 触发重连的两种场景：
+    // 1. 之前已连接，现在断开（正常掉线）
+    // 2. 首次检测（lastStatus 为 null）且当前已断开（冷启动时网络不通）
+    const isFirstCheck = this.lastStatus === null;
+    const shouldReconnect = (wasConnected && isDisconnected) || (isFirstCheck && isDisconnected);
+
+    this.lastStatus = status;
+
+    if (shouldReconnect) {
+      // 需求 §2.4.4：校园网认证断线重连仅针对需要认证的 WiFi
+      // 若当前 WiFi 不需要认证（家庭WiFi、手机热点），跳过认证重连
+      if (!status.requiresAuth) {
+        this.logger.debug('当前 WiFi 无需校园网认证，跳过认证重连', {
+          ssid: status.ssid || '未知',
+        });
+        return;
+      }
+
       this.logger.warn('检测到网络断开，启动自动重连', {
+        触发原因: isFirstCheck ? '冷启动检测' : '连接状态变化',
         最大重试次数: this.options.maxRetries,
         初始延迟: `${this.options.initialDelay}ms`,
       });
@@ -110,7 +131,27 @@ export class AutoReconnectService {
    * 尝试重连
    */
   private async attemptReconnect(): Promise<void> {
-    const currentAccount = this.accountManager.getCurrentAccount();
+    // 优先使用当前 WiFi 关联的账号（linkedAccountId），回退到全局当前账号
+    let currentAccount = this.accountManager.getCurrentAccount();
+
+    if (this.lastStatus?.ssid && this.wifiManager) {
+      const wifiConfig = this.wifiManager.getWifiBySsid(this.lastStatus.ssid);
+      if (wifiConfig?.linkedAccountId) {
+        const linkedAccount = this.accountManager.getAccountById(wifiConfig.linkedAccountId);
+        if (linkedAccount) {
+          this.logger.info('使用 WiFi 关联账号进行重连', {
+            WiFi: this.lastStatus.ssid,
+            关联账号: linkedAccount.username,
+          });
+          currentAccount = linkedAccount;
+        } else {
+          this.logger.warn('WiFi 关联的账号不存在，使用当前账号', {
+            linkedAccountId: wifiConfig.linkedAccountId,
+          });
+        }
+      }
+    }
+
     if (!currentAccount) {
       this.logger.warn('自动重连失败：未配置账户');
       return;
@@ -261,7 +302,8 @@ export function createAutoReconnectService(
   accountManager: AccountManager,
   logger: ReturnType<typeof createLogger>,
   options?: Partial<AutoReconnectOptions>,
-  callbacks?: AutoReconnectCallbacks
+  callbacks?: AutoReconnectCallbacks,
+  wifiManager?: WifiManager
 ): AutoReconnectService {
-  return new AutoReconnectService(authService, accountManager, logger, options, callbacks);
+  return new AutoReconnectService(authService, accountManager, logger, options, callbacks, wifiManager);
 }

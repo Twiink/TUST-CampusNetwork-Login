@@ -63,9 +63,9 @@ export function useAutoReconnect(options: UseAutoReconnectOptions): UseAutoRecon
   const retryPolicyRef = useRef(
     createRetryPolicy({
       maxRetries,
-      initialDelay,
+      delay: initialDelay,
       maxDelay,
-      backoffMultiplier: 2,
+      backoff: 'exponential',
     })
   );
 
@@ -73,9 +73,9 @@ export function useAutoReconnect(options: UseAutoReconnectOptions): UseAutoRecon
   useEffect(() => {
     retryPolicyRef.current = createRetryPolicy({
       maxRetries,
-      initialDelay,
+      delay: initialDelay,
       maxDelay,
-      backoffMultiplier: 2,
+      backoff: 'exponential',
     });
   }, [maxRetries, initialDelay, maxDelay]);
 
@@ -83,7 +83,6 @@ export function useAutoReconnect(options: UseAutoReconnectOptions): UseAutoRecon
     setCurrentAttempt(0);
     setIsExhausted(false);
     setIsReconnecting(false);
-    retryPolicyRef.current.reset();
   }, []);
 
   const triggerReconnect = useCallback(async (): Promise<boolean> => {
@@ -115,9 +114,9 @@ export function useAutoReconnect(options: UseAutoReconnectOptions): UseAutoRecon
       }
 
       if (!success && attempt < maxRetries) {
-        // 等待一段时间后重试
-        const delay = retryPolicyRef.current.getNextDelay();
-        await new Promise(resolve => setTimeout(resolve, delay));
+        // 等待一段时间后重试（指数退避）
+        const delay = Math.min(initialDelay * Math.pow(2, attempt - 1), maxDelay);
+        await new Promise<void>(resolve => setTimeout(() => resolve(), delay));
       }
     }
 

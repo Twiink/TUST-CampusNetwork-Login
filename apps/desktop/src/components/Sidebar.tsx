@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, Settings, FileText, Wifi } from 'lucide-react';
+import { Globe, Settings, FileText, Wifi, Info } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useApp } from '../context/AppContext';
 
@@ -37,6 +37,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
       >
         <FileText size={18} style={{ marginRight: 10 }} />
         运行日志
+      </div>
+      <div
+        className={`nav-item ${activeTab === 'about' ? 'active' : ''}`}
+        onClick={() => onTabChange('about')}
+      >
+        <Info size={18} style={{ marginRight: 10 }} />
+        关于
       </div>
 
       <div

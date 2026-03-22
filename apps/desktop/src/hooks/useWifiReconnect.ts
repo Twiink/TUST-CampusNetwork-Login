@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { IPC_EVENTS } from '../types/electron';
 import type {
   WifiReconnectProgress,
   WifiAllReconnectsFailed,
@@ -34,7 +35,7 @@ export function useWifiReconnect() {
   useEffect(() => {
     // 监听 WiFi 重连进度事件
     const unsubscribeProgress = window.electronAPI.on(
-      'event:wifi:reconnectProgress',
+      IPC_EVENTS.WIFI_RECONNECT_PROGRESS,
       (...args: unknown[]) => {
         const progress = args[0] as WifiReconnectProgress;
         console.log('[useWifiReconnect] 收到重连进度:', progress);
@@ -71,7 +72,7 @@ export function useWifiReconnect() {
 
     // 监听所有 WiFi 重连失败事件
     const unsubscribeFailed = window.electronAPI.on(
-      'event:wifi:allReconnectsFailed',
+      IPC_EVENTS.WIFI_ALL_RECONNECTS_FAILED,
       (...args: unknown[]) => {
         const failed = args[0] as WifiAllReconnectsFailed;
         console.log('[useWifiReconnect] 所有WiFi重连失败:', failed);

@@ -362,7 +362,8 @@ app.whenReady().then(async () => {
             message: `正在重连 (第 ${attempt}/${maxAttempts} 次)`,
           });
         },
-      }
+      },
+      services.wifiManager
     );
 
     // 启动后台服务（带自动重连和心跳检测设置）

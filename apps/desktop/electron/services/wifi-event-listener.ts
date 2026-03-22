@@ -14,11 +14,12 @@ import { promisify } from 'node:util';
 import { BrowserWindow } from 'electron';
 import type { NetworkDetector, Logger, WifiManager, ConfigManager } from '@repo/shared';
 import type { WifiSwitcherService } from './wifi-switcher';
+import { IPC_EVENTS } from '../ipc/channels';
 
 const execAsync = promisify(exec);
 
 export interface WifiEventListenerOptions {
-  /** 检测间隔（毫秒），默认 3000ms (3秒) */
+  /** 检测间隔（毫秒），默认 1000ms (1秒) */
   checkInterval?: number;
   /** 网络检测器实例 */
   networkDetector: NetworkDetector;
@@ -80,7 +81,7 @@ export class WifiEventListener {
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
-    this.checkInterval = options.checkInterval || 3000;
+    this.checkInterval = options.checkInterval || 1000;
     this.networkDetector = options.networkDetector;
     this.logger = options.logger;
     this.window = options.window;
@@ -216,6 +217,10 @@ export class WifiEventListener {
     // 获取最大重试次数（默认3次）
     const maxRetries = this.configManager?.getConfig()?.settings.maxRetries || 3;
     this.logger.info(`最大重试次数: ${maxRetries}`);
+
+    // 等待硬件重置（WiFi刚断开时立即尝试连接可能会失败）
+    this.logger.info('等待WiFi硬件重置...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // 获取所有启用自动重连的WiFi，按优先级排序
     const allWifiConfigs = this.wifiManager.getWifiConfigs()
@@ -355,6 +360,22 @@ export class WifiEventListener {
       }
     }
 
+    // 确保即使 connectToConfiguredNetwork 返回 false（非异常）也记录失败
+    if (!failedList.some(f => f.ssid === ssid)) {
+      this.broadcastReconnectProgress({
+        ssid,
+        attempt: maxRetries,
+        maxAttempts: maxRetries,
+        status: 'failed',
+      });
+
+      failedList.push({
+        ssid,
+        priority,
+        reason: '连接超时',
+      });
+    }
+
     return false;
   }
 
@@ -377,7 +398,7 @@ export class WifiEventListener {
       return;
     }
 
-    this.window.webContents.send('event:wifi:reconnectProgress', progress);
+    this.window.webContents.send(IPC_EVENTS.WIFI_RECONNECT_PROGRESS, progress);
   }
 
   /**
@@ -389,7 +410,7 @@ export class WifiEventListener {
     }
 
     const event: WifiAllReconnectsFailed = { failedList };
-    this.window.webContents.send('event:wifi:allReconnectsFailed', event);
+    this.window.webContents.send(IPC_EVENTS.WIFI_ALL_RECONNECTS_FAILED, event);
   }
 
   /**

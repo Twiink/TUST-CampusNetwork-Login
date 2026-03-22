@@ -151,7 +151,7 @@ export function startNetworkPolling(
     // 启动倒计时广播（每秒发送一次）
     startHeartbeatCountdown(logger);
   } else {
-    // 只执行一次检测
+    // 心跳检测已禁用，但若启用了自动重连，需独立启动轮询（仅供重连使用，不广播倒计时）
     logger.info('心跳检测已禁用，仅执行初始网络状态检测');
     networkDetector.getNetworkStatus().then((status) => {
       logger.success('初始网络状态检测完成', {
@@ -164,6 +164,13 @@ export function startNetworkPolling(
         错误: err instanceof Error ? err.message : String(err),
       });
     });
+
+    // 如果配置了自动重连，启动独立轮询以持续监控网络状态
+    if (autoReconnectService) {
+      const reconnectPollInterval = 30000; // 固定 30 秒轮询一次
+      logger.info(`心跳已禁用但自动重连已启用，启动重连专用轮询，间隔: ${reconnectPollInterval / 1000}秒`);
+      networkDetector.startPolling(statusCallback, { interval: reconnectPollInterval, immediate: false });
+    }
   }
 }
 

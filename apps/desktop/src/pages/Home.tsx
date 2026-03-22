@@ -8,7 +8,6 @@ import {
   Wifi,
   WifiOff,
   Loader,
-  User,
   Server,
   Globe,
   AlertCircle,
@@ -241,11 +240,11 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
             borderRadius: 'var(--radius-sm)',
           }}
         >
-          <Wifi size={16} color="var(--primary-color)" />
+          <Wifi size={16} color={frequency >= 5000 ? (isDarkMode() ? '#34d399' : '#22c55e') : (isDarkMode() ? '#60a5fa' : '#3b82f6')} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>频段</div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              {frequency >= 5000 ? '5GHz' : frequency >= 2400 ? '2.4GHz' : '未知'}
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: frequency >= 5000 ? (isDarkMode() ? '#34d399' : '#22c55e') : (isDarkMode() ? '#60a5fa' : '#3b82f6') }}>
+              {frequency >= 5000 ? '5G' : frequency >= 2400 ? '2.4G' : '未知'}
             </div>
           </div>
         </div>
@@ -849,7 +848,7 @@ const WifiReconnectFailedCard: React.FC<{
 };
 
 export const Home: React.FC = () => {
-  const { networkStatus, ipAddress, login, logout, config } = useApp();
+  const { networkStatus, login, logout, config } = useApp();
   const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
     useNetwork();
   const { heartbeat, reconnectProgress } = useHeartbeat();
@@ -913,41 +912,6 @@ export const Home: React.FC = () => {
       setTimeout(() => {
         setRefreshing(false);
       }, 1000);
-    }
-  };
-
-  const getStatusIcon = () => {
-    switch (networkStatus) {
-      case 'connected':
-        return <CheckCircle2 size={48} color="#22c55e" />;
-      case 'connecting':
-        return <Loader size={48} color="#3b82f6" className="spin" />;
-      default:
-        return <XCircle size={48} color="#ef4444" />;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'connected':
-        return '已连接';
-      case 'disconnected':
-        return '未连接';
-      case 'connecting':
-        return '连接中...';
-      default:
-        return status;
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (networkStatus) {
-      case 'connected':
-        return '#22c55e';
-      case 'connecting':
-        return '#3b82f6';
-      default:
-        return '#ef4444';
     }
   };
 
@@ -1865,7 +1829,7 @@ export const Home: React.FC = () => {
           >
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-                此 WiFi 已配置为"无需认证"
+                此 WiFi 已配置为「无需认证」
               </p>
               <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                 如家庭 WiFi、手机热点等网络
@@ -2225,7 +2189,7 @@ export const Home: React.FC = () => {
         >
           <div style={{ flex: 1 }}>
             <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-              此 WiFi 已配置为"需要认证"
+              此 WiFi 已配置为「需要认证」
             </p>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               如校园网 CMCC/CUCC/CTCC

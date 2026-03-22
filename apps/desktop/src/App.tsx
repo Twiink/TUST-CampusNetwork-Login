@@ -5,6 +5,7 @@ import { Sidebar } from './components/Sidebar';
 import { Home } from './pages/Home';
 import { Settings } from './pages/Settings';
 import { Logs } from './pages/Logs';
+import { About } from './pages/About';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('home');
@@ -16,6 +17,7 @@ const AppContent: React.FC = () => {
         {activeTab === 'home' && <Home />}
         {activeTab === 'settings' && <Settings />}
         {activeTab === 'logs' && <Logs />}
+        {activeTab === 'about' && <About />}
       </div>
     </div>
   );

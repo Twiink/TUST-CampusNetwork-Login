@@ -99,6 +99,13 @@ function createReactNativeStorage() {
     async remove(key: string): Promise<void> {
       await AsyncStorage.removeItem(key);
     },
+    async clear(): Promise<void> {
+      await AsyncStorage.clear();
+    },
+    async keys(): Promise<string[]> {
+      const keys = await AsyncStorage.getAllKeys();
+      return [...keys];
+    },
   };
 }
 
@@ -174,13 +181,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // 加载配置
         await configManager.load();
         const loadedConfig = configManager.getConfig();
-        setConfigState(loadedConfig);
-        setAccounts(loadedConfig.accounts);
+        if (loadedConfig) {
+          setConfigState(loadedConfig);
+          setAccounts(loadedConfig.accounts);
 
-        // 设置当前账户
-        if (loadedConfig.currentAccountId) {
-          const account = accountManager.getAccountById(loadedConfig.currentAccountId);
-          setCurrentAccount(account);
+          // 设置当前账户
+          if (loadedConfig.currentAccountId) {
+            const account = accountManager.getAccountById(loadedConfig.currentAccountId);
+            setCurrentAccount(account);
+          }
         }
 
         // 保存服务引用
@@ -247,7 +256,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 更新配置
   const setConfig = useCallback((newConfig: AppConfig) => {
     setConfigState(newConfig);
-    servicesRef.current?.configManager.updateConfig(newConfig);
+    servicesRef.current?.configManager.update(newConfig);
   }, []);
 
   // 登录
@@ -341,7 +350,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 如果是第一个账户，自动设为当前账户
       if (accounts.length === 0) {
-        await servicesRef.current.accountManager.setCurrentAccount(newAccount.id);
+        await servicesRef.current.accountManager.switchAccount(newAccount.id);
         setCurrentAccount(newAccount);
       }
 
@@ -395,7 +404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         throw new Error('服务未初始化');
       }
 
-      await servicesRef.current.accountManager.setCurrentAccount(id);
+      await servicesRef.current.accountManager.switchAccount(id);
       const account = servicesRef.current.accountManager.getAccountById(id);
       setCurrentAccount(account);
 
