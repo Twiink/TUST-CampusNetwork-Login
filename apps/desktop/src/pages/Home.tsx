@@ -313,6 +313,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Globe2 size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -346,6 +347,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Globe size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -380,6 +382,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <MonitorSmartphone
@@ -415,6 +418,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Router size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -446,6 +450,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Server size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -478,6 +483,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Network size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -509,6 +515,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Cpu size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -538,6 +545,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Radio size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
@@ -560,6 +568,7 @@ const WifiInfoCard: React.FC<{
                   padding: 10,
                   backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
                 }}
               >
                 <Lock size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
