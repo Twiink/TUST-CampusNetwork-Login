@@ -130,6 +130,7 @@ body::after {
   flex: 1;
   padding: 48px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .page-title {
