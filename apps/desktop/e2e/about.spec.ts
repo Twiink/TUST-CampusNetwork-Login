@@ -2,17 +2,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
 import { _electron as electron } from 'playwright';
+import { createElectronLaunchOptions } from './launchOptions';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
 test('关于页展示真实版本与仓库链接', async () => {
-  const electronApp = await electron.launch({
-    args: [path.join(currentDir, '..', 'dist-electron', 'main.js')],
-    env: {
-      ...process.env,
-      NETMATE_E2E: '1',
-    },
-  });
+  const electronApp = await electron.launch(createElectronLaunchOptions(currentDir));
 
   try {
     const window = await electronApp.firstWindow();
