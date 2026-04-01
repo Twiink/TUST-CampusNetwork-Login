@@ -54,22 +54,28 @@ export class TrayService {
   /**
    * 初始化托盘
    */
-  init(): void {
-    const icon = this.getIcon('disconnected');
-    this.tray = new Tray(icon);
-    this.tray.setToolTip('NetMate - 校园网登录');
+  init(): boolean {
+    try {
+      const icon = this.getIcon('disconnected');
+      this.tray = new Tray(icon);
+      this.tray.setToolTip('NetMate - 校园网登录');
 
-    // 点击托盘图标显示窗口
-    this.tray.on('click', () => {
-      this.callbacks.onShowWindow();
-    });
+      // 点击托盘图标显示窗口
+      this.tray.on('click', () => {
+        this.callbacks.onShowWindow();
+      });
 
-    // 双击托盘图标显示窗口（Windows）
-    this.tray.on('double-click', () => {
-      this.callbacks.onShowWindow();
-    });
+      // 双击托盘图标显示窗口（Windows）
+      this.tray.on('double-click', () => {
+        this.callbacks.onShowWindow();
+      });
 
-    this.updateMenu();
+      this.updateMenu();
+      return true;
+    } catch {
+      this.tray = null;
+      return false;
+    }
   }
 
   /**

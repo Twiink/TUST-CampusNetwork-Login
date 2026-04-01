@@ -55,6 +55,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST;
 
+const IS_E2E_TEST = process.env['NETMATE_E2E'] === '1';
+
 let win: BrowserWindow | null;
 let services: AppServices | null = null;
 let trayService: TrayService | null = null;
@@ -380,91 +382,99 @@ app.whenReady().then(async () => {
     // 创建窗口
     createWindow();
 
-    // 创建托盘服务
-    trayService = createTrayService(iconDir, {
-      onLogin: async () => {
-        // 获取当前账户并登录
-        const currentAccount = services?.accountManager.getCurrentAccount();
-        if (currentAccount && services) {
-          const networkInfo = getNetworkInfo();
-          if (!networkInfo.ipv4) {
-            services.logger.error('托盘登录失败：无法获取 IP 地址');
-            return;
-          }
-
-          trayService?.setStatus('connecting');
-          try {
-            services.authService.setServerUrl(currentAccount.serverUrl);
-            const result = await services.authService.login({
-              serverUrl: currentAccount.serverUrl,
-              userAccount: currentAccount.username,
-              userPassword: currentAccount.password,
-              wlanUserIp: networkInfo.ipv4,
-              wlanUserIpv6: networkInfo.ipv6 || undefined,
-              wlanUserMac: networkInfo.mac || undefined,
-              isp: currentAccount.isp,
-            });
-            if (result.success) {
-              trayService?.setStatus('connected');
-              services.logger.info('托盘登录成功');
-            } else {
-              trayService?.setStatus('disconnected');
-              services.logger.error(`托盘登录失败: ${result.message}`);
+    if (IS_E2E_TEST) {
+      services.logger.info('E2E 测试模式已启用，跳过托盘与 WiFi 事件监听初始化');
+    } else {
+      // 创建托盘服务
+      trayService = createTrayService(iconDir, {
+        onLogin: async () => {
+          // 获取当前账户并登录
+          const currentAccount = services?.accountManager.getCurrentAccount();
+          if (currentAccount && services) {
+            const networkInfo = getNetworkInfo();
+            if (!networkInfo.ipv4) {
+              services.logger.error('托盘登录失败：无法获取 IP 地址');
+              return;
             }
-          } catch (error) {
-            trayService?.setStatus('disconnected');
-            services.logger.error('托盘登录异常', error);
-          }
-        }
-      },
-      onLogout: async () => {
-        if (services) {
-          const networkInfo = getNetworkInfo();
-          if (!networkInfo.ipv4) {
-            services.logger.error('托盘登出失败：无法获取 IP 地址');
-            return;
-          }
 
-          try {
-            const result = await services.authService.logout(networkInfo.ipv4);
-            if (result.success) {
+            trayService?.setStatus('connecting');
+            try {
+              services.authService.setServerUrl(currentAccount.serverUrl);
+              const result = await services.authService.login({
+                serverUrl: currentAccount.serverUrl,
+                userAccount: currentAccount.username,
+                userPassword: currentAccount.password,
+                wlanUserIp: networkInfo.ipv4,
+                wlanUserIpv6: networkInfo.ipv6 || undefined,
+                wlanUserMac: networkInfo.mac || undefined,
+                isp: currentAccount.isp,
+              });
+              if (result.success) {
+                trayService?.setStatus('connected');
+                services.logger.info('托盘登录成功');
+              } else {
+                trayService?.setStatus('disconnected');
+                services.logger.error(`托盘登录失败: ${result.message}`);
+              }
+            } catch (error) {
               trayService?.setStatus('disconnected');
-              services.logger.info('托盘登出成功');
-            } else {
-              services.logger.error(`托盘登出失败: ${result.message}`);
+              services.logger.error('托盘登录异常', error);
             }
-          } catch (error) {
-            services.logger.error('托盘登出异常', error);
           }
-        }
-      },
-      onShowWindow: () => {
-        if (win) {
-          win.show();
-          win.focus();
-        }
-      },
-      onQuit: () => {
-        forceQuit = true;
-        app.quit();
-      },
-    });
-    trayService.init();
-    services.logger.info('托盘服务已初始化');
+        },
+        onLogout: async () => {
+          if (services) {
+            const networkInfo = getNetworkInfo();
+            if (!networkInfo.ipv4) {
+              services.logger.error('托盘登出失败：无法获取 IP 地址');
+              return;
+            }
 
-    // 创建并启动 WiFi 事件监听器
-    // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连
-    wifiEventListener = createWifiEventListener({
-      networkDetector: services.networkDetector,
-      logger: services.logger,
-      window: win,
-      checkInterval: 1000, // 1秒检测一次 SSID 变化（更快响应断开事件）
-      wifiManager: services.wifiManager,
-      wifiSwitcherService: wifiSwitcherService,
-      configManager: services.configManager,
-    });
-    wifiEventListener.start();
-    services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
+            try {
+              const result = await services.authService.logout(networkInfo.ipv4);
+              if (result.success) {
+                trayService?.setStatus('disconnected');
+                services.logger.info('托盘登出成功');
+              } else {
+                services.logger.error(`托盘登出失败: ${result.message}`);
+              }
+            } catch (error) {
+              services.logger.error('托盘登出异常', error);
+            }
+          }
+        },
+        onShowWindow: () => {
+          if (win) {
+            win.show();
+            win.focus();
+          }
+        },
+        onQuit: () => {
+          forceQuit = true;
+          app.quit();
+        },
+      });
+
+      if (trayService.init()) {
+        services.logger.info('托盘服务已初始化');
+      } else {
+        services.logger.warn('托盘服务初始化失败，将继续在无托盘模式下运行');
+      }
+
+      // 创建并启动 WiFi 事件监听器
+      // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连
+      wifiEventListener = createWifiEventListener({
+        networkDetector: services.networkDetector,
+        logger: services.logger,
+        window: win,
+        checkInterval: 1000, // 1秒检测一次 SSID 变化（更快响应断开事件）
+        wifiManager: services.wifiManager,
+        wifiSwitcherService: wifiSwitcherService,
+        configManager: services.configManager,
+      });
+      wifiEventListener.start();
+      services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
+    }
 
     services.logger.success('===== 应用初始化完成 =====');
   } catch (error) {

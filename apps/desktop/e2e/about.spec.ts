@@ -8,6 +8,10 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 test('关于页展示真实版本与仓库链接', async () => {
   const electronApp = await electron.launch({
     args: [path.join(currentDir, '..', 'dist-electron', 'main.js')],
+    env: {
+      ...process.env,
+      NETMATE_E2E: '1',
+    },
   });
 
   try {
