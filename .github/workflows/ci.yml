@@ -86,7 +86,7 @@ jobs:
 
       - name: 验证 Linux runner 支持 netem 链路整形
         run: |
-          python3 -m http.server 38080 >/tmp/netmate-http.log 2>&1 &
+          python3 -m http.server 38080 --bind 127.0.0.1 >/tmp/netmate-http.log 2>&1 &
           SERVER_PID=$!
 
           cleanup() {
@@ -96,9 +96,17 @@ jobs:
 
           trap cleanup EXIT
 
-          BASE_TIME="$(curl -s -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
+          for _ in {1..20}; do
+            if curl -fsS -o /dev/null http://127.0.0.1:38080; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          curl -fsS -o /dev/null http://127.0.0.1:38080
+          BASE_TIME="$(curl -fsS -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
           sudo tc qdisc add dev lo root netem delay 120ms 20ms distribution normal
-          SHAPED_TIME="$(curl -s -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
+          SHAPED_TIME="$(curl -fsS -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
 
           echo "base=${BASE_TIME}"
           echo "shaped=${SHAPED_TIME}"
