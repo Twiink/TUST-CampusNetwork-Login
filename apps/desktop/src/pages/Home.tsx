@@ -329,6 +329,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.85rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {networkStatus.ip}
@@ -361,6 +362,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.75rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                     title={networkStatus.ipv6}
                   >
@@ -396,6 +398,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.85rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {networkStatus.mac}
@@ -426,6 +429,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.85rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {networkStatus.gateway}
@@ -456,6 +460,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.75rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                     title={networkStatus.dns}
                   >
@@ -487,6 +492,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.85rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {networkStatus.subnetMask}
@@ -515,6 +521,7 @@ const WifiInfoCard: React.FC<{
                       fontSize: '0.85rem',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
                     {networkStatus.bssid}
