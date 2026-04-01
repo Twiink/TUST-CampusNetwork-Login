@@ -85,8 +85,11 @@ export async function httpRequest<T = unknown>(
         ...headers,
       },
       signal: controller.signal,
-      redirect: followRedirects ? 'follow' : 'manual',
     };
+
+    if (!followRedirects) {
+      (requestInit.headers as Record<string, string>)['X-NetMate-No-Redirect'] = 'true';
+    }
 
     if (body) {
       if (typeof body === 'string') {

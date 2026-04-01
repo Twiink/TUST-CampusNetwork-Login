@@ -153,23 +153,31 @@ export function startNetworkPolling(
   } else {
     // 心跳检测已禁用，但若启用了自动重连，需独立启动轮询（仅供重连使用，不广播倒计时）
     logger.info('心跳检测已禁用，仅执行初始网络状态检测');
-    networkDetector.getNetworkStatus().then((status) => {
-      logger.success('初始网络状态检测完成', {
-        网络连接: status.connected ? '是' : '否',
-        已认证: status.authenticated ? '是' : '否',
+    networkDetector
+      .getNetworkStatus()
+      .then((status) => {
+        logger.success('初始网络状态检测完成', {
+          网络连接: status.connected ? '是' : '否',
+          已认证: status.authenticated ? '是' : '否',
+        });
+        statusCallback(status);
+      })
+      .catch((err) => {
+        logger.error('获取初始网络状态失败', {
+          错误: err instanceof Error ? err.message : String(err),
+        });
       });
-      statusCallback(status);
-    }).catch((err) => {
-      logger.error('获取初始网络状态失败', {
-        错误: err instanceof Error ? err.message : String(err),
-      });
-    });
 
     // 如果配置了自动重连，启动独立轮询以持续监控网络状态
     if (autoReconnectService) {
       const reconnectPollInterval = 30000; // 固定 30 秒轮询一次
-      logger.info(`心跳已禁用但自动重连已启用，启动重连专用轮询，间隔: ${reconnectPollInterval / 1000}秒`);
-      networkDetector.startPolling(statusCallback, { interval: reconnectPollInterval, immediate: false });
+      logger.info(
+        `心跳已禁用但自动重连已启用，启动重连专用轮询，间隔: ${reconnectPollInterval / 1000}秒`
+      );
+      networkDetector.startPolling(statusCallback, {
+        interval: reconnectPollInterval,
+        immediate: false,
+      });
     }
   }
 }

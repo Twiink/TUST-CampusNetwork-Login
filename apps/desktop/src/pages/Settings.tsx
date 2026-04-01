@@ -126,15 +126,25 @@ export const Settings: React.FC = () => {
       password: newWifi.password,
       autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
+      linkedAccountIds:
+        newWifi.requiresAuth && newWifi.linkedAccountId ? [newWifi.linkedAccountId] : [],
       linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
       priority: newWifi.priority,
+      lastConnectedAt: null,
     };
 
     setConfig({
       ...config,
       wifiList: [...config.wifiList, wifi],
     });
-    setNewWifi({ ssid: '', password: '', requiresAuth: true, autoConnect: true, linkedAccountId: '', priority: 10 });
+    setNewWifi({
+      ssid: '',
+      password: '',
+      requiresAuth: true,
+      autoConnect: true,
+      linkedAccountId: '',
+      priority: 10,
+    });
   };
 
   const handleRemoveWifi = (id: string) => {
@@ -432,9 +442,7 @@ export const Settings: React.FC = () => {
                           ? 'rgba(14, 165, 233, 0.1)'
                           : 'rgba(255, 255, 255, 0.4)',
                       color:
-                        newAccount.isp === opt.value
-                          ? 'var(--primary-color)'
-                          : 'var(--text-color)',
+                        newAccount.isp === opt.value ? 'var(--primary-color)' : 'var(--text-color)',
                       cursor: 'pointer',
                       fontWeight: newAccount.isp === opt.value ? '600' : '500',
                       transition: 'all 0.2s ease',
@@ -474,7 +482,8 @@ export const Settings: React.FC = () => {
             </h3>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: 16 }}>
               配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。
-              点击 <RefreshCw size={12} style={{ verticalAlign: 'middle', display: 'inline' }} /> 按钮可切换自动重连状态。
+              点击 <RefreshCw size={12} style={{ verticalAlign: 'middle', display: 'inline' }} />{' '}
+              按钮可切换自动重连状态。
             </p>
 
             <div style={{ marginBottom: 20 }}>

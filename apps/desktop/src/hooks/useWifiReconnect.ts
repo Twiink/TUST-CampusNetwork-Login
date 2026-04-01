@@ -4,11 +4,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { IPC_EVENTS } from '../types/electron';
-import type {
-  WifiReconnectProgress,
-  WifiAllReconnectsFailed,
-} from '../types/electron';
+import { IPC_EVENTS } from '../constants/ipc';
+import type { WifiReconnectProgress, WifiAllReconnectsFailed } from '../types/electron';
 
 /**
  * WiFi 重连状态

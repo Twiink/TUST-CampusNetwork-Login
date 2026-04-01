@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { LogEntry, LogQueryOptions } from '@repo/shared';
-import { IPC_EVENTS } from '../types/electron.d';
+import { IPC_EVENTS } from '../constants/ipc';
 
 export function useLogs() {
   const [logs, setLogs] = useState<LogEntry[]>([]);

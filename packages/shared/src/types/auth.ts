@@ -57,6 +57,19 @@ export interface LoginResult {
   rawResponse?: string;
 }
 
+export interface MultiAccountLoginAttempt {
+  accountId: string;
+  username: string;
+  success: boolean;
+  message: string;
+  code?: number;
+}
+
+export interface MultiAccountLoginResult extends LoginResult {
+  accountId?: string;
+  attempts: MultiAccountLoginAttempt[];
+}
+
 /**
  * 登出结果
  */

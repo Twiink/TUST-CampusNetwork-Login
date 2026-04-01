@@ -1,0 +1,214 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.27.0'
+
+jobs:
+  quality:
+    name: 质量门禁
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.27.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: ESLint
+        run: pnpm lint
+
+      - name: TypeScript 检查
+        run: pnpm type-check
+
+      - name: 单元与组件测试
+        run: pnpm test
+
+      - name: Prettier 检查
+        run: pnpm format:check
+
+  network-simulation:
+    name: 网络模拟回归
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.27.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 运行共享层网络模拟测试
+        run: pnpm test:network
+
+      - name: 验证 Linux runner 支持 netem 链路整形
+        run: |
+          python3 -m http.server 38080 >/tmp/netmate-http.log 2>&1 &
+          SERVER_PID=$!
+
+          cleanup() {
+            sudo tc qdisc del dev lo root 2>/dev/null || true
+            kill "${SERVER_PID}" 2>/dev/null || true
+          }
+
+          trap cleanup EXIT
+
+          BASE_TIME="$(curl -s -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
+          sudo tc qdisc add dev lo root netem delay 120ms 20ms distribution normal
+          SHAPED_TIME="$(curl -s -o /dev/null -w '%{time_total}' http://127.0.0.1:38080)"
+
+          echo "base=${BASE_TIME}"
+          echo "shaped=${SHAPED_TIME}"
+
+          awk -v base="${BASE_TIME}" -v shaped="${SHAPED_TIME}" 'BEGIN { exit !(shaped > base + 0.05) }'
+
+  desktop-build:
+    name: 桌面端构建 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    needs: quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.27.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 shared + desktop
+        run: pnpm build
+
+  desktop-e2e:
+    name: 桌面端 E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: quality
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.27.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 执行 Electron E2E
+        run: xvfb-run -a pnpm test:e2e
+
+      - name: 上传 Playwright 结果
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-e2e-results
+          path: |
+            apps/desktop/test-results
+            apps/desktop/playwright-report
+          if-no-files-found: ignore
+
+  android-build:
+    name: Android 构建
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: quality
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v6
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: 设置 Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: 安装 pnpm
+        run: npm install --global pnpm@10.27.0
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Android Debug APK
+        working-directory: apps/mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: 上传 Android Debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

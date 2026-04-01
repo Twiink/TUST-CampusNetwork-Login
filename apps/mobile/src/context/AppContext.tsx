@@ -24,6 +24,14 @@ import {
   isNativeModuleAvailable,
   type NetworkInfo,
 } from '../native/WifiModule';
+import { createMobileWifiAdapter } from '../services/MobileWifiAdapter';
+import {
+  isBackgroundServiceAvailable,
+  isBackgroundServiceRunning,
+  startBackgroundService,
+  stopBackgroundService,
+} from '../native/BackgroundService';
+import { isAutoStartAvailable, setAutoStartEnabled } from '../native/AutoStart';
 
 export interface LogEntry {
   id: string;
@@ -163,6 +171,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 初始化服务
   useEffect(() => {
+    let mounted = true;
+    let logger: Logger | null = null;
+
     const initServices = async () => {
       try {
         addLog('info', '正在初始化应用...');
@@ -171,15 +182,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const storage = createReactNativeStorage();
 
         // 创建服务
-        const logger = createLogger(500);
+        logger = createLogger(500);
         const configManager = createConfigManager(storage);
         const authService = createAuthService();
         const accountManager = createAccountManager(configManager);
         const wifiManager = createWifiManager(configManager);
-        const networkDetector = createNetworkDetector();
+        const networkDetector = createNetworkDetector(createMobileWifiAdapter());
 
         // 加载配置
         await configManager.load();
+
+        if (!mounted) {
+          return;
+        }
+
         const loadedConfig = configManager.getConfig();
         if (loadedConfig) {
           setConfigState(loadedConfig);
@@ -206,11 +222,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         // 检查权限并获取网络信息
         const permission = await hasLocationPermission();
+        if (!mounted) {
+          return;
+        }
         setHasPermission(permission);
 
         if (isModuleAvailable) {
           const info = await getNetworkInfo();
+          if (!mounted) {
+            return;
+          }
           setNetworkInfo(info);
+          setNetworkStatus(info.connected ? 'connected' : 'disconnected');
           if (info.connected && info.ssid) {
             addLog('info', `已连接到 WiFi: ${info.ssid}`);
           }
@@ -226,6 +249,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     initServices();
+
+    return () => {
+      mounted = false;
+      logger?.stopAutoCleanup();
+    };
   }, [addLog, isModuleAvailable]);
 
   // 刷新网络信息
@@ -235,6 +263,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const info = await getNetworkInfo();
       setNetworkInfo(info);
+      setNetworkStatus(info.connected ? 'connected' : 'disconnected');
     } catch (error) {
       console.warn('刷新网络信息失败:', error);
     }
@@ -256,8 +285,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 更新配置
   const setConfig = useCallback((newConfig: AppConfig) => {
     setConfigState(newConfig);
-    servicesRef.current?.configManager.update(newConfig);
+    servicesRef.current?.configManager.update(newConfig).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!isAutoStartAvailable()) {
+      return;
+    }
+
+    setAutoStartEnabled(config.settings.autoLaunch).catch(() => undefined);
+  }, [config.settings.autoLaunch]);
+
+  useEffect(() => {
+    if (!isBackgroundServiceAvailable()) {
+      return;
+    }
+
+    const syncBackgroundService = async () => {
+      const shouldRun = config.settings.enableHeartbeat || config.settings.autoReconnect;
+      const running = await isBackgroundServiceRunning();
+
+      if (shouldRun && !running) {
+        await startBackgroundService(config.settings.heartbeatIntervalSeconds * 1000);
+        addLog('info', '后台服务已启动');
+      } else if (!shouldRun && running) {
+        await stopBackgroundService();
+        addLog('info', '后台服务已停止');
+      }
+    };
+
+    syncBackgroundService().catch(() => undefined);
+  }, [
+    addLog,
+    config.settings.autoReconnect,
+    config.settings.enableHeartbeat,
+    config.settings.heartbeatIntervalSeconds,
+  ]);
 
   // 登录
   const login = useCallback(async () => {

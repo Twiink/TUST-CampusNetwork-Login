@@ -1,30 +1,106 @@
 import React, { useState, useEffect } from 'react';
 import { Info, Github, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
+import type { UpdateStatus } from '../types/electron';
+
+const REPOSITORY_URL = 'https://github.com/Twiink/TUST-Campusnet-Login';
+const ISSUES_URL = `${REPOSITORY_URL}/issues`;
+
+const initialUpdateStatus: UpdateStatus = {
+  checking: false,
+  available: false,
+  downloading: false,
+  downloaded: false,
+  progress: 0,
+  version: null,
+  error: null,
+};
 
 export const About: React.FC = () => {
-  const [updateStatus, setUpdateStatus] = useState<'checking' | 'available' | 'latest' | 'error'>('latest');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(initialUpdateStatus);
   const [version, setVersion] = useState('0.0.0');
 
   useEffect(() => {
-    // 获取当前版本
-    if (window.electronAPI) {
-      setVersion('0.0.0'); // 暂时使用固定版本，后续可通过 IPC 获取
-    }
+    let isMounted = true;
+
+    const loadInitialState = async () => {
+      if (!window.electronAPI) {
+        return;
+      }
+
+      const [currentVersion, currentUpdateStatus] = await Promise.all([
+        window.electronAPI.app.getVersion(),
+        window.electronAPI.update.getStatus(),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setVersion(currentVersion);
+      setUpdateStatus(currentUpdateStatus);
+    };
+
+    void loadInitialState();
+
+    const unsubscribe = window.electronAPI.on('event:update:statusChanged', (data: unknown) => {
+      setUpdateStatus(data as UpdateStatus);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const checkForUpdates = async () => {
-    setUpdateStatus('checking');
     try {
       if (window.electronAPI?.update) {
-        const available = await window.electronAPI.update.check();
-        setUpdateStatus(available ? 'available' : 'latest');
-      } else {
-        setUpdateStatus('error');
+        await window.electronAPI.update.check();
       }
     } catch {
-      setUpdateStatus('error');
+      setUpdateStatus((prev) => ({ ...prev, error: '检查更新失败' }));
     }
   };
+
+  const downloadUpdate = async () => {
+    await window.electronAPI.update.download();
+  };
+
+  const installUpdate = async () => {
+    await window.electronAPI.update.install();
+  };
+
+  const getStatusLabel = () => {
+    if (updateStatus.error) {
+      return { text: updateStatus.error, tone: 'error' as const };
+    }
+
+    if (updateStatus.downloaded) {
+      return { text: '更新已下载，可立即安装', tone: 'success' as const };
+    }
+
+    if (updateStatus.downloading) {
+      return {
+        text: `正在下载更新 ${updateStatus.progress.toFixed(1)}%`,
+        tone: 'checking' as const,
+      };
+    }
+
+    if (updateStatus.checking) {
+      return { text: '正在检查更新...', tone: 'checking' as const };
+    }
+
+    if (updateStatus.available) {
+      return {
+        text: `发现新版本 ${updateStatus.version || ''}`.trim(),
+        tone: 'available' as const,
+      };
+    }
+
+    return { text: '已是最新版本', tone: 'latest' as const };
+  };
+
+  const statusMeta = getStatusLabel();
 
   return (
     <div className="page-container">
@@ -37,19 +113,19 @@ export const About: React.FC = () => {
         <div style={{ textAlign: 'center', padding: '20px 0' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📡</div>
           <h2 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>NetMate</h2>
-          <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 24 }}>
-            智能 WiFi 管理工具
-          </p>
-          <div style={{
-            display: 'inline-block',
-            padding: '6px 16px',
-            background: 'var(--primary-color)',
-            color: 'white',
-            borderRadius: 20,
-            fontSize: 14,
-            fontWeight: 600,
-            marginBottom: 32
-          }}>
+          <p style={{ fontSize: 14, opacity: 0.7, marginBottom: 24 }}>智能 WiFi 管理工具</p>
+          <div
+            style={{
+              display: 'inline-block',
+              padding: '6px 16px',
+              background: 'var(--primary-color)',
+              color: 'white',
+              borderRadius: 20,
+              fontSize: 14,
+              fontWeight: 600,
+              marginBottom: 32,
+            }}
+          >
             版本 {version}
           </div>
         </div>
@@ -84,38 +160,65 @@ export const About: React.FC = () => {
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>更新检查</h3>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              {updateStatus === 'checking' && (
+              {statusMeta.tone === 'checking' && (
                 <>
                   <div className="spinner" style={{ marginRight: 8 }} />
-                  <span>正在检查更新...</span>
+                  <span>{statusMeta.text}</span>
                 </>
               )}
-              {updateStatus === 'latest' && (
+              {statusMeta.tone === 'latest' && (
                 <>
-                  <CheckCircle size={18} style={{ marginRight: 8, color: 'var(--success-color)' }} />
-                  <span>已是最新版本</span>
+                  <CheckCircle
+                    size={18}
+                    style={{ marginRight: 8, color: 'var(--success-color)' }}
+                  />
+                  <span>{statusMeta.text}</span>
                 </>
               )}
-              {updateStatus === 'available' && (
+              {statusMeta.tone === 'available' && (
                 <>
-                  <AlertCircle size={18} style={{ marginRight: 8, color: 'var(--warning-color)' }} />
-                  <span>发现新版本</span>
+                  <AlertCircle
+                    size={18}
+                    style={{ marginRight: 8, color: 'var(--warning-color)' }}
+                  />
+                  <span>{statusMeta.text}</span>
                 </>
               )}
-              {updateStatus === 'error' && (
+              {statusMeta.tone === 'success' && (
+                <>
+                  <CheckCircle
+                    size={18}
+                    style={{ marginRight: 8, color: 'var(--success-color)' }}
+                  />
+                  <span>{statusMeta.text}</span>
+                </>
+              )}
+              {statusMeta.tone === 'error' && (
                 <>
                   <AlertCircle size={18} style={{ marginRight: 8, color: 'var(--error-color)' }} />
-                  <span>检查失败</span>
+                  <span>{statusMeta.text}</span>
                 </>
               )}
             </div>
-            <button
-              className="btn-secondary"
-              onClick={checkForUpdates}
-              disabled={updateStatus === 'checking'}
-            >
-              检查更新
-            </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {updateStatus.available && !updateStatus.downloading && !updateStatus.downloaded && (
+                <button className="btn-primary" onClick={downloadUpdate}>
+                  下载更新
+                </button>
+              )}
+              {updateStatus.downloaded && (
+                <button className="btn-primary" onClick={installUpdate}>
+                  立即安装
+                </button>
+              )}
+              <button
+                className="btn-secondary"
+                onClick={checkForUpdates}
+                disabled={updateStatus.checking || updateStatus.downloading}
+              >
+                检查更新
+              </button>
+            </div>
           </div>
         </div>
 
@@ -123,7 +226,7 @@ export const About: React.FC = () => {
           <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>项目信息</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <a
-              href="https://github.com/yourusername/netmate"
+              href={REPOSITORY_URL}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -133,17 +236,17 @@ export const About: React.FC = () => {
                 textDecoration: 'none',
                 padding: '8px 12px',
                 borderRadius: 8,
-                transition: 'background 0.2s'
+                transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover-bg)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <Github size={18} style={{ marginRight: 8 }} />
               <span>GitHub 仓库</span>
               <ExternalLink size={14} style={{ marginLeft: 'auto', opacity: 0.5 }} />
             </a>
             <a
-              href="https://github.com/yourusername/netmate/issues"
+              href={ISSUES_URL}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -153,10 +256,10 @@ export const About: React.FC = () => {
                 textDecoration: 'none',
                 padding: '8px 12px',
                 borderRadius: 8,
-                transition: 'background 0.2s'
+                transition: 'background 0.2s',
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--hover-bg)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--hover-bg)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
               <AlertCircle size={18} style={{ marginRight: 8 }} />
               <span>问题反馈</span>
@@ -165,14 +268,16 @@ export const About: React.FC = () => {
           </div>
         </div>
 
-        <div style={{
-          borderTop: '1px solid var(--border-color)',
-          paddingTop: 24,
-          marginTop: 24,
-          textAlign: 'center',
-          fontSize: 12,
-          opacity: 0.6
-        }}>
+        <div
+          style={{
+            borderTop: '1px solid var(--border-color)',
+            paddingTop: 24,
+            marginTop: 24,
+            textAlign: 'center',
+            fontSize: 12,
+            opacity: 0.6,
+          }}
+        >
           <p style={{ margin: 0 }}>© 2026 NetMate. All rights reserved.</p>
           <p style={{ margin: '8px 0 0 0' }}>基于 Electron + React 构建</p>
         </div>

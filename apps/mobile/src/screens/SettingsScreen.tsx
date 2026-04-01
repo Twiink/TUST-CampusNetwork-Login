@@ -52,13 +52,13 @@ export const SettingsScreen: React.FC = () => {
     ssid: string;
     password: string;
     requiresAuth: boolean;
-    linkedAccountId: string;
+    linkedAccountIds: string[];
     priority: number;
   }>({
     ssid: '',
     password: '',
     requiresAuth: true,
-    linkedAccountId: '',
+    linkedAccountIds: [],
     priority: 10,
   });
 
@@ -88,12 +88,11 @@ export const SettingsScreen: React.FC = () => {
 
   const handleRemoveAccount = (id: string) => {
     const updatedAccounts = config.accounts.filter(a => a.id !== id);
-    // Remove linked account from wifi list
     const updatedWifiList = config.wifiList.map(wifi => {
-      if (wifi.linkedAccountId === id) {
-        return { ...wifi, linkedAccountId: undefined };
-      }
-      return wifi;
+      return {
+        ...wifi,
+        linkedAccountIds: wifi.linkedAccountIds.filter(accountId => accountId !== id),
+      };
     });
 
     setConfig({
@@ -111,8 +110,7 @@ export const SettingsScreen: React.FC = () => {
 
   const handleAddWifi = () => {
     if (!newWifi.ssid) return;
-    // For now simple alert logic (UI feedback could be improved later)
-    if (newWifi.requiresAuth && !newWifi.linkedAccountId) {
+    if (newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) {
       return;
     }
     const wifi: WifiConfig = {
@@ -121,8 +119,9 @@ export const SettingsScreen: React.FC = () => {
       password: newWifi.password,
       autoConnect: true,
       requiresAuth: newWifi.requiresAuth,
-      linkedAccountId: newWifi.requiresAuth ? newWifi.linkedAccountId : undefined,
+      linkedAccountIds: newWifi.requiresAuth ? newWifi.linkedAccountIds : [],
       priority: newWifi.priority,
+      lastConnectedAt: null,
     };
 
     setConfig({
@@ -133,7 +132,7 @@ export const SettingsScreen: React.FC = () => {
       ssid: '',
       password: '',
       requiresAuth: true,
-      linkedAccountId: '',
+      linkedAccountIds: [],
       priority: 10,
     });
   };
@@ -149,6 +148,22 @@ export const SettingsScreen: React.FC = () => {
     setConfig({
       ...config,
       settings: { ...config.settings, [key]: value },
+    });
+  };
+
+  const toggleNotificationSetting = (
+    key: keyof typeof config.settings.notificationSettings,
+    value: boolean
+  ) => {
+    setConfig({
+      ...config,
+      settings: {
+        ...config.settings,
+        notificationSettings: {
+          ...config.settings.notificationSettings,
+          [key]: value,
+        },
+      },
     });
   };
 
@@ -205,13 +220,23 @@ export const SettingsScreen: React.FC = () => {
             />
           </View>
 
-          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>显示通知</Text>
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>启动时自动连接</Text>
             <Switch
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
-              thumbColor={config.settings.showNotification ? theme.colors.primary : '#f4f3f4'}
-              value={config.settings.showNotification}
-              onValueChange={v => toggleSetting('showNotification', v)}
+              thumbColor={config.settings.startupAutoConnect ? theme.colors.primary : '#f4f3f4'}
+              value={config.settings.startupAutoConnect}
+              onValueChange={v => toggleSetting('startupAutoConnect', v)}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>保持当前连接</Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={config.settings.keepCurrentConnection ? theme.colors.primary : '#f4f3f4'}
+              value={config.settings.keepCurrentConnection}
+              onValueChange={v => toggleSetting('keepCurrentConnection', v)}
             />
           </View>
 
@@ -225,7 +250,7 @@ export const SettingsScreen: React.FC = () => {
                     心跳检测间隔
                   </Text>
                   <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
-                    当前值: {config.settings.pollingInterval} 秒
+                    当前值: {config.settings.heartbeatIntervalSeconds} 秒
                   </Text>
                 </View>
               </View>
@@ -240,11 +265,11 @@ export const SettingsScreen: React.FC = () => {
                       color: theme.colors.text,
                     },
                   ]}
-                  value={String(config.settings.pollingInterval)}
+                  value={String(config.settings.heartbeatIntervalSeconds)}
                   onChangeText={text => {
                     const value = parseInt(text, 10) || 5;
                     if (value >= 5 && value <= 300) {
-                      toggleSetting('pollingInterval', value);
+                      toggleSetting('heartbeatIntervalSeconds', value);
                     }
                   }}
                   keyboardType="number-pad"
@@ -257,10 +282,10 @@ export const SettingsScreen: React.FC = () => {
               <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                    最大重试次数
+                    连续失败阈值
                   </Text>
                   <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
-                    当前值: {config.settings.maxRetries} 次
+                    当前值: {config.settings.heartbeatFailureThreshold} 次
                   </Text>
                 </View>
               </View>
@@ -275,11 +300,46 @@ export const SettingsScreen: React.FC = () => {
                       color: theme.colors.text,
                     },
                   ]}
-                  value={String(config.settings.maxRetries)}
+                  value={String(config.settings.heartbeatFailureThreshold)}
+                  onChangeText={text => {
+                    const value = parseInt(text, 10) || 1;
+                    if (value >= 1 && value <= 10) {
+                      toggleSetting('heartbeatFailureThreshold', value);
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="1-10"
+                  placeholderTextColor={theme.colors.textSecondary}
+                />
+                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>次</Text>
+              </View>
+
+              <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    单个 WiFi 重试次数
+                  </Text>
+                  <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+                    当前值: {config.settings.wifiReconnectRetries} 次
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.sliderContainer}>
+                <TextInput
+                  style={[
+                    styles.numberInput,
+                    {
+                      borderColor: theme.colors.border + '40',
+                      backgroundColor: theme.colors.cardBg + '80',
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  value={String(config.settings.wifiReconnectRetries)}
                   onChangeText={text => {
                     const value = parseInt(text, 10) || 0;
                     if (value >= 0 && value <= 10) {
-                      toggleSetting('maxRetries', value);
+                      toggleSetting('wifiReconnectRetries', value);
                     }
                   }}
                   keyboardType="number-pad"
@@ -288,8 +348,105 @@ export const SettingsScreen: React.FC = () => {
                 />
                 <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>次</Text>
               </View>
+
+              <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                    冷却期时长
+                  </Text>
+                  <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+                    当前值: {config.settings.wifiReconnectCooldownMinutes} 分钟
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[styles.sliderContainer, { marginBottom: 0 }]}>
+                <TextInput
+                  style={[
+                    styles.numberInput,
+                    {
+                      borderColor: theme.colors.border + '40',
+                      backgroundColor: theme.colors.cardBg + '80',
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  value={String(config.settings.wifiReconnectCooldownMinutes)}
+                  onChangeText={text => {
+                    const value = parseInt(text, 10) || 0;
+                    if (value >= 0 && value <= 60) {
+                      toggleSetting('wifiReconnectCooldownMinutes', value);
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="0-60"
+                  placeholderTextColor={theme.colors.textSecondary}
+                />
+                <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>分</Text>
+              </View>
             </>
           )}
+        </GlassView>
+
+        <GlassView style={styles.card}>
+          <Text style={[styles.cardHeader, { color: theme.colors.text }]}>通知设置</Text>
+
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>WiFi 断开</Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={
+                config.settings.notificationSettings.wifiDisconnected
+                  ? theme.colors.primary
+                  : '#f4f3f4'
+              }
+              value={config.settings.notificationSettings.wifiDisconnected}
+              onValueChange={v => toggleNotificationSetting('wifiDisconnected', v)}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动重连成功</Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={
+                config.settings.notificationSettings.reconnectSuccess
+                  ? theme.colors.primary
+                  : '#f4f3f4'
+              }
+              value={config.settings.notificationSettings.reconnectSuccess}
+              onValueChange={v => toggleNotificationSetting('reconnectSuccess', v)}
+            />
+          </View>
+
+          <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+              自动重连全部失败
+            </Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={
+                config.settings.notificationSettings.reconnectFailed
+                  ? theme.colors.primary
+                  : '#f4f3f4'
+              }
+              value={config.settings.notificationSettings.reconnectFailed}
+              onValueChange={v => toggleNotificationSetting('reconnectFailed', v)}
+            />
+          </View>
+
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>认证恢复成功</Text>
+            <Switch
+              trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+              thumbColor={
+                config.settings.notificationSettings.authRecovered
+                  ? theme.colors.primary
+                  : '#f4f3f4'
+              }
+              value={config.settings.notificationSettings.authRecovered}
+              onValueChange={v => toggleNotificationSetting('authRecovered', v)}
+            />
+          </View>
         </GlassView>
 
         {/* Account Management Card */}
@@ -494,8 +651,10 @@ export const SettingsScreen: React.FC = () => {
                 <Text style={{ color: theme.colors.textSecondary }}>暂无 WiFi 配置</Text>
               </View>
             ) : (
-              config.wifiList.map((wifi) => {
-                const linkedAccount = config.accounts.find(a => a.id === wifi.linkedAccountId);
+              config.wifiList.map(wifi => {
+                const linkedAccounts = config.accounts.filter(a =>
+                  wifi.linkedAccountIds.includes(a.id)
+                );
                 return (
                   <View
                     key={wifi.id}
@@ -538,11 +697,16 @@ export const SettingsScreen: React.FC = () => {
                             styles.ispBadge,
                             {
                               backgroundColor: getPriorityColor(wifi.priority || 10) + '20',
-                              borderColor: 'transparent'
+                              borderColor: 'transparent',
                             },
                           ]}
                         >
-                          <Text style={[styles.ispBadgeText, { color: getPriorityColor(wifi.priority || 10) }]}>
+                          <Text
+                            style={[
+                              styles.ispBadgeText,
+                              { color: getPriorityColor(wifi.priority || 10) },
+                            ]}
+                          >
                             ⭐ 优先级 {wifi.priority || 10}
                           </Text>
                         </View>
@@ -550,8 +714,10 @@ export const SettingsScreen: React.FC = () => {
                       {wifi.requiresAuth && (
                         <Text style={[styles.accountUrl, { color: theme.colors.textSecondary }]}>
                           关联账号:{' '}
-                          {linkedAccount
-                            ? `${linkedAccount.username} (${getISPLabel(linkedAccount.isp)})`
+                          {linkedAccounts.length > 0
+                            ? linkedAccounts
+                                .map(account => `${account.username} (${getISPLabel(account.isp)})`)
+                                .join(' / ')
                             : '未关联 (可能已删除)'}
                         </Text>
                       )}
@@ -624,7 +790,7 @@ export const SettingsScreen: React.FC = () => {
               trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
               thumbColor={newWifi.requiresAuth ? theme.colors.primary : '#f4f3f4'}
               value={newWifi.requiresAuth}
-              onValueChange={v => setNewWifi({ ...newWifi, requiresAuth: v, linkedAccountId: '' })}
+              onValueChange={v => setNewWifi({ ...newWifi, requiresAuth: v, linkedAccountIds: [] })}
             />
           </View>
 
@@ -649,7 +815,7 @@ export const SettingsScreen: React.FC = () => {
                           justifyContent: 'flex-start',
                           marginBottom: 8,
                         },
-                        newWifi.linkedAccountId === acc.id
+                        newWifi.linkedAccountIds.includes(acc.id)
                           ? {
                               backgroundColor: theme.colors.primary + '20',
                               borderColor: theme.colors.primary,
@@ -659,17 +825,23 @@ export const SettingsScreen: React.FC = () => {
                               backgroundColor: theme.colors.cardBg + '60',
                             },
                       ]}
-                      onPress={() => setNewWifi({ ...newWifi, linkedAccountId: acc.id })}
+                      onPress={() =>
+                        setNewWifi(prev => ({
+                          ...prev,
+                          linkedAccountIds: prev.linkedAccountIds.includes(acc.id)
+                            ? prev.linkedAccountIds.filter(accountId => accountId !== acc.id)
+                            : [...prev.linkedAccountIds, acc.id],
+                        }))
+                      }
                       activeOpacity={0.7}
                     >
                       <Text
                         style={[
                           styles.ispOptionText,
                           {
-                            color:
-                              newWifi.linkedAccountId === acc.id
-                                ? theme.colors.primary
-                                : theme.colors.textSecondary,
+                            color: newWifi.linkedAccountIds.includes(acc.id)
+                              ? theme.colors.primary
+                              : theme.colors.textSecondary,
                           },
                         ]}
                       >
@@ -698,9 +870,7 @@ export const SettingsScreen: React.FC = () => {
 
           {/* 优先级配置 */}
           <View style={styles.formGroup}>
-            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
-              优先级
-            </Text>
+            <Text style={[styles.label, { color: theme.colors.textSecondary }]}>优先级</Text>
             <TextInput
               style={[
                 styles.formControl,
@@ -730,11 +900,15 @@ export const SettingsScreen: React.FC = () => {
               {
                 backgroundColor: theme.colors.primary,
                 opacity:
-                  (newWifi.requiresAuth && !newWifi.linkedAccountId) || !newWifi.ssid ? 0.5 : 1,
+                  (newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) || !newWifi.ssid
+                    ? 0.5
+                    : 1,
               },
             ]}
             onPress={handleAddWifi}
-            disabled={(newWifi.requiresAuth && !newWifi.linkedAccountId) || !newWifi.ssid}
+            disabled={
+              (newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) || !newWifi.ssid
+            }
             activeOpacity={0.8}
           >
             <Text style={styles.btnText}>添加 WiFi</Text>

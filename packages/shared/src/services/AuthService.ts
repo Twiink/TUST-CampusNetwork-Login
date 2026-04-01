@@ -2,8 +2,14 @@
  * 登录认证服务
  */
 
-import type { LoginConfig, LoginResult, LogoutResult } from '../types/auth';
-import type { ISP } from '../types/config';
+import type {
+  LoginConfig,
+  LoginResult,
+  LogoutResult,
+  MultiAccountLoginAttempt,
+  MultiAccountLoginResult,
+} from '../types/auth';
+import type { ISP, AccountConfig } from '../types/config';
 import type { Logger } from '../models/Logger';
 import { httpGet, HttpError } from '../utils/httpClient';
 import { buildQueryString } from '../utils/urlEncode';
@@ -15,9 +21,9 @@ import { ErrorCode, AppError } from '../constants/errors';
  * 注意：根据抓包结果，运营商后缀为 unicom/cmcc/telecom
  */
 const ISP_SUFFIX_MAP: Record<string, string> = {
-  campus: '',       // 校园网无后缀
-  cmcc: '@cmcc',    // 中国移动
-  cucc: '@unicom',  // 中国联通 (抓包显示后缀为 unicom)
+  campus: '', // 校园网无后缀
+  cmcc: '@cmcc', // 中国移动
+  cucc: '@unicom', // 中国联通 (抓包显示后缀为 unicom)
   ctcc: '@telecom', // 中国电信 (抓包显示后缀为 telecom)
 };
 
@@ -136,9 +142,14 @@ export class AuthService {
    */
   async login(config: LoginConfig): Promise<LoginResult> {
     const userAccount = this.buildUserAccount(config.userAccount, config.isp);
-    const ispName = config.isp === 'campus' ? '校园网' :
-                    config.isp === 'cmcc' ? '中国移动' :
-                    config.isp === 'cucc' ? '中国联通' : '中国电信';
+    const ispName =
+      config.isp === 'campus'
+        ? '校园网'
+        : config.isp === 'cmcc'
+          ? '中国移动'
+          : config.isp === 'cucc'
+            ? '中国联通'
+            : '中国电信';
 
     this.logger?.info(`开始登录认证`, {
       用户: userAccount,
@@ -175,6 +186,58 @@ export class AuthService {
       }
       throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
+  }
+
+  /**
+   * 按顺序使用多个账号尝试登录
+   */
+  async loginWithAccounts(
+    accounts: AccountConfig[],
+    networkConfig: Omit<LoginConfig, 'serverUrl' | 'userAccount' | 'userPassword' | 'isp'>
+  ): Promise<MultiAccountLoginResult> {
+    const attempts: MultiAccountLoginAttempt[] = [];
+
+    if (accounts.length === 0) {
+      return {
+        success: false,
+        message: '没有可用的认证账号',
+        attempts,
+      };
+    }
+
+    for (const account of accounts) {
+      const result = await this.login({
+        ...networkConfig,
+        serverUrl: account.serverUrl,
+        userAccount: account.username,
+        userPassword: account.password,
+        isp: account.isp,
+      });
+
+      attempts.push({
+        accountId: account.id,
+        username: account.username,
+        success: result.success,
+        message: result.message,
+        code: result.code,
+      });
+
+      if (result.success) {
+        return {
+          ...result,
+          accountId: account.id,
+          attempts,
+        };
+      }
+    }
+
+    const lastAttempt = attempts[attempts.length - 1];
+    return {
+      success: false,
+      message: lastAttempt?.message || '所有账号认证失败',
+      code: lastAttempt?.code,
+      attempts,
+    };
   }
 
   /**

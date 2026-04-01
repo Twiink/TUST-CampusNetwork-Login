@@ -1,0 +1,14 @@
+#!/bin/sh
+# 自动移除 commit message 中的 AI co-author 尾注
+# 防止 GitHub 贡献者列表出现 AI 账号（Claude、Anthropic、Copilot 等）
+
+MSG_FILE="$1"
+
+# 移除常见 AI co-author 行
+sed -i.bak '/^[[:space:]]*Co-[Aa]uthored-[Bb]y:.*\(Claude\|Anthropic\|noreply@anthropic\.com\|Copilot\|copilot\|GitHub Copilot\|OpenAI\|GPT\|Gemini\|google\.com\)/d' "$MSG_FILE"
+
+# 清理可能残留的末尾空行
+sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$MSG_FILE"
+
+# 删除 sed 备份文件
+rm -f "${MSG_FILE}.bak"

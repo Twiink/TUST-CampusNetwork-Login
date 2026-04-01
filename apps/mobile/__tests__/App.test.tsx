@@ -1,13 +1,15 @@
-/**
- * @format
- */
-
 import React from 'react';
-import ReactTestRenderer from 'react-test-renderer';
+import { render, screen, waitFor } from '@testing-library/react-native';
 import App from '../App';
 
-test('renders correctly', async () => {
-  await ReactTestRenderer.act(() => {
-    ReactTestRenderer.create(<App />);
+describe('App', () => {
+  it('应默认渲染运行状态页', async () => {
+    render(<App />);
+
+    expect(await screen.findByText('TUST-WIFI')).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getAllByText('运行状态').length).toBeGreaterThan(0);
+    });
   });
 });

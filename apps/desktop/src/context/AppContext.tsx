@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
-import type { AppConfig, ConnectionStatus } from '@repo/shared';
+import { DEFAULT_APP_SETTINGS, type AppConfig, type ConnectionStatus } from '@repo/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useNetwork } from '../hooks/useNetwork';
 import { useLogs } from '../hooks/useLogs';
@@ -102,15 +102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           accounts: [],
           currentAccountId: null,
           wifiList: [],
-          settings: {
-            autoLaunch: false,
-            enableHeartbeat: false,
-            pollingInterval: 30,
-            autoReconnect: true,
-            maxRetries: 3,
-            showNotification: true,
-            autoUpdate: true,
-          },
+          settings: DEFAULT_APP_SETTINGS,
         },
         setConfig,
         networkStatus: getConnectionStatus(),

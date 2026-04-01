@@ -10,7 +10,7 @@ import {
   NetworkStatus,
   createRetryPolicy,
   createLogger,
-  LoginConfig,
+  AccountConfig,
 } from '@repo/shared';
 import { getNetworkInfo } from './network';
 
@@ -131,36 +131,42 @@ export class AutoReconnectService {
    * 尝试重连
    */
   private async attemptReconnect(): Promise<void> {
-    // 优先使用当前 WiFi 关联的账号（linkedAccountId），回退到全局当前账号
-    let currentAccount = this.accountManager.getCurrentAccount();
+    let loginAccounts: AccountConfig[] = [];
+    const currentAccount = this.accountManager.getCurrentAccount();
+    if (currentAccount) {
+      loginAccounts = [currentAccount];
+    }
 
     if (this.lastStatus?.ssid && this.wifiManager) {
       const wifiConfig = this.wifiManager.getWifiBySsid(this.lastStatus.ssid);
-      if (wifiConfig?.linkedAccountId) {
-        const linkedAccount = this.accountManager.getAccountById(wifiConfig.linkedAccountId);
-        if (linkedAccount) {
-          this.logger.info('使用 WiFi 关联账号进行重连', {
+      if (wifiConfig?.linkedAccountIds.length) {
+        const linkedAccounts = wifiConfig.linkedAccountIds
+          .map((accountId) => this.accountManager.getAccountById(accountId))
+          .filter((account): account is AccountConfig => account !== null);
+
+        if (linkedAccounts.length > 0) {
+          this.logger.info('使用 WiFi 关联账号序列进行重连', {
             WiFi: this.lastStatus.ssid,
-            关联账号: linkedAccount.username,
+            关联账号数: linkedAccounts.length,
+            首选账号: linkedAccounts[0].username,
           });
-          currentAccount = linkedAccount;
+          loginAccounts = linkedAccounts;
         } else {
-          this.logger.warn('WiFi 关联的账号不存在，使用当前账号', {
-            linkedAccountId: wifiConfig.linkedAccountId,
+          this.logger.warn('WiFi 关联账号不存在，回退到当前账号', {
+            linkedAccountIds: wifiConfig.linkedAccountIds.join(', '),
           });
         }
       }
     }
 
-    if (!currentAccount) {
+    if (loginAccounts.length === 0) {
       this.logger.warn('自动重连失败：未配置账户');
       return;
     }
 
     this.logger.info('===== 开始自动重连 =====', {
-      账户: currentAccount.username,
-      运营商: currentAccount.isp,
-      服务器: currentAccount.serverUrl,
+      账号数: loginAccounts.length,
+      首选账户: loginAccounts[0].username,
       最大重试: this.options.maxRetries,
     });
 
@@ -196,25 +202,22 @@ export class AutoReconnectService {
           MAC: networkInfo.mac || '无',
         });
 
-        const loginConfig: LoginConfig = {
-          serverUrl: currentAccount.serverUrl,
-          userAccount: currentAccount.username,
-          userPassword: currentAccount.password,
+        const result = await this.authService.loginWithAccounts(loginAccounts, {
           wlanUserIp: networkInfo.ipv4,
           wlanUserIpv6: networkInfo.ipv6 || undefined,
           wlanUserMac: networkInfo.mac || undefined,
-          isp: currentAccount.isp,
-        };
-
-        this.authService.setServerUrl(currentAccount.serverUrl);
-        const result = await this.authService.login(loginConfig);
+        });
 
         if (!result.success) {
           this.logger.warn('登录请求失败', { 消息: result.message });
           throw new Error(result.message);
         }
 
-        this.logger.success('登录请求成功', { 消息: result.message });
+        this.logger.success('登录请求成功', {
+          消息: result.message,
+          账户ID: result.accountId || '未知',
+          尝试次数: result.attempts.length,
+        });
         return result;
       });
 
@@ -305,5 +308,12 @@ export function createAutoReconnectService(
   callbacks?: AutoReconnectCallbacks,
   wifiManager?: WifiManager
 ): AutoReconnectService {
-  return new AutoReconnectService(authService, accountManager, logger, options, callbacks, wifiManager);
+  return new AutoReconnectService(
+    authService,
+    accountManager,
+    logger,
+    options,
+    callbacks,
+    wifiManager
+  );
 }

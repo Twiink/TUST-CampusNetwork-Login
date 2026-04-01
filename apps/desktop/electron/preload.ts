@@ -53,6 +53,8 @@ const IPC_EVENTS = {
   LOG_ADDED: 'event:log:added',
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
+  WIFI_RECONNECT_PROGRESS: 'event:wifi:reconnectProgress',
+  WIFI_ALL_RECONNECTS_FAILED: 'event:wifi:allReconnectsFailed',
 } as const;
 
 /**
@@ -137,6 +139,11 @@ const electronAPI = {
     download: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_DOWNLOAD),
     install: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_INSTALL),
     getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.UPDATE_STATUS),
+  },
+
+  app: {
+    getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.APP_VERSION),
+    quit: () => ipcRenderer.invoke(IPC_CHANNELS.APP_QUIT),
   },
 
   // 事件监听

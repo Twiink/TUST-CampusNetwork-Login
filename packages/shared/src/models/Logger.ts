@@ -31,7 +31,10 @@ export class Logger {
   private listeners: Set<(entry: LogEntry) => void> = new Set();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(maxLogs: number = DEFAULT_MAX_LOGS, retentionDays: number = DEFAULT_LOG_RETENTION_DAYS) {
+  constructor(
+    maxLogs: number = DEFAULT_MAX_LOGS,
+    retentionDays: number = DEFAULT_LOG_RETENTION_DAYS
+  ) {
     this.maxLogs = maxLogs;
     this.retentionDays = retentionDays;
     this.startAutoCleanup();

@@ -139,23 +139,34 @@ export class MobileWifiAdapter implements WifiAdapter {
    * 连接到指定 WiFi（暂不实现）
    */
   async connect(_ssid: string, _password: string): Promise<boolean> {
-    console.warn('WiFi connection not implemented on mobile');
-    return false;
+    return WifiModule.connectToWifi(_ssid, _password);
   }
 
   /**
    * 断开 WiFi（暂不实现）
    */
   async disconnect(): Promise<void> {
-    console.warn('WiFi disconnection not implemented on mobile');
+    await WifiModule.disconnectWifi();
   }
 
   /**
    * 获取可用 WiFi 列表（暂不实现）
    */
   async scan(): Promise<WifiInfo[]> {
-    console.warn('WiFi scanning not implemented on mobile');
-    return [];
+    const networks = await WifiModule.scanWifiNetworks();
+    return networks
+      .filter(
+        (network): network is typeof network & { ssid: string } => typeof network.ssid === 'string'
+      )
+      .map(network => ({
+        ssid: network.ssid,
+        bssid: network.bssid || undefined,
+        signalStrength: network.signalStrength || 0,
+        frequency: network.frequency || undefined,
+        channel: network.channel || undefined,
+        security: network.security || undefined,
+        connected: false,
+      }));
   }
 }
 

@@ -127,7 +127,18 @@ export function useAutoReconnect(options: UseAutoReconnectOptions): UseAutoRecon
 
     setIsReconnecting(false);
     return success;
-  }, [enabled, isReconnecting, maxRetries, onReconnect, onSuccess, onFailure, onAttempt, reset]);
+  }, [
+    enabled,
+    isReconnecting,
+    maxRetries,
+    initialDelay,
+    maxDelay,
+    onReconnect,
+    onSuccess,
+    onFailure,
+    onAttempt,
+    reset,
+  ]);
 
   return {
     isReconnecting,

@@ -147,10 +147,7 @@ async function scanLinux(): Promise<AvailableNetwork[]> {
  * @param ssid WiFi SSID
  * @param password WiFi 密码（可选，如果未提供则尝试连接已保存的网络）
  */
-export async function connectToNetwork(
-  ssid: string,
-  password?: string
-): Promise<boolean> {
+export async function connectToNetwork(ssid: string, password?: string): Promise<boolean> {
   switch (process.platform) {
     case 'darwin':
       return await connectMacOS(ssid, password);
@@ -196,10 +193,7 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
  * @param ssid WiFi SSID
  * @param password WiFi密码
  */
-async function connectWindows(
-  ssid: string,
-  password?: string
-): Promise<boolean> {
+async function connectWindows(ssid: string, password?: string): Promise<boolean> {
   return await connectWindowsInternal(ssid, password);
 }
 
@@ -229,7 +223,9 @@ async function connectWindowsInternal(ssid: string, _password?: string): Promise
     }
 
     // 没有配置文件，抛出错误提示用户手动连接
-    throw new Error(`未找到WiFi配置文件。请先在Windows系统中手动连接一次WiFi "${ssid}"，之后应用可自动重连`);
+    throw new Error(
+      `未找到WiFi配置文件。请先在Windows系统中手动连接一次WiFi "${ssid}"，之后应用可自动重连`
+    );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(errorMessage);

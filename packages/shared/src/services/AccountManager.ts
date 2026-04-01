@@ -14,7 +14,10 @@ import type { Logger } from '../models/Logger';
 export class AccountManager {
   private logger: Logger | null;
 
-  constructor(private configManager: ConfigManager, logger?: Logger) {
+  constructor(
+    private configManager: ConfigManager,
+    logger?: Logger
+  ) {
     this.logger = logger || null;
   }
 
@@ -254,6 +257,9 @@ export class AccountManager {
 /**
  * 创建账户管理服务实例
  */
-export function createAccountManager(configManager: ConfigManager, logger?: Logger): AccountManager {
+export function createAccountManager(
+  configManager: ConfigManager,
+  logger?: Logger
+): AccountManager {
   return new AccountManager(configManager, logger);
 }

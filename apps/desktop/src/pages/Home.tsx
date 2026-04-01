@@ -31,10 +31,7 @@ import {
 
 // 检测是否为深色模式
 const isDarkMode = () => {
-  return (
-    window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-  );
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
 // WiFi 信号强度图标和颜色（支持深色模式）
@@ -86,11 +83,11 @@ const getLinkSpeedStatus = (speed: number) => {
 };
 
 // WiFi 信息卡片组件
-const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => void; refreshing: boolean }> = ({
-  networkStatus,
-  onRefresh,
-  refreshing,
-}) => {
+const WifiInfoCard: React.FC<{
+  networkStatus: NetworkStatus;
+  onRefresh: () => void;
+  refreshing: boolean;
+}> = ({ networkStatus, onRefresh, refreshing }) => {
   const { ssid, signalStrength = 0, latency, linkSpeed = 0, frequency = 0 } = networkStatus;
 
   const signal = getSignalIcon(signalStrength);
@@ -148,7 +145,15 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
       </button>
 
       {/* WiFi 名称 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingRight: 30 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: 12,
+          paddingRight: 30,
+        }}
+      >
         <Wifi size={18} color="var(--primary-color)" />
         <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>WiFi 名称:</span>
         <strong style={{ color: 'var(--text-primary)', fontSize: '1.1rem' }}>{ssid}</strong>
@@ -240,10 +245,34 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
             borderRadius: 'var(--radius-sm)',
           }}
         >
-          <Wifi size={16} color={frequency >= 5000 ? (isDarkMode() ? '#34d399' : '#22c55e') : (isDarkMode() ? '#60a5fa' : '#3b82f6')} />
+          <Wifi
+            size={16}
+            color={
+              frequency >= 5000
+                ? isDarkMode()
+                  ? '#34d399'
+                  : '#22c55e'
+                : isDarkMode()
+                  ? '#60a5fa'
+                  : '#3b82f6'
+            }
+          />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>频段</div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: frequency >= 5000 ? (isDarkMode() ? '#34d399' : '#22c55e') : (isDarkMode() ? '#60a5fa' : '#3b82f6') }}>
+            <div
+              style={{
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                color:
+                  frequency >= 5000
+                    ? isDarkMode()
+                      ? '#34d399'
+                      : '#22c55e'
+                    : isDarkMode()
+                      ? '#60a5fa'
+                      : '#3b82f6',
+              }}
+            >
               {frequency >= 5000 ? '5G' : frequency >= 2400 ? '2.4G' : '未知'}
             </div>
           </div>
@@ -287,8 +316,12 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
                 }}
               >
                 <Globe2 size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>IPv4 地址</span>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    IPv4 地址
+                  </span>
                   <span
                     style={{
                       color: 'var(--text-primary)',
@@ -315,8 +348,12 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
                 }}
               >
                 <Globe size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>IPv6 地址</span>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    IPv6 地址
+                  </span>
                   <span
                     style={{
                       color: 'var(--text-primary)',
@@ -343,10 +380,22 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
                   borderRadius: 'var(--radius-sm)',
                 }}
               >
-                <MonitorSmartphone size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
+                <MonitorSmartphone
+                  size={16}
+                  color="var(--primary-color)"
+                  style={{ flexShrink: 0 }}
+                />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>MAC 地址</span>
-                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    MAC 地址
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     {networkStatus.mac}
                   </span>
                 </div>
@@ -365,8 +414,16 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
               >
                 <Router size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>默认网关</span>
-                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    默认网关
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     {networkStatus.gateway}
                   </span>
                 </div>
@@ -385,8 +442,16 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
               >
                 <Server size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>DNS 服务器</span>
-                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    DNS 服务器
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     {networkStatus.dns}
                   </span>
                 </div>
@@ -405,8 +470,16 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
               >
                 <Network size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>子网掩码</span>
-                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    子网掩码
+                  </span>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     {networkStatus.subnetMask}
                   </span>
                 </div>
@@ -426,7 +499,13 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
                 <Cpu size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>BSSID</span>
-                  <span style={{ color: 'var(--text-primary)', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                  <span
+                    style={{
+                      color: 'var(--text-primary)',
+                      fontFamily: 'monospace',
+                      fontSize: '0.85rem',
+                    }}
+                  >
                     {networkStatus.bssid}
                   </span>
                 </div>
@@ -445,7 +524,9 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
               >
                 <Radio size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>WiFi 信道</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    WiFi 信道
+                  </span>
                   <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
                     {networkStatus.channel}
                   </span>
@@ -465,7 +546,9 @@ const WifiInfoCard: React.FC<{ networkStatus: NetworkStatus; onRefresh: () => vo
               >
                 <Lock size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>安全类型</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                    安全类型
+                  </span>
                   <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
                     {networkStatus.security}
                   </span>
@@ -487,7 +570,9 @@ const WifiSwitcherCard: React.FC<{
   switching: boolean;
 }> = ({ config, currentSsid, onSwitch, switching }) => {
   // 按优先级排序WiFi列表
-  const sortedWifiList = [...config.wifiList].sort((a, b) => (a.priority || 10) - (b.priority || 10));
+  const sortedWifiList = [...config.wifiList].sort(
+    (a, b) => (a.priority || 10) - (b.priority || 10)
+  );
 
   // 如果只有一个或没有WiFi配置，不显示切换卡片
   if (sortedWifiList.length <= 1) {
@@ -529,7 +614,9 @@ const WifiSwitcherCard: React.FC<{
               style={{
                 padding: 12,
                 borderRadius: 'var(--radius-md)',
-                border: isCurrent ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
+                border: isCurrent
+                  ? '2px solid var(--primary-color)'
+                  : '1px solid var(--border-color)',
                 background: isCurrent
                   ? 'rgba(14, 165, 233, 0.1)'
                   : switching
@@ -654,7 +741,14 @@ const WifiReconnectProgressCard: React.FC<{
         border: `2px solid ${statusConfig.borderColor}`,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 12,
+        }}
+      >
         <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
           {statusConfig.icon}
           WiFi 自动重连
@@ -674,7 +768,9 @@ const WifiReconnectProgressCard: React.FC<{
         {/* WiFi名称 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Wifi size={16} color={statusConfig.textColor} />
-          <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>{ssid}</span>
+          <span style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+            {ssid}
+          </span>
         </div>
 
         {/* 尝试次数 */}
@@ -699,7 +795,14 @@ const WifiReconnectProgressCard: React.FC<{
                 }}
               />
             </div>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: statusConfig.textColor, minWidth: 50 }}>
+            <span
+              style={{
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                color: statusConfig.textColor,
+                minWidth: 50,
+              }}
+            >
               {attempt} / {maxAttempts}
             </span>
           </div>
@@ -750,7 +853,14 @@ const WifiReconnectFailedCard: React.FC<{
         border: '2px solid #ef4444',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: 16,
+        }}
+      >
         <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444' }}>
           <AlertCircle size={20} />
           所有 WiFi 连接失败
@@ -794,7 +904,14 @@ const WifiReconnectFailedCard: React.FC<{
               border: '1px solid rgba(239, 68, 68, 0.2)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 8,
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <WifiOff size={16} color="#ef4444" />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{failed.ssid}</span>
@@ -832,10 +949,19 @@ const WifiReconnectFailedCard: React.FC<{
       >
         <AlertCircle size={16} color="#3b82f6" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ flex: 1 }}>
-          <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}>
+          <p
+            style={{ margin: '0 0 8px 0', fontSize: '0.85rem', fontWeight: 600, color: '#3b82f6' }}
+          >
             建议操作
           </p>
-          <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 20,
+              fontSize: '0.85rem',
+              color: 'var(--text-secondary)',
+            }}
+          >
             <li>检查WiFi密码是否正确</li>
             <li>确认WiFi信号强度是否足够</li>
             <li>尝试手动连接WiFi</li>
@@ -849,8 +975,14 @@ const WifiReconnectFailedCard: React.FC<{
 
 export const Home: React.FC = () => {
   const { networkStatus, login, logout, config } = useApp();
-  const { status: fullNetworkStatus, wifiConnected, wifiSSID, fetchStatus, loading, initialCheckDone } =
-    useNetwork();
+  const {
+    status: fullNetworkStatus,
+    wifiConnected,
+    wifiSSID,
+    fetchStatus,
+    loading,
+    initialCheckDone,
+  } = useNetwork();
   const { heartbeat, reconnectProgress } = useHeartbeat();
   const { progress: wifiReconnectProgress, allFailed, clearAllFailed } = useWifiReconnect();
   const [refreshing, setRefreshing] = useState(false);
@@ -991,7 +1123,11 @@ export const Home: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    backgroundColor: wifiConnected
+                      ? heartbeat.connected
+                        ? '#22c55e'
+                        : '#ef4444'
+                      : '#9ca3af',
                     marginRight: 8,
                     animation: wifiConnected ? 'pulse 2s infinite' : 'none',
                   }}
@@ -1026,10 +1162,24 @@ export const Home: React.FC = () => {
                 }}
               >
                 <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
-                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                <p
+                  style={{
+                    margin: '0 0 8px 0',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#6b7280',
+                  }}
+                >
                   心跳检测已暂停
                 </p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                  }}
+                >
                   当前未连接 WiFi，心跳检测功能暂停。
                   <br />
                   连接到 WiFi 后将自动恢复检测。
@@ -1060,8 +1210,16 @@ export const Home: React.FC = () => {
                     >
                       <Activity size={16} color="var(--primary-color)" />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          检测间隔
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           {config.settings.pollingInterval} 秒
                         </div>
                       </div>
@@ -1086,7 +1244,9 @@ export const Home: React.FC = () => {
                         <XCircle size={16} color="#ef4444" />
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          连接状态
+                        </div>
                         <div
                           style={{
                             fontSize: '0.9rem',
@@ -1117,7 +1277,13 @@ export const Home: React.FC = () => {
                           marginBottom: 8,
                         }}
                       >
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <span
+                          style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           网络延迟详情
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1125,7 +1291,10 @@ export const Home: React.FC = () => {
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <Activity
+                          size={16}
+                          color={getLatencyStatus(heartbeat.latency.value).color}
+                        />
                         <div style={{ flex: 1 }}>
                           <div
                             style={{
@@ -1243,7 +1412,11 @@ export const Home: React.FC = () => {
             <Wifi size={18} style={{ marginRight: 8 }} />
             当前 WiFi
           </h3>
-          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+          <WifiInfoCard
+            networkStatus={fullNetworkStatus}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+          />
         </div>
 
         {/* WiFi 重连进度卡片 */}
@@ -1262,7 +1435,11 @@ export const Home: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    backgroundColor: wifiConnected
+                      ? heartbeat.connected
+                        ? '#22c55e'
+                        : '#ef4444'
+                      : '#9ca3af',
                     marginRight: 8,
                     animation: wifiConnected ? 'pulse 2s infinite' : 'none',
                   }}
@@ -1297,10 +1474,24 @@ export const Home: React.FC = () => {
                 }}
               >
                 <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
-                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                <p
+                  style={{
+                    margin: '0 0 8px 0',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#6b7280',
+                  }}
+                >
                   心跳检测已暂停
                 </p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                  }}
+                >
                   当前未连接 WiFi，心跳检测功能暂停。
                   <br />
                   连接到 WiFi 后将自动恢复检测。
@@ -1331,8 +1522,16 @@ export const Home: React.FC = () => {
                     >
                       <Activity size={16} color="var(--primary-color)" />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          检测间隔
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           {config.settings.pollingInterval} 秒
                         </div>
                       </div>
@@ -1357,7 +1556,9 @@ export const Home: React.FC = () => {
                         <XCircle size={16} color="#ef4444" />
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          连接状态
+                        </div>
                         <div
                           style={{
                             fontSize: '0.9rem',
@@ -1388,7 +1589,13 @@ export const Home: React.FC = () => {
                           marginBottom: 8,
                         }}
                       >
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <span
+                          style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           网络延迟详情
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1396,7 +1603,10 @@ export const Home: React.FC = () => {
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <Activity
+                          size={16}
+                          color={getLatencyStatus(heartbeat.latency.value).color}
+                        />
                         <div style={{ flex: 1 }}>
                           <div
                             style={{
@@ -1509,7 +1719,8 @@ export const Home: React.FC = () => {
           <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>该 WiFi 未配置</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-            当前连接的 WiFi &quot;{wifiSSID}&quot; 尚未配置，请前往&quot;配置设置&quot;添加此 WiFi 的配置。
+            当前连接的 WiFi &quot;{wifiSSID}&quot; 尚未配置，请前往&quot;配置设置&quot;添加此 WiFi
+            的配置。
           </p>
           <div
             style={{
@@ -1545,7 +1756,11 @@ export const Home: React.FC = () => {
             <Wifi size={18} style={{ marginRight: 8 }} />
             当前 WiFi
           </h3>
-          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+          <WifiInfoCard
+            networkStatus={fullNetworkStatus}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+          />
         </div>
 
         {/* WiFi 重连进度卡片 */}
@@ -1564,7 +1779,11 @@ export const Home: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    backgroundColor: wifiConnected
+                      ? heartbeat.connected
+                        ? '#22c55e'
+                        : '#ef4444'
+                      : '#9ca3af',
                     marginRight: 8,
                     animation: wifiConnected ? 'pulse 2s infinite' : 'none',
                   }}
@@ -1599,10 +1818,24 @@ export const Home: React.FC = () => {
                 }}
               >
                 <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
-                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                <p
+                  style={{
+                    margin: '0 0 8px 0',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#6b7280',
+                  }}
+                >
                   心跳检测已暂停
                 </p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                  }}
+                >
                   当前未连接 WiFi，心跳检测功能暂停。
                   <br />
                   连接到 WiFi 后将自动恢复检测。
@@ -1633,8 +1866,16 @@ export const Home: React.FC = () => {
                     >
                       <Activity size={16} color="var(--primary-color)" />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          检测间隔
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           {config.settings.pollingInterval} 秒
                         </div>
                       </div>
@@ -1659,7 +1900,9 @@ export const Home: React.FC = () => {
                         <XCircle size={16} color="#ef4444" />
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          连接状态
+                        </div>
                         <div
                           style={{
                             fontSize: '0.9rem',
@@ -1690,7 +1933,13 @@ export const Home: React.FC = () => {
                           marginBottom: 8,
                         }}
                       >
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <span
+                          style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           网络延迟详情
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -1698,7 +1947,10 @@ export const Home: React.FC = () => {
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <Activity
+                          size={16}
+                          color={getLatencyStatus(heartbeat.latency.value).color}
+                        />
                         <div style={{ flex: 1 }}>
                           <div
                             style={{
@@ -1828,14 +2080,25 @@ export const Home: React.FC = () => {
             }}
           >
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+              <p
+                style={{
+                  margin: '0 0 4px 0',
+                  fontSize: '0.9rem',
+                  fontWeight: 500,
+                  color: 'var(--text-primary)',
+                }}
+              >
                 此 WiFi 已配置为「无需认证」
               </p>
               <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                 如家庭 WiFi、手机热点等网络
               </p>
             </div>
-            <button className="btn btn-danger" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={logout}>
+            <button
+              className="btn btn-danger"
+              style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
+              onClick={logout}
+            >
               <LogOut size={16} style={{ marginRight: 6 }} />
               断开连接
             </button>
@@ -1862,7 +2125,11 @@ export const Home: React.FC = () => {
             <Wifi size={18} style={{ marginRight: 8 }} />
             当前 WiFi
           </h3>
-          <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+          <WifiInfoCard
+            networkStatus={fullNetworkStatus}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+          />
         </div>
 
         {/* WiFi 重连进度卡片 */}
@@ -1881,7 +2148,11 @@ export const Home: React.FC = () => {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    backgroundColor: wifiConnected ? (heartbeat.connected ? '#22c55e' : '#ef4444') : '#9ca3af',
+                    backgroundColor: wifiConnected
+                      ? heartbeat.connected
+                        ? '#22c55e'
+                        : '#ef4444'
+                      : '#9ca3af',
                     marginRight: 8,
                     animation: wifiConnected ? 'pulse 2s infinite' : 'none',
                   }}
@@ -1916,10 +2187,24 @@ export const Home: React.FC = () => {
                 }}
               >
                 <WifiOff size={48} color="#9ca3af" style={{ marginBottom: 12 }} />
-                <p style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600, color: '#6b7280' }}>
+                <p
+                  style={{
+                    margin: '0 0 8px 0',
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#6b7280',
+                  }}
+                >
                   心跳检测已暂停
                 </p>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: '0.85rem',
+                    color: 'var(--text-secondary)',
+                    lineHeight: 1.6,
+                  }}
+                >
                   当前未连接 WiFi，心跳检测功能暂停。
                   <br />
                   连接到 WiFi 后将自动恢复检测。
@@ -1950,8 +2235,16 @@ export const Home: React.FC = () => {
                     >
                       <Activity size={16} color="var(--primary-color)" />
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          检测间隔
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '0.9rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           {config.settings.pollingInterval} 秒
                         </div>
                       </div>
@@ -1976,7 +2269,9 @@ export const Home: React.FC = () => {
                         <XCircle size={16} color="#ef4444" />
                       )}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          连接状态
+                        </div>
                         <div
                           style={{
                             fontSize: '0.9rem',
@@ -2007,7 +2302,13 @@ export const Home: React.FC = () => {
                           marginBottom: 8,
                         }}
                       >
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                        <span
+                          style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            color: 'var(--text-primary)',
+                          }}
+                        >
                           网络延迟详情
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -2015,7 +2316,10 @@ export const Home: React.FC = () => {
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Activity size={16} color={getLatencyStatus(heartbeat.latency.value).color} />
+                        <Activity
+                          size={16}
+                          color={getLatencyStatus(heartbeat.latency.value).color}
+                        />
                         <div style={{ flex: 1 }}>
                           <div
                             style={{
@@ -2128,7 +2432,8 @@ export const Home: React.FC = () => {
           <AlertCircle size={64} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ margin: '0 0 8px 0', color: '#f59e0b' }}>未配置账户</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
-            该 WiFi 需要校园网认证，但尚未关联账户。请前往&quot;配置设置&quot;添加账户并关联到此 WiFi。
+            该 WiFi 需要校园网认证，但尚未关联账户。请前往&quot;配置设置&quot;添加账户并关联到此
+            WiFi。
           </p>
           <div
             style={{
@@ -2163,7 +2468,11 @@ export const Home: React.FC = () => {
           <Wifi size={18} style={{ marginRight: 8 }} />
           当前 WiFi
         </h3>
-        <WifiInfoCard networkStatus={fullNetworkStatus} onRefresh={handleRefresh} refreshing={refreshing} />
+        <WifiInfoCard
+          networkStatus={fullNetworkStatus}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
+        />
       </div>
 
       {/* 需要认证提示 */}
@@ -2188,7 +2497,14 @@ export const Home: React.FC = () => {
           }}
         >
           <div style={{ flex: 1 }}>
-            <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', fontWeight: 500, color: 'var(--text-primary)' }}>
+            <p
+              style={{
+                margin: '0 0 4px 0',
+                fontSize: '0.9rem',
+                fontWeight: 500,
+                color: 'var(--text-primary)',
+              }}
+            >
               此 WiFi 已配置为「需要认证」
             </p>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
@@ -2196,17 +2512,29 @@ export const Home: React.FC = () => {
             </p>
           </div>
           {networkStatus === 'disconnected' ? (
-            <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={login}>
+            <button
+              className="btn btn-primary"
+              style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
+              onClick={login}
+            >
               <LogIn size={16} style={{ marginRight: 6 }} />
               立即连接
             </button>
           ) : networkStatus === 'connected' ? (
-            <button className="btn btn-danger" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} onClick={logout}>
+            <button
+              className="btn btn-danger"
+              style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
+              onClick={logout}
+            >
               <LogOut size={16} style={{ marginRight: 6 }} />
               断开连接
             </button>
           ) : (
-            <button className="btn btn-primary" style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }} disabled>
+            <button
+              className="btn btn-primary"
+              style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
+              disabled
+            >
               <Loader size={16} style={{ marginRight: 6 }} className="spin" />
               正在认证...
             </button>
@@ -2276,8 +2604,12 @@ export const Home: React.FC = () => {
               >
                 <Activity size={16} color="var(--primary-color)" />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>检测间隔</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    检测间隔
+                  </div>
+                  <div
+                    style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}
+                  >
                     {config.settings.pollingInterval} 秒
                   </div>
                 </div>
@@ -2302,7 +2634,9 @@ export const Home: React.FC = () => {
                   <XCircle size={16} color="#ef4444" />
                 )}
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接状态</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    连接状态
+                  </div>
                   <div
                     style={{
                       fontSize: '0.9rem',
@@ -2333,7 +2667,9 @@ export const Home: React.FC = () => {
                     marginBottom: 8,
                   }}
                 >
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <span
+                    style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}
+                  >
                     网络延迟详情
                   </span>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -2466,11 +2802,7 @@ export const Home: React.FC = () => {
             zIndex: 1000,
           }}
         >
-          {toast.type === 'success' ? (
-            <CheckCircle2 size={18} />
-          ) : (
-            <AlertCircle size={18} />
-          )}
+          {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
           <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{toast.message}</span>
         </div>
       )}

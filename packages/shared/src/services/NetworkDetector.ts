@@ -17,21 +17,54 @@ import type { Logger } from '../models/Logger';
 /**
  * 网络探测 URL（使用国内服务）
  */
-const CONNECTIVITY_CHECK_URLS = [
+const DEFAULT_CONNECTIVITY_CHECK_URLS = [
   'https://www.baidu.com',
   'https://www.speedtest.cn',
   'http://connectivitycheck.platform.hicloud.com/generate_204',
 ];
 
 /**
- * 默认 Ping 目标（使用百度）
+ * 延迟测试目标
  */
-const DEFAULT_PING_TARGET = 'https://www.baidu.com';
+interface LatencyTarget {
+  url: string;
+  source: string;
+}
 
 /**
- * 备用 Ping 目标（测速网）
+ * 默认延迟测试目标
  */
-const FALLBACK_PING_TARGET = 'https://www.speedtest.cn';
+const DEFAULT_PING_TARGETS: LatencyTarget[] = [
+  {
+    url: 'https://www.baidu.com',
+    source: '百度',
+  },
+  {
+    url: 'https://www.speedtest.cn',
+    source: '测速网',
+  },
+];
+
+/**
+ * 网络探测服务可选配置
+ */
+export interface NetworkDetectorOptions {
+  /** 连通性检测 URL 列表 */
+  connectivityCheckUrls?: string[];
+  /** 连通性检测超时时间（毫秒） */
+  connectivityTimeoutMs?: number;
+  /** 延迟测试目标列表，按顺序回退 */
+  pingTargets?: LatencyTarget[];
+  /** 延迟测试超时时间（毫秒） */
+  latencyTimeoutMs?: number;
+}
+
+interface ResolvedNetworkDetectorOptions {
+  connectivityCheckUrls: string[];
+  connectivityTimeoutMs: number;
+  pingTargets: LatencyTarget[];
+  latencyTimeoutMs: number;
+}
 
 /**
  * 联网探测服务类
@@ -41,10 +74,26 @@ export class NetworkDetector {
   private isPolling = false;
   private wifiAdapter?: WifiAdapter;
   private logger: Logger | null;
+  private options: ResolvedNetworkDetectorOptions;
 
-  constructor(wifiAdapter?: WifiAdapter, logger?: Logger) {
+  constructor(wifiAdapter?: WifiAdapter, logger?: Logger, options: NetworkDetectorOptions = {}) {
     this.wifiAdapter = wifiAdapter;
     this.logger = logger || null;
+    const pingTargets =
+      options.pingTargets && options.pingTargets.length > 0
+        ? options.pingTargets
+        : DEFAULT_PING_TARGETS;
+
+    this.options = {
+      connectivityCheckUrls: [
+        ...(options.connectivityCheckUrls?.length
+          ? options.connectivityCheckUrls
+          : DEFAULT_CONNECTIVITY_CHECK_URLS),
+      ],
+      connectivityTimeoutMs: options.connectivityTimeoutMs ?? 5000,
+      pingTargets: pingTargets.map((target) => ({ ...target })),
+      latencyTimeoutMs: options.latencyTimeoutMs ?? 5000,
+    };
   }
 
   /**
@@ -60,10 +109,10 @@ export class NetworkDetector {
   async checkConnectivity(): Promise<boolean> {
     this.logger?.debug('开始检查网络连通性');
 
-    for (const url of CONNECTIVITY_CHECK_URLS) {
+    for (const url of this.options.connectivityCheckUrls) {
       try {
         this.logger?.debug(`尝试连接: ${url}`);
-        const response = await httpGet(url, { timeout: 5000 });
+        const response = await httpGet(url, { timeout: this.options.connectivityTimeoutMs });
         if (response.status === 204 || response.ok) {
           this.logger?.success(`网络连通性检查成功`, { URL: url, 状态码: response.status });
           return true;
@@ -111,81 +160,78 @@ export class NetworkDetector {
   async measureLatency(): Promise<LatencyResult> {
     this.logger?.debug('开始测量网络延迟');
 
-    // 先尝试百度
-    const baiduResult = await this.testSingleTarget(DEFAULT_PING_TARGET, '百度');
-    if (baiduResult.status !== 'timeout') {
-      this.logger?.success(`延迟测试成功`, {
-        目标: baiduResult.source,
-        延迟: `${baiduResult.value}ms`,
-        状态: baiduResult.status,
-      });
-      return baiduResult;
-    }
+    let lastTimeoutResult: LatencyResult | null = null;
 
-    this.logger?.warn('百度延迟测试超时，尝试备用服务');
+    for (const [index, target] of this.options.pingTargets.entries()) {
+      const result = await this.testSingleTarget(target);
 
-    // 百度失败，尝试测速网
-    const speedtestResult = await this.testSingleTarget(FALLBACK_PING_TARGET, '测速网');
-    if (speedtestResult.status !== 'timeout') {
-      this.logger?.success(`延迟测试成功（备用）`, {
-        目标: speedtestResult.source,
-        延迟: `${speedtestResult.value}ms`,
-        状态: speedtestResult.status,
-      });
-      return speedtestResult;
+      if (result.status !== 'timeout') {
+        this.logger?.success(index === 0 ? '延迟测试成功' : '延迟测试成功（备用）', {
+          目标: result.source,
+          延迟: `${result.value}ms`,
+          状态: result.status,
+        });
+        return result;
+      }
+
+      lastTimeoutResult = result;
+
+      if (index < this.options.pingTargets.length - 1) {
+        this.logger?.warn(`${target.source} 延迟测试超时，尝试备用服务`);
+      }
     }
 
     this.logger?.error('延迟测试失败：所有目标均超时');
 
-    // 都失败了，返回超时
-    return {
-      value: 9999,
-      status: 'timeout',
-      target: DEFAULT_PING_TARGET,
-      source: '百度',
-      timestamp: Date.now(),
-    };
+    return (
+      lastTimeoutResult || {
+        value: 9999,
+        status: 'timeout',
+        target: this.options.pingTargets[0]?.url || 'unknown',
+        source: this.options.pingTargets[0]?.source || '未配置目标',
+        timestamp: Date.now(),
+      }
+    );
   }
 
   /**
    * 测试单个目标的延迟
    */
-  private async testSingleTarget(target: string, source: string): Promise<LatencyResult> {
+  private async testSingleTarget(target: LatencyTarget): Promise<LatencyResult> {
     const startTime = Date.now();
-    this.logger?.debug(`测试延迟目标: ${source} (${target})`);
+    this.logger?.debug(`测试延迟目标: ${target.source} (${target.url})`);
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), this.options.latencyTimeoutMs);
 
-      await fetch(target, {
+      await fetch(target.url, {
         method: 'HEAD',
         signal: controller.signal,
-        cache: 'no-cache',
       });
 
       clearTimeout(timeout);
       const latency = Date.now() - startTime;
 
-      this.logger?.debug(`${source} 延迟测试完成: ${latency}ms`);
+      this.logger?.debug(`${target.source} 延迟测试完成: ${latency}ms`);
 
       return {
         value: latency,
         status: this.getLatencyStatus(latency),
-        target,
-        source,
+        target: target.url,
+        source: target.source,
         timestamp: Date.now(),
       };
     } catch (error) {
-      this.logger?.debug(`${source} 延迟测试超时`, {
+      this.logger?.debug(`${target.source} 延迟测试超时`, {
         错误: error instanceof Error ? error.message : String(error),
       });
 
       return {
         value: 9999,
         status: 'timeout',
-        target,
-        source,
+        target: target.url,
+        source: target.source,
         timestamp: Date.now(),
       };
     }

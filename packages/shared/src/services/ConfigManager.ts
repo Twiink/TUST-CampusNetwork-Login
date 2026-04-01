@@ -3,7 +3,12 @@
  */
 
 import { AppConfig, AppSettings } from '../types/config';
-import { validateAppConfig, createDefaultAppConfig } from '../utils/validator';
+import {
+  validateAppConfig,
+  createDefaultAppConfig,
+  normalizeAppConfig,
+  normalizeAppSettings,
+} from '../utils/validator';
 import { DEFAULT_APP_SETTINGS } from '../constants/defaults';
 import { ErrorCode, AppError } from '../constants/errors';
 import { StorageAdapter, MemoryStorageAdapter } from './StorageAdapter';
@@ -45,27 +50,25 @@ export class ConfigManager {
 
       if (stored) {
         this.logger?.debug('发现已存储的配置，开始验证');
+        const normalized = normalizeAppConfig(stored);
 
         // 验证存储的配置
-        const validation = validateAppConfig(stored);
+        const validation = validateAppConfig(normalized);
         if (validation.valid) {
-          // 合并默认设置以确保新增字段有默认值
-          this.config = {
-            ...createDefaultAppConfig(),
-            ...stored,
-            settings: {
-              ...DEFAULT_APP_SETTINGS,
-              ...stored.settings,
-            },
-          };
+          this.config = normalized;
 
           this.logger?.success('应用配置加载成功', {
             账户数量: this.config.accounts.length,
             WiFi配置数量: this.config.wifiList.length,
             自动重连: this.config.settings.autoReconnect ? '已启用' : '已禁用',
             心跳检测: this.config.settings.enableHeartbeat ? '已启用' : '已禁用',
-            轮询间隔: `${this.config.settings.pollingInterval}秒`,
+            心跳间隔: `${this.config.settings.heartbeatIntervalSeconds}秒`,
           });
+
+          if (JSON.stringify(stored) !== JSON.stringify(normalized)) {
+            this.logger?.info('检测到旧配置结构，已自动迁移并保存');
+            await this.save(normalized);
+          }
 
           return this.config;
         } else {
@@ -105,14 +108,15 @@ export class ConfigManager {
     try {
       if (config) {
         this.logger?.debug('验证提供的配置');
-        const validation = validateAppConfig(config);
+        const normalized = normalizeAppConfig(config);
+        const validation = validateAppConfig(normalized);
         if (!validation.valid) {
           this.logger?.error('配置验证失败', {
             错误: validation.errors.join('; '),
           });
           throw new AppError(ErrorCode.CONFIG_INVALID, validation.errors.join('; '));
         }
-        this.config = config;
+        this.config = normalized;
         this.logger?.debug('配置验证通过');
       }
 
@@ -164,9 +168,15 @@ export class ConfigManager {
     this.config = {
       ...this.config!,
       ...partial,
+      settings: partial.settings
+        ? {
+            ...this.config!.settings,
+            ...partial.settings,
+          }
+        : this.config!.settings,
     };
 
-    await this.save();
+    await this.save(normalizeAppConfig(this.config));
 
     this.logger?.success('应用配置更新成功');
 
@@ -184,17 +194,17 @@ export class ConfigManager {
       await this.load();
     }
 
-    this.config!.settings = {
+    this.config!.settings = normalizeAppSettings({
       ...this.config!.settings,
       ...settings,
-    };
+    });
 
     await this.save();
 
     this.logger?.success('应用设置更新成功', {
       自动重连: this.config!.settings.autoReconnect ? '已启用' : '已禁用',
       心跳检测: this.config!.settings.enableHeartbeat ? '已启用' : '已禁用',
-      轮询间隔: `${this.config!.settings.pollingInterval}秒`,
+      心跳间隔: `${this.config!.settings.heartbeatIntervalSeconds}秒`,
     });
 
     return this.config!.settings;
@@ -204,7 +214,7 @@ export class ConfigManager {
    * 获取设置
    */
   getSettings(): AppSettings {
-    return this.config?.settings || DEFAULT_APP_SETTINGS;
+    return this.config?.settings || normalizeAppSettings(DEFAULT_APP_SETTINGS);
   }
 
   /**

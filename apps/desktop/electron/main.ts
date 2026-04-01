@@ -21,6 +21,7 @@ import { createNotificationService, NotificationService } from './services/notif
 import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
+import { getResolvedAppVersion } from './utils/app-version';
 import {
   registerAllIPC,
   registerTrayIPC,
@@ -77,11 +78,11 @@ async function initServices(): Promise<AppServices> {
     const timestamp = entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false });
     const level = entry.level.toUpperCase().padEnd(7);
     const levelColors = {
-      DEBUG: '\x1b[36m',   // Cyan
-      INFO: '\x1b[37m',    // White
+      DEBUG: '\x1b[36m', // Cyan
+      INFO: '\x1b[37m', // White
       SUCCESS: '\x1b[32m', // Green
-      WARN: '\x1b[33m',    // Yellow
-      ERROR: '\x1b[31m',   // Red
+      WARN: '\x1b[33m', // Yellow
+      ERROR: '\x1b[31m', // Red
     };
     const color = levelColors[entry.level.toUpperCase() as keyof typeof levelColors] || '\x1b[37m';
     const reset = '\x1b[0m';
@@ -95,7 +96,7 @@ async function initServices(): Promise<AppServices> {
 
   logger.info('===== NetMate 应用启动 =====');
   logger.info(`运行平台: ${process.platform}`);
-  logger.info(`应用版本: ${app.getVersion()}`);
+  logger.info(`应用版本: ${getResolvedAppVersion()}`);
 
   // 创建存储适配器
   const storage = createElectronStorage();
@@ -281,7 +282,7 @@ app.whenReady().then(async () => {
     // 使用 build 目录作为图标目录
     const iconDir = path.join(process.env.APP_ROOT!, 'build');
     notificationService = createNotificationService(iconDir);
-    notificationService.setEnabled(settings.showNotification);
+    notificationService.setEnabled(settings.showNotification ?? true);
     registerNotificationIPC(notificationService, services.logger);
 
     // 创建并注册更新服务
@@ -367,8 +368,14 @@ app.whenReady().then(async () => {
     );
 
     // 启动后台服务（带自动重连和心跳检测设置）
-    const pollingInterval = settings.pollingInterval * 1000;
-    startBackgroundServices(services, pollingInterval, autoReconnectService, settings.enableHeartbeat);
+    const pollingInterval =
+      (settings.heartbeatIntervalSeconds ?? settings.pollingInterval ?? 30) * 1000;
+    startBackgroundServices(
+      services,
+      pollingInterval,
+      autoReconnectService,
+      settings.enableHeartbeat
+    );
 
     // 创建窗口
     createWindow();

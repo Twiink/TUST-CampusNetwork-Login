@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.wifi.ScanResult
+import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
@@ -392,5 +394,131 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     @ReactMethod
     fun checkLocationPermission(promise: Promise) {
         promise.resolve(hasLocationPermission())
+    }
+
+    /**
+     * 连接到指定 WiFi
+     * Android 10+ 使用 Network Suggestion，Android 9 及以下使用旧配置 API
+     */
+    @ReactMethod
+    fun connectToWifi(ssid: String, password: String?, promise: Promise) {
+        try {
+            if (ssid.isBlank()) {
+                promise.resolve(false)
+                return
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val builder = android.net.wifi.WifiNetworkSuggestion.Builder()
+                    .setSsid(ssid)
+                    .setIsAppInteractionRequired(false)
+
+                if (!password.isNullOrBlank()) {
+                    builder.setWpa2Passphrase(password)
+                }
+
+                val status = wifiManager.addNetworkSuggestions(listOf(builder.build()))
+                promise.resolve(status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS)
+                return
+            }
+
+            @Suppress("DEPRECATION")
+            val wifiConfig = WifiConfiguration().apply {
+                SSID = "\"$ssid\""
+                status = WifiConfiguration.Status.ENABLED
+                priority = 40
+
+                if (password.isNullOrBlank()) {
+                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE)
+                } else {
+                    preSharedKey = "\"$password\""
+                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK)
+                }
+            }
+
+            @Suppress("DEPRECATION")
+            val networkId = wifiManager.addNetwork(wifiConfig)
+            if (networkId == -1) {
+                promise.resolve(false)
+                return
+            }
+
+            @Suppress("DEPRECATION")
+            wifiManager.disconnect()
+            @Suppress("DEPRECATION")
+            wifiManager.enableNetwork(networkId, true)
+            @Suppress("DEPRECATION")
+            wifiManager.reconnect()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("WIFI_ERROR", "Failed to connect WiFi: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 断开当前 WiFi
+     */
+    @ReactMethod
+    fun disconnectWifi(promise: Promise) {
+        try {
+            @Suppress("DEPRECATION")
+            promise.resolve(wifiManager.disconnect())
+        } catch (e: Exception) {
+            promise.reject("WIFI_ERROR", "Failed to disconnect WiFi: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 扫描附近 WiFi
+     */
+    @ReactMethod
+    fun scanWifiNetworks(promise: Promise) {
+        try {
+            wifiManager.startScan()
+            val results = Arguments.createArray()
+
+            wifiManager.scanResults?.forEach { scanResult ->
+                val item = Arguments.createMap()
+                item.putString("ssid", scanResult.SSID.takeIf { it.isNotBlank() })
+                item.putString("bssid", scanResult.BSSID)
+                item.putInt("signalStrength", calculateSignalStrength(scanResult.level))
+                item.putInt("frequency", scanResult.frequency)
+                item.putInt("channel", frequencyToChannel(scanResult.frequency))
+                item.putString("security", parseSecurity(scanResult))
+                results.pushMap(item)
+            }
+
+            promise.resolve(results)
+        } catch (e: Exception) {
+            promise.reject("WIFI_ERROR", "Failed to scan WiFi networks: ${e.message}", e)
+        }
+    }
+
+    private fun calculateSignalStrength(rssi: Int): Int {
+        return when {
+            rssi >= -40 -> 100
+            rssi <= -100 -> 0
+            else -> ((rssi + 100) * 100 / 60).coerceIn(0, 100)
+        }
+    }
+
+    private fun frequencyToChannel(frequency: Int): Int {
+        return when {
+            frequency in 2412..2484 -> (frequency - 2412) / 5 + 1
+            frequency == 2484 -> 14
+            frequency in 5170..5825 -> (frequency - 5170) / 5 + 34
+            else -> 0
+        }
+    }
+
+    private fun parseSecurity(scanResult: ScanResult): String {
+        val capabilities = scanResult.capabilities ?: return "Unknown"
+        return when {
+            capabilities.contains("WPA3") -> "WPA3"
+            capabilities.contains("WPA2") -> "WPA2"
+            capabilities.contains("WPA") -> "WPA"
+            capabilities.contains("WEP") -> "WEP"
+            else -> "Open"
+        }
     }
 }

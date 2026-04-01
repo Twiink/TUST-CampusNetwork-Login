@@ -8,13 +8,41 @@ import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
 import type { Logger } from '../models/Logger';
 
+export interface WifiMatchInput {
+  ssid: string;
+  security?: string;
+  bssid?: string;
+}
+
+function sameFingerprint(left: WifiConfig, right: WifiMatchInput): boolean {
+  return (
+    left.ssid === right.ssid &&
+    (left.security || '') === (right.security || '') &&
+    (left.bssid || '') === (right.bssid || '')
+  );
+}
+
+function compareWifiPriority(left: WifiConfig, right: WifiConfig): number {
+  if (left.priority !== right.priority) {
+    return left.priority - right.priority;
+  }
+
+  const leftConnectedAt = left.lastConnectedAt ?? 0;
+  const rightConnectedAt = right.lastConnectedAt ?? 0;
+
+  return rightConnectedAt - leftConnectedAt;
+}
+
 /**
  * WiFi 配置管理服务类
  */
 export class WifiManager {
   private logger: Logger | null;
 
-  constructor(private configManager: ConfigManager, logger?: Logger) {
+  constructor(
+    private configManager: ConfigManager,
+    logger?: Logger
+  ) {
     this.logger = logger || null;
   }
 
@@ -23,7 +51,7 @@ export class WifiManager {
    */
   getWifiConfigs(): WifiConfig[] {
     const config = this.configManager.getConfig();
-    return config?.wifiList || [];
+    return [...(config?.wifiList || [])].sort(compareWifiPriority);
   }
 
   /**
@@ -31,15 +59,58 @@ export class WifiManager {
    */
   getWifiById(id: string): WifiConfig | null {
     const wifiList = this.getWifiConfigs();
-    return wifiList.find((w) => w.id === id) || null;
+    return wifiList.find((wifi) => wifi.id === id) || null;
   }
 
   /**
-   * 根据 SSID 获取 WiFi 配置
+   * 根据 SSID 获取优先级最高的 WiFi 配置
    */
   getWifiBySsid(ssid: string): WifiConfig | null {
     const wifiList = this.getWifiConfigs();
-    return wifiList.find((w) => w.ssid === ssid) || null;
+    return wifiList.find((wifi) => wifi.ssid === ssid) || null;
+  }
+
+  /**
+   * 根据 SSID 获取所有匹配的 WiFi 配置
+   */
+  getWifiBySsidList(ssid: string): WifiConfig[] {
+    return this.getWifiConfigs().filter((wifi) => wifi.ssid === ssid);
+  }
+
+  /**
+   * 根据当前 WiFi 信息进行精确匹配
+   */
+  findMatchingWifi(input: WifiMatchInput): WifiConfig | null {
+    const candidates = this.getWifiBySsidList(input.ssid);
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    const exactMatch = candidates.find((wifi) => sameFingerprint(wifi, input));
+    if (exactMatch) {
+      return exactMatch;
+    }
+
+    if (input.security) {
+      const securityMatch = candidates.find(
+        (wifi) => (wifi.security || '') === input.security && !wifi.bssid
+      );
+      if (securityMatch) {
+        return securityMatch;
+      }
+    }
+
+    return candidates[0] || null;
+  }
+
+  private assertConfigLoaded() {
+    const config = this.configManager.getConfig();
+    if (!config) {
+      this.logger?.error('WiFi配置操作失败：配置未加载');
+      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
+    }
+
+    return config;
   }
 
   /**
@@ -55,6 +126,7 @@ export class WifiManager {
     const newWifi: WifiConfig = {
       ...createDefaultWifiConfig(),
       ...wifi,
+      linkedAccountIds: [...wifi.linkedAccountIds],
       id: wifi.id || generateId(),
     };
 
@@ -66,23 +138,18 @@ export class WifiManager {
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('添加WiFi配置失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    // 检查是否已存在相同 SSID 的配置
-    const exists = config.wifiList.find((w) => w.ssid === newWifi.ssid);
+    const config = this.assertConfigLoaded();
+    const exists = config.wifiList.find((item) => sameFingerprint(item, newWifi));
     if (exists) {
       this.logger?.error('添加WiFi配置失败：该WiFi已存在', {
         SSID: newWifi.ssid,
+        安全类型: newWifi.security || '未知',
+        BSSID: newWifi.bssid || '无',
       });
-      throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 已存在');
+      throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 配置已存在');
     }
 
-    const updatedWifiList = [...config.wifiList, newWifi];
-
+    const updatedWifiList = [...config.wifiList, newWifi].sort(compareWifiPriority);
     await this.configManager.update({ wifiList: updatedWifiList });
 
     this.logger?.success('WiFi配置添加成功', {
@@ -103,13 +170,8 @@ export class WifiManager {
       更新字段: Object.keys(updates).join(', '),
     });
 
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('更新WiFi配置失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    const index = config.wifiList.findIndex((w) => w.id === id);
+    const config = this.assertConfigLoaded();
+    const index = config.wifiList.findIndex((wifi) => wifi.id === id);
     if (index === -1) {
       this.logger?.error('更新WiFi配置失败：配置不存在', { WiFi_ID: id });
       throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
@@ -118,7 +180,10 @@ export class WifiManager {
     const updatedWifi: WifiConfig = {
       ...config.wifiList[index],
       ...updates,
-      id, // 确保 ID 不变
+      linkedAccountIds: updates.linkedAccountIds
+        ? [...updates.linkedAccountIds]
+        : config.wifiList[index].linkedAccountIds,
+      id,
     };
 
     const validation = validateWifiConfig(updatedWifi);
@@ -130,8 +195,16 @@ export class WifiManager {
       throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
     }
 
+    const duplicate = config.wifiList.find(
+      (wifi) => wifi.id !== id && sameFingerprint(wifi, updatedWifi)
+    );
+    if (duplicate) {
+      throw new AppError(ErrorCode.INVALID_PARAMS, '存在相同指纹的 WiFi 配置');
+    }
+
     const updatedWifiList = [...config.wifiList];
     updatedWifiList[index] = updatedWifi;
+    updatedWifiList.sort(compareWifiPriority);
 
     await this.configManager.update({ wifiList: updatedWifiList });
 
@@ -149,14 +222,9 @@ export class WifiManager {
   async removeWifi(id: string): Promise<void> {
     this.logger?.info('删除WiFi配置', { WiFi_ID: id });
 
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('删除WiFi配置失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    const wifiToRemove = config.wifiList.find((w) => w.id === id);
-    const updatedWifiList = config.wifiList.filter((w) => w.id !== id);
+    const config = this.assertConfigLoaded();
+    const wifiToRemove = config.wifiList.find((wifi) => wifi.id === id);
+    const updatedWifiList = config.wifiList.filter((wifi) => wifi.id !== id);
 
     if (updatedWifiList.length === config.wifiList.length) {
       this.logger?.error('删除WiFi配置失败：配置不存在', { WiFi_ID: id });
@@ -175,8 +243,12 @@ export class WifiManager {
   /**
    * 匹配当前 WiFi 是否在配置列表中
    */
-  matchWifi(ssid: string): WifiConfig | null {
-    return this.getWifiBySsid(ssid);
+  matchWifi(target: string | WifiMatchInput): WifiConfig | null {
+    if (typeof target === 'string') {
+      return this.getWifiBySsid(target);
+    }
+
+    return this.findMatchingWifi(target);
   }
 
   /**
@@ -191,7 +263,51 @@ export class WifiManager {
    * 获取所有自动连接的 WiFi
    */
   getAutoConnectWifiList(): WifiConfig[] {
-    return this.getWifiConfigs().filter((w) => w.autoConnect);
+    return this.getWifiConfigs().filter((wifi) => wifi.autoConnect);
+  }
+
+  /**
+   * 获取重连候选列表，可指定本次会话首选 SSID
+   */
+  getReconnectCandidates(preferredSsid?: string): WifiConfig[] {
+    const wifiList = this.getAutoConnectWifiList();
+    if (!preferredSsid) {
+      return wifiList;
+    }
+
+    return [...wifiList].sort((left, right) => {
+      if (left.ssid === preferredSsid && right.ssid !== preferredSsid) {
+        return -1;
+      }
+
+      if (right.ssid === preferredSsid && left.ssid !== preferredSsid) {
+        return 1;
+      }
+
+      return compareWifiPriority(left, right);
+    });
+  }
+
+  /**
+   * 标记 WiFi 连接成功，更新最近连接时间
+   */
+  async markConnected(id: string, connectedAt: number = Date.now()): Promise<WifiConfig> {
+    return this.updateWifi(id, { lastConnectedAt: connectedAt });
+  }
+
+  /**
+   * 根据 WiFi 信息标记连接成功
+   */
+  async markConnectedByMatch(
+    input: WifiMatchInput,
+    connectedAt: number = Date.now()
+  ): Promise<WifiConfig | null> {
+    const matched = this.findMatchingWifi(input);
+    if (!matched) {
+      return null;
+    }
+
+    return this.markConnected(matched.id, connectedAt);
   }
 
   /**

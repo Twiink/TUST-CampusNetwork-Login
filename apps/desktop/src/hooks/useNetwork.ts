@@ -4,7 +4,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { NetworkStatus } from '@repo/shared';
-import { IPC_EVENTS, type NetworkInfo, type WifiStatus } from '../types/electron.d';
+import { IPC_EVENTS } from '../constants/ipc';
+import type { NetworkInfo, WifiStatus } from '../types/electron.d';
 
 export function useNetwork() {
   const [status, setStatus] = useState<NetworkStatus>({
@@ -70,7 +71,11 @@ export function useNetwork() {
     const unsubscribeLoading = window.electronAPI.on(
       IPC_EVENTS.NETWORK_STATUS_LOADING,
       (loadingData: unknown) => {
-        const data = loadingData as { loading: boolean; wifiConnected: boolean; ssid: string | null };
+        const data = loadingData as {
+          loading: boolean;
+          wifiConnected: boolean;
+          ssid: string | null;
+        };
         setLoading(data.loading);
         setWifiStatus({
           connected: data.wifiConnected,

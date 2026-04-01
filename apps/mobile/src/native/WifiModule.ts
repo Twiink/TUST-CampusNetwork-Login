@@ -54,6 +54,15 @@ export interface WifiStatus {
   ssid: string | null;
 }
 
+export interface ScannedWifiNetwork {
+  ssid: string | null;
+  bssid?: string | null;
+  signalStrength?: number | null;
+  frequency?: number | null;
+  channel?: number | null;
+  security?: string | null;
+}
+
 // 原生模块接口
 interface WifiModuleInterface {
   getCurrentSSID(): Promise<string | null>;
@@ -64,6 +73,9 @@ interface WifiModuleInterface {
   isConnected(): Promise<boolean>;
   getNetworkInfo(): Promise<NetworkInfo>;
   checkLocationPermission(): Promise<boolean>;
+  connectToWifi(ssid: string, password?: string): Promise<boolean>;
+  disconnectWifi(): Promise<boolean>;
+  scanWifiNetworks(): Promise<ScannedWifiNetwork[]>;
 }
 
 // 获取原生模块
@@ -251,6 +263,57 @@ export async function getNetworkInfo(): Promise<NetworkInfo> {
 }
 
 /**
+ * 连接到指定 WiFi
+ */
+export async function connectToWifi(ssid: string, password?: string): Promise<boolean> {
+  if (!WifiModule) {
+    console.warn('WifiModule is not available');
+    return false;
+  }
+
+  try {
+    return await WifiModule.connectToWifi(ssid, password);
+  } catch (error) {
+    console.warn('connectToWifi error:', error);
+    return false;
+  }
+}
+
+/**
+ * 断开当前 WiFi
+ */
+export async function disconnectWifi(): Promise<boolean> {
+  if (!WifiModule) {
+    console.warn('WifiModule is not available');
+    return false;
+  }
+
+  try {
+    return await WifiModule.disconnectWifi();
+  } catch (error) {
+    console.warn('disconnectWifi error:', error);
+    return false;
+  }
+}
+
+/**
+ * 扫描 WiFi 列表
+ */
+export async function scanWifiNetworks(): Promise<ScannedWifiNetwork[]> {
+  if (!WifiModule) {
+    console.warn('WifiModule is not available');
+    return [];
+  }
+
+  try {
+    return await WifiModule.scanWifiNetworks();
+  } catch (error) {
+    console.warn('scanWifiNetworks error:', error);
+    return [];
+  }
+}
+
+/**
  * 获取 WiFi 状态（简化版）
  */
 export async function getWifiStatus(): Promise<WifiStatus> {
@@ -277,5 +340,8 @@ export default {
   isConnected,
   getNetworkInfo,
   getWifiStatus,
+  connectToWifi,
+  disconnectWifi,
+  scanWifiNetworks,
   isNativeModuleAvailable,
 };

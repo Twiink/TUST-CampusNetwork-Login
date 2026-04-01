@@ -343,7 +343,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
     try {
       // 使用 chcp 65001 切换到 UTF-8 编码，避免中文乱码
       const { stdout } = await execAsync('chcp 65001 >nul && netsh wlan show interfaces', {
-        encoding: 'buffer',  // 先获取原始 buffer
+        encoding: 'buffer', // 先获取原始 buffer
       });
 
       // 手动使用 UTF-8 解码
@@ -398,8 +398,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
       const signalStrength = parseInt(signalStr.replace('%', '')) || 0;
 
       // 连接速度：Receive rate 或 Transmit rate (Mbps) - 支持中英文
-      const receiveRateStr = data['receive rate'] || data['receive rate (mbps)'] || data['接收速率'] || '0';
-      const transmitRateStr = data['transmit rate'] || data['transmit rate (mbps)'] || data['传输速率'] || '0';
+      const receiveRateStr =
+        data['receive rate'] || data['receive rate (mbps)'] || data['接收速率'] || '0';
+      const transmitRateStr =
+        data['transmit rate'] || data['transmit rate (mbps)'] || data['传输速率'] || '0';
       const receiveRate = parseFloat(receiveRateStr) || 0;
       const transmitRate = parseFloat(transmitRateStr) || 0;
       const linkSpeed = Math.max(receiveRate, transmitRate);
@@ -531,7 +533,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           const trimmed = line.trim();
 
           // IPv4（支持中英文）
-          if ((trimmed.includes('IPv4') || trimmed.includes('IPv4 地址')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('IPv4') || trimmed.includes('IPv4 地址')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*(\d+\.\d+\.\d+\.\d+)/);
             if (match) {
               info.ipv4 = match[1];
@@ -539,7 +544,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           }
 
           // IPv6（支持中英文）
-          if ((trimmed.includes('IPv6') || trimmed.includes('IPv6 地址')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('IPv6') || trimmed.includes('IPv6 地址')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*([0-9a-fA-F:]+)/);
             if (match && match[1].includes(':')) {
               info.ipv6 = match[1].replace(/\(.*\)/, '').trim();
@@ -547,7 +555,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           }
 
           // 子网掩码（支持中英文）
-          if ((trimmed.includes('Subnet Mask') || trimmed.includes('子网掩码')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('Subnet Mask') || trimmed.includes('子网掩码')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*(\d+\.\d+\.\d+\.\d+)/);
             if (match) {
               info.subnetMask = match[1];
@@ -555,7 +566,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           }
 
           // 默认网关（支持中英文）
-          if ((trimmed.includes('Default Gateway') || trimmed.includes('默认网关')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('Default Gateway') || trimmed.includes('默认网关')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*(\d+\.\d+\.\d+\.\d+)/);
             if (match) {
               info.gateway = match[1];
@@ -563,7 +577,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           }
 
           // DNS 服务器（支持中英文）
-          if ((trimmed.includes('DNS Servers') || trimmed.includes('DNS 服务器')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('DNS Servers') || trimmed.includes('DNS 服务器')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*(\d+\.\d+\.\d+\.\d+)/);
             if (match) {
               info.dns = [match[1]];
@@ -571,7 +588,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
           }
 
           // MAC 地址（支持中英文）
-          if ((trimmed.includes('Physical Address') || trimmed.includes('物理地址')) && trimmed.includes(':')) {
+          if (
+            (trimmed.includes('Physical Address') || trimmed.includes('物理地址')) &&
+            trimmed.includes(':')
+          ) {
             const match = trimmed.match(/:\s*([0-9A-F-]+)/i);
             if (match) {
               info.mac = match[1].replace(/-/g, ':');

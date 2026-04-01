@@ -220,10 +220,11 @@ export class WifiEventListener {
 
     // 等待硬件重置（WiFi刚断开时立即尝试连接可能会失败）
     this.logger.info('等待WiFi硬件重置...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     // 获取所有启用自动重连的WiFi，按优先级排序
-    const allWifiConfigs = this.wifiManager.getWifiConfigs()
+    const allWifiConfigs = this.wifiManager
+      .getWifiConfigs()
       .filter((w: { autoConnect: boolean }) => w.autoConnect)
       .sort((a: { priority: number }, b: { priority: number }) => a.priority - b.priority);
 
@@ -257,7 +258,7 @@ export class WifiEventListener {
         this.logger.info(`切换到下一个WiFi: ${wifi.ssid} (优先级: ${wifi.priority})`);
 
         // 等待1秒后尝试连接下一个WiFi
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const success = await this.retryConnectToWifi(
           wifi.ssid,
@@ -282,7 +283,6 @@ export class WifiEventListener {
 
       // 广播所有WiFi失败事件到UI
       this.broadcastAllWifiFailed(failedList);
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(`WiFi自动重连流程异常: ${errorMessage}`);
@@ -320,7 +320,7 @@ export class WifiEventListener {
       try {
         // 等待2秒后尝试连接
         if (attempt > 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
+          await new Promise((resolve) => setTimeout(resolve, 2000));
         }
 
         const success = await this.wifiSwitcherService!.connectToConfiguredNetwork(ssid);
@@ -361,7 +361,7 @@ export class WifiEventListener {
     }
 
     // 确保即使 connectToConfiguredNetwork 返回 false（非异常）也记录失败
-    if (!failedList.some(f => f.ssid === ssid)) {
+    if (!failedList.some((f) => f.ssid === ssid)) {
       this.broadcastReconnectProgress({
         ssid,
         attempt: maxRetries,
@@ -384,7 +384,7 @@ export class WifiEventListener {
    */
   private async finalizeSuccessfulReconnect(): Promise<void> {
     // 等待WiFi连接稳定
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise((resolve) => setTimeout(resolve, 3000));
 
     // 更新网络状态
     await this.notifyNetworkStatusChange();
@@ -440,7 +440,8 @@ export class WifiEventListener {
   private async getMacOSSsid(): Promise<string | null> {
     try {
       // 方法1: 使用 airport 命令（更可靠）
-      const airportPath = '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport';
+      const airportPath =
+        '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport';
       try {
         const { stdout } = await execAsync(`${airportPath} -I`, {
           timeout: 2000,
@@ -455,7 +456,8 @@ export class WifiEventListener {
         }
       } catch (airportError) {
         // airport 失败，继续尝试其他方法
-        const errorMsg = airportError instanceof Error ? airportError.message : String(airportError);
+        const errorMsg =
+          airportError instanceof Error ? airportError.message : String(airportError);
         this.logger.debug(`[WiFi检测] airport命令失败: ${errorMsg}`);
       }
 

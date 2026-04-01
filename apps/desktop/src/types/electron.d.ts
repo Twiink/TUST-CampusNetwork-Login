@@ -165,6 +165,11 @@ export interface ElectronAPI {
     getStatus: () => Promise<UpdateStatus>;
   };
 
+  app: {
+    getVersion: () => Promise<string>;
+    quit: () => Promise<boolean>;
+  };
+
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void;
   off: (channel: string, callback?: (...args: unknown[]) => void) => void;
 }

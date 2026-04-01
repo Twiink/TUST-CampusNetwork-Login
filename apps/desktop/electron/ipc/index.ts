@@ -13,6 +13,7 @@ import {
 
 import { registerAuthIPC } from './auth';
 import { registerConfigIPC } from './config';
+import { registerAppIPC } from './app';
 import { registerAccountIPC } from './account';
 import { registerWifiIPC } from './wifi';
 import { registerNetworkIPC, startNetworkPolling, stopNetworkPolling } from './network';
@@ -43,11 +44,15 @@ export interface AppServices {
 /**
  * 注册所有 IPC 处理器
  */
-export function registerAllIPC(services: AppServices, wifiSwitcherService?: WifiSwitcherService): void {
+export function registerAllIPC(
+  services: AppServices,
+  wifiSwitcherService?: WifiSwitcherService
+): void {
   const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
     services;
 
   registerAuthIPC(authService, configManager, accountManager, logger);
+  registerAppIPC(logger);
   registerConfigIPC(configManager, logger);
   registerAccountIPC(accountManager, logger);
   registerWifiIPC(wifiManager, logger, wifiSwitcherService);

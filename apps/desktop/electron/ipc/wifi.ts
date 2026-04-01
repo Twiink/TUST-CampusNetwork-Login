@@ -5,7 +5,11 @@
 import { ipcMain } from 'electron';
 import { WifiManager, WifiConfig, createLogger } from '@repo/shared';
 import { IPC_CHANNELS } from './channels';
-import { WifiSwitcherService, scanAvailableNetworks, AvailableNetwork } from '../services/wifi-switcher';
+import {
+  WifiSwitcherService,
+  scanAvailableNetworks,
+  AvailableNetwork,
+} from '../services/wifi-switcher';
 
 /**
  * 注册 WiFi IPC 处理器

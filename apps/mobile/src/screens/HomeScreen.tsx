@@ -79,13 +79,23 @@ const WifiInfoCard: React.FC<{
       }}
     >
       {/* WiFi 名称和刷新按钮 */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16, justifyContent: 'space-between' }}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          marginBottom: 16,
+          justifyContent: 'space-between',
+        }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
           <Text style={{ fontSize: 18, marginRight: 8 }}>📡</Text>
           <Text style={{ color: theme.colors.textSecondary, fontSize: 14, marginRight: 8 }}>
             WiFi 名称:
           </Text>
-          <Text style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+          <Text
+            style={{ color: theme.colors.text, fontSize: 16, fontWeight: '700', flex: 1 }}
+            numberOfLines={1}
+          >
             {wifiInfo?.ssid || '未知'}
           </Text>
         </View>
@@ -448,7 +458,7 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第二优先级：检查 WiFi 是否在配置列表中
-  const wifiConfig = config.wifiList?.find((w) => w.ssid === wifiSSID);
+  const wifiConfig = config.wifiList?.find(w => w.ssid === wifiSSID);
 
   if (!wifiConfig) {
     return (
@@ -463,14 +473,21 @@ export const HomeScreen: React.FC = () => {
           {/* WiFi 基础信息 - 必须显示 */}
           <GlassView style={styles.card}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
-            <WifiInfoCard wifiInfo={wifiInfo} theme={theme} onRefresh={handleRefresh} refreshing={refreshing} />
+            <WifiInfoCard
+              wifiInfo={wifiInfo}
+              theme={theme}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+            />
           </GlassView>
 
           {/* WiFi 未配置警告 */}
           <GlassView style={styles.card}>
             <View style={styles.warningCardContent}>
               <Text style={styles.warningIcon}>⚠️</Text>
-              <Text style={[styles.warningTitle, { color: theme.colors.warning }]}>该 WiFi 未配置</Text>
+              <Text style={[styles.warningTitle, { color: theme.colors.warning }]}>
+                该 WiFi 未配置
+              </Text>
               <Text style={[styles.warningText, { color: theme.colors.textSecondary }]}>
                 当前连接的 WiFi "{wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。
               </Text>
@@ -508,7 +525,12 @@ export const HomeScreen: React.FC = () => {
           {/* WiFi 基础信息 */}
           <GlassView style={styles.card}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
-            <WifiInfoCard wifiInfo={wifiInfo} theme={theme} onRefresh={handleRefresh} refreshing={refreshing} />
+            <WifiInfoCard
+              wifiInfo={wifiInfo}
+              theme={theme}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+            />
           </GlassView>
 
           {/* 无需认证提示 */}
@@ -540,7 +562,9 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第四优先级：检查是否有关联账户
-  const linkedAccount = config.accounts.find((a) => a.id === wifiConfig.linkedAccountId);
+  const linkedAccount = config.accounts.find(account =>
+    wifiConfig.linkedAccountIds.includes(account.id)
+  );
 
   if (!linkedAccount) {
     return (
@@ -555,7 +579,12 @@ export const HomeScreen: React.FC = () => {
           {/* WiFi 基础信息 */}
           <GlassView style={styles.card}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
-            <WifiInfoCard wifiInfo={wifiInfo} theme={theme} onRefresh={handleRefresh} refreshing={refreshing} />
+            <WifiInfoCard
+              wifiInfo={wifiInfo}
+              theme={theme}
+              onRefresh={handleRefresh}
+              refreshing={refreshing}
+            />
           </GlassView>
 
           {/* 未配置账户警告 */}
