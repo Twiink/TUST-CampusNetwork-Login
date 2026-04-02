@@ -32,13 +32,19 @@ export function registerAuthIPC(
     try {
       const currentAccount = accountManager.getCurrentAccount();
       if (!currentAccount) {
-        logger.log('error', 'IPC错误：登录失败，未选择账户', { category: 'auth', source: 'IPC:Auth' });
+        logger.log('error', 'IPC错误：登录失败，未选择账户', {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
         return { success: false, message: '请先选择或添加账户' };
       }
 
       const networkInfo = getNetworkInfo();
       if (!networkInfo.ipv4) {
-        logger.log('error', 'IPC错误：登录失败，无法获取IP地址', { category: 'auth', source: 'IPC:Auth' });
+        logger.log('error', 'IPC错误：登录失败，无法获取IP地址', {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
         return { success: false, message: '无法获取本机 IP 地址' };
       }
 
@@ -71,10 +77,16 @@ export function registerAuthIPC(
       const result = await authService.login(loginConfig);
 
       if (result.success) {
-        logger.log('success', `IPC响应：登录成功 - ${result.message}`, { category: 'auth', source: 'IPC:Auth' });
+        logger.log('success', `IPC响应：登录成功 - ${result.message}`, {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
         win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'authenticated');
       } else {
-        logger.log('error', `IPC响应：登录失败 - ${result.message}`, { category: 'auth', source: 'IPC:Auth' });
+        logger.log('error', `IPC响应：登录失败 - ${result.message}`, {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
         win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'failed');
       }
 
@@ -99,7 +111,10 @@ export function registerAuthIPC(
     try {
       const networkInfo = getNetworkInfo();
       if (!networkInfo.ipv4) {
-        logger.log('error', 'IPC错误：登出失败，无法获取IP地址', { category: 'auth', source: 'IPC:Auth' });
+        logger.log('error', 'IPC错误：登出失败，无法获取IP地址', {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
         return { success: false, message: '无法获取本机 IP 地址' };
       }
 
@@ -116,7 +131,10 @@ export function registerAuthIPC(
         const win = BrowserWindow.fromWebContents(event.sender);
         win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'idle');
       } else {
-        logger.log('warn', `IPC响应：登出失败 - ${result.message}`, { category: 'auth', source: 'IPC:Auth' });
+        logger.log('warn', `IPC响应：登出失败 - ${result.message}`, {
+          category: 'auth',
+          source: 'IPC:Auth',
+        });
       }
 
       return result;

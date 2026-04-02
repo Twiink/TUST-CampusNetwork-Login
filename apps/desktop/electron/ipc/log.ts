@@ -64,9 +64,7 @@ export function registerLogIPC(logger: Logger) {
 
         // 生成导出内容
         const content =
-          format === 'json'
-            ? logger.exportAsJson(systemInfo)
-            : logger.exportAsText(systemInfo);
+          format === 'json' ? logger.exportAsJson(systemInfo) : logger.exportAsText(systemInfo);
 
         // 生成默认文件名
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

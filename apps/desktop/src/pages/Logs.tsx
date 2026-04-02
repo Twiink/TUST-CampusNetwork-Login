@@ -249,14 +249,17 @@ export const Logs: React.FC = () => {
                       {log.level.toUpperCase()}
                     </span>
                   </span>
-                  <span className="log-message" style={{
-                    color: 'var(--log-message)',
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
+                  <span
+                    className="log-message"
+                    style={{
+                      color: 'var(--log-message)',
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {log.message}
                   </span>
                 </div>

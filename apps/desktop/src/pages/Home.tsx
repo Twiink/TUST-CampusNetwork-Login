@@ -390,7 +390,9 @@ const WifiInfoCard: React.FC<{
                   color="var(--primary-color)"
                   style={{ flexShrink: 0 }}
                 />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     MAC 地址
                   </span>
@@ -422,7 +424,9 @@ const WifiInfoCard: React.FC<{
                 }}
               >
                 <Router size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     默认网关
                   </span>
@@ -454,7 +458,9 @@ const WifiInfoCard: React.FC<{
                 }}
               >
                 <Server size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     DNS 服务器
                   </span>
@@ -487,7 +493,9 @@ const WifiInfoCard: React.FC<{
                 }}
               >
                 <Network size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                     子网掩码
                   </span>
@@ -519,7 +527,9 @@ const WifiInfoCard: React.FC<{
                 }}
               >
                 <Cpu size={16} color="var(--primary-color)" style={{ flexShrink: 0 }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
+                >
                   <span style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>BSSID</span>
                   <span
                     style={{

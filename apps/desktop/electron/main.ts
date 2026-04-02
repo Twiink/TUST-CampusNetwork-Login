@@ -98,7 +98,10 @@ async function initServices(): Promise<AppServices> {
 
   logger.log('info', '===== NetMate 应用启动 =====', { category: 'system', source: 'Main' });
   logger.log('info', `运行平台: ${process.platform}`, { category: 'system', source: 'Main' });
-  logger.log('info', `应用版本: ${getResolvedAppVersion()}`, { category: 'system', source: 'Main' });
+  logger.log('info', `应用版本: ${getResolvedAppVersion()}`, {
+    category: 'system',
+    source: 'Main',
+  });
 
   // 创建存储适配器
   const storage = createElectronStorage();
@@ -191,7 +194,10 @@ function createWindow() {
       try {
         const currentStatus = await services.networkDetector.getNetworkStatus();
         win?.webContents.send('event:network:statusChanged', currentStatus);
-        services.logger.log('info', '窗口加载完成，已发送初始网络状态', { category: 'system', source: 'Main' });
+        services.logger.log('info', '窗口加载完成，已发送初始网络状态', {
+          category: 'system',
+          source: 'Main',
+        });
       } catch (error) {
         services.logger.error('获取初始网络状态失败', error);
       }
@@ -480,11 +486,18 @@ app.whenReady().then(async () => {
       services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
     }
 
-    services.logger.log('success', '===== 应用初始化完成 =====', { category: 'system', source: 'Main' });
+    services.logger.log('success', '===== 应用初始化完成 =====', {
+      category: 'system',
+      source: 'Main',
+    });
   } catch (error) {
     console.error('Failed to initialize app:', error);
     if (services) {
-      services.logger.log('error', '应用初始化失败', { category: 'system', source: 'Main', data: error });
+      services.logger.log('error', '应用初始化失败', {
+        category: 'system',
+        source: 'Main',
+        data: error,
+      });
     }
     app.quit();
   }

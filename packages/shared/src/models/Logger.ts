@@ -313,9 +313,7 @@ export class Logger {
     lines.push(
       `Electron: ${systemInfo.app.electronVersion} | Node: ${systemInfo.app.nodeVersion} | Chrome: ${systemInfo.app.chromeVersion}`
     );
-    lines.push(
-      `CPU: ${systemInfo.hardware.cpuModel} (${systemInfo.hardware.cpuCores}核)`
-    );
+    lines.push(`CPU: ${systemInfo.hardware.cpuModel} (${systemInfo.hardware.cpuCores}核)`);
     lines.push(
       `内存: ${systemInfo.hardware.totalMemoryMB}MB 总计 / ${systemInfo.hardware.freeMemoryMB}MB 可用`
     );
@@ -378,12 +376,16 @@ export class Logger {
   exportAsJson(systemInfo?: SystemInfo): string {
     const serializableEntries = this.logs.map((log) => ({
       ...log,
-      timestamp: log.timestamp instanceof Date ? log.timestamp.toISOString() : String(log.timestamp),
+      timestamp:
+        log.timestamp instanceof Date ? log.timestamp.toISOString() : String(log.timestamp),
       category: log.category || 'general',
     }));
 
     const timeRange = {
-      from: serializableEntries.length > 0 ? serializableEntries[serializableEntries.length - 1].timestamp : '',
+      from:
+        serializableEntries.length > 0
+          ? serializableEntries[serializableEntries.length - 1].timestamp
+          : '',
       to: serializableEntries.length > 0 ? serializableEntries[0].timestamp : '',
     };
 

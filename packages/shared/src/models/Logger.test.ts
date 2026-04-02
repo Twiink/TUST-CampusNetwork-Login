@@ -12,9 +12,19 @@ function createTestLogger(maxLogs = 1000, retentionDays = 7) {
 
 const mockSystemInfo: SystemInfo = {
   os: { platform: 'darwin', release: '25.3.0', arch: 'arm64' },
-  app: { version: '1.0.0', electronVersion: '32.0.0', nodeVersion: '20.18.0', chromeVersion: '128.0.0' },
+  app: {
+    version: '1.0.0',
+    electronVersion: '32.0.0',
+    nodeVersion: '20.18.0',
+    chromeVersion: '128.0.0',
+  },
   hardware: { cpuModel: 'Apple M2', cpuCores: 8, totalMemoryMB: 16384, freeMemoryMB: 8192 },
-  network: { interface: 'en0', ipv4: '10.0.0.1', mac: 'AA:BB:CC:DD:EE:FF', wifiSSID: 'TUST-Student' },
+  network: {
+    interface: 'en0',
+    ipv4: '10.0.0.1',
+    mac: 'AA:BB:CC:DD:EE:FF',
+    wifiSSID: 'TUST-Student',
+  },
   collectedAt: '2026-04-02T12:00:00.000Z',
 };
 
