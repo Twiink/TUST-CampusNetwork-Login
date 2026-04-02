@@ -30,6 +30,7 @@ const IPC_CHANNELS = {
   LOG_GET: 'log:get',
   LOG_CLEAR: 'log:clear',
   LOG_EXPORT: 'log:export',
+  LOG_EXPORT_SAVE: 'log:exportSave',
   SETTINGS_GET: 'settings:get',
   SETTINGS_UPDATE: 'settings:update',
   APP_VERSION: 'app:version',
@@ -110,6 +111,8 @@ const electronAPI = {
     get: (options?: unknown) => ipcRenderer.invoke(IPC_CHANNELS.LOG_GET, options),
     clear: () => ipcRenderer.invoke(IPC_CHANNELS.LOG_CLEAR),
     export: (format?: 'text' | 'json') => ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT, format),
+    exportSave: (format?: 'text' | 'json') =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT_SAVE, format),
   },
 
   // 设置

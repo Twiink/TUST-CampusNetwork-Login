@@ -44,7 +44,10 @@ export class AuthService {
    */
   setServerUrl(url: string): void {
     this.serverUrl = url;
-    this.logger?.info(`认证服务器地址已更新: ${url}`);
+    this.logger?.log('info', `认证服务器地址已更新: ${url}`, {
+      category: 'auth',
+      source: 'AuthService',
+    });
   }
 
   /**
@@ -151,34 +154,50 @@ export class AuthService {
             ? '中国联通'
             : '中国电信';
 
-    this.logger?.info(`开始登录认证`, {
-      用户: userAccount,
-      运营商: ispName,
-      IP: config.wlanUserIp,
-      服务器: config.serverUrl || this.serverUrl,
+    this.logger?.log('info', `开始登录认证`, {
+      category: 'auth',
+      source: 'AuthService',
+      data: {
+        用户: userAccount,
+        运营商: ispName,
+        IP: config.wlanUserIp,
+        服务器: config.serverUrl || this.serverUrl,
+      },
     });
 
     try {
       const url = this.buildLoginUrl(config);
-      this.logger?.debug(`请求登录 URL: ${url.substring(0, 100)}...`);
+      this.logger?.log('debug', `请求登录 URL: ${url.substring(0, 100)}...`, {
+        category: 'request',
+        source: 'AuthService',
+      });
 
       const response = await httpGet<string>(url, { timeout: 10000 });
       const result = this.parseLoginResponse(response.rawText);
 
       if (result.success) {
-        this.logger?.success(`登录成功: ${result.message}`, { 用户: userAccount });
+        this.logger?.log('success', `登录成功: ${result.message}`, {
+          category: 'auth',
+          source: 'AuthService',
+          data: { 用户: userAccount },
+        });
       } else {
-        this.logger?.warn(`登录失败: ${result.message}`, {
-          用户: userAccount,
-          错误码: result.code,
+        this.logger?.log('warn', `登录失败: ${result.message}`, {
+          category: 'auth',
+          source: 'AuthService',
+          data: { 用户: userAccount, 错误码: result.code },
         });
       }
 
       return result;
     } catch (error) {
-      this.logger?.error(`登录异常`, {
-        用户: userAccount,
-        错误: error instanceof Error ? error.message : String(error),
+      this.logger?.log('error', `登录异常`, {
+        category: 'auth',
+        source: 'AuthService',
+        data: {
+          用户: userAccount,
+          错误: error instanceof Error ? error.message : String(error),
+        },
       });
 
       if (error instanceof HttpError) {
@@ -259,14 +278,18 @@ export class AuthService {
    * 执行登出
    */
   async logout(wlanUserIp: string): Promise<LogoutResult> {
-    this.logger?.info(`开始登出认证`, {
-      IP: wlanUserIp,
-      服务器: this.serverUrl,
+    this.logger?.log('info', `开始登出认证`, {
+      category: 'auth',
+      source: 'AuthService',
+      data: { IP: wlanUserIp, 服务器: this.serverUrl },
     });
 
     try {
       const url = this.buildLogoutUrl(wlanUserIp);
-      this.logger?.debug(`请求登出 URL: ${url.substring(0, 100)}...`);
+      this.logger?.log('debug', `请求登出 URL: ${url.substring(0, 100)}...`, {
+        category: 'request',
+        source: 'AuthService',
+      });
 
       const response = await httpGet<string>(url, { timeout: 10000 });
 
@@ -288,9 +311,17 @@ export class AuthService {
       }
 
       if (success) {
-        this.logger?.success(`登出成功`, { IP: wlanUserIp });
+        this.logger?.log('success', `登出成功`, {
+          category: 'auth',
+          source: 'AuthService',
+          data: { IP: wlanUserIp },
+        });
       } else {
-        this.logger?.warn(`登出失败`, { IP: wlanUserIp });
+        this.logger?.log('warn', `登出失败`, {
+          category: 'auth',
+          source: 'AuthService',
+          data: { IP: wlanUserIp },
+        });
       }
 
       return {
@@ -298,9 +329,13 @@ export class AuthService {
         message: success ? '登出成功' : '登出失败',
       };
     } catch (error) {
-      this.logger?.error(`登出异常`, {
-        IP: wlanUserIp,
-        错误: error instanceof Error ? error.message : String(error),
+      this.logger?.log('error', `登出异常`, {
+        category: 'auth',
+        source: 'AuthService',
+        data: {
+          IP: wlanUserIp,
+          错误: error instanceof Error ? error.message : String(error),
+        },
       });
 
       if (error instanceof HttpError) {

@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   XCircle,
   Bug,
+  Download,
 } from 'lucide-react';
 
 type LogLevel = 'all' | 'info' | 'success' | 'warn' | 'error' | 'debug';
@@ -30,6 +31,7 @@ const LOG_LEVEL_OPTIONS: {
 export const Logs: React.FC = () => {
   const { logs, clearLogs } = useApp();
   const [filterLevel, setFilterLevel] = useState<LogLevel>('all');
+  const [exporting, setExporting] = useState(false);
 
   const filteredLogs = useMemo(() => {
     if (filterLevel === 'all') return logs;
@@ -56,6 +58,17 @@ export const Logs: React.FC = () => {
   const getLogColor = (level: string) => {
     const option = LOG_LEVEL_OPTIONS.find((opt) => opt.value === level);
     return option ? option.color : '#3b82f6';
+  };
+
+  const handleExport = async (format: 'text' | 'json') => {
+    setExporting(true);
+    try {
+      await window.electronAPI.log.exportSave(format);
+    } catch {
+      // 忽略导出错误
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -135,6 +148,38 @@ export const Logs: React.FC = () => {
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
               共 {filteredLogs.length} 条{filterLevel !== 'all' && ` (筛选自 ${logs.length} 条)`}
             </span>
+            <button
+              onClick={() => handleExport('text')}
+              disabled={exporting || logs.length === 0}
+              className="btn btn-secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                opacity: exporting || logs.length === 0 ? 0.5 : 1,
+              }}
+            >
+              <Download size={14} />
+              导出 LOG
+            </button>
+            <button
+              onClick={() => handleExport('json')}
+              disabled={exporting || logs.length === 0}
+              className="btn btn-secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                opacity: exporting || logs.length === 0 ? 0.5 : 1,
+              }}
+            >
+              <Download size={14} />
+              导出 JSON
+            </button>
             <button
               onClick={clearLogs}
               className="btn btn-danger"

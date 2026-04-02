@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   LOG_GET: 'log:get',
   LOG_CLEAR: 'log:clear',
   LOG_EXPORT: 'log:export',
+  LOG_EXPORT_SAVE: 'log:exportSave',
 
   // 设置相关
   SETTINGS_GET: 'settings:get',

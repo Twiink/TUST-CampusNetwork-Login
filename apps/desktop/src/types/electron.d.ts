@@ -135,6 +135,7 @@ export interface ElectronAPI {
     get: (options?: LogQueryOptions) => Promise<LogEntry[]>;
     clear: () => Promise<void>;
     export: (format?: 'text' | 'json') => Promise<string>;
+    exportSave: (format?: 'text' | 'json') => Promise<{ success: boolean; path?: string; error?: string }>;
   };
 
   settings: {

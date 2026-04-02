@@ -96,24 +96,28 @@ async function initServices(): Promise<AppServices> {
     console.log(message);
   });
 
-  logger.info('===== NetMate 应用启动 =====');
-  logger.info(`运行平台: ${process.platform}`);
-  logger.info(`应用版本: ${getResolvedAppVersion()}`);
+  logger.log('info', '===== NetMate 应用启动 =====', { category: 'system', source: 'Main' });
+  logger.log('info', `运行平台: ${process.platform}`, { category: 'system', source: 'Main' });
+  logger.log('info', `应用版本: ${getResolvedAppVersion()}`, { category: 'system', source: 'Main' });
 
   // 创建存储适配器
   const storage = createElectronStorage();
-  logger.info('存储服务初始化完成');
+  logger.log('info', '存储服务初始化完成', { category: 'system', source: 'Main' });
 
   // 创建配置管理器
   const configManager = createConfigManager(storage, logger);
   await configManager.load();
   const config = configManager.getConfig();
   if (config) {
-    logger.info('配置加载完成', {
-      账户数量: config.accounts.length,
-      WiFi配置数量: config.wifiList.length,
-      心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
-      自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
+    logger.log('info', '配置加载完成', {
+      category: 'system',
+      source: 'Main',
+      data: {
+        账户数量: config.accounts.length,
+        WiFi配置数量: config.wifiList.length,
+        心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
+        自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
+      },
     });
   }
 
@@ -121,12 +125,12 @@ async function initServices(): Promise<AppServices> {
   const authService = createAuthService(undefined, logger);
   const accountManager = createAccountManager(configManager, logger);
   const wifiManager = createWifiManager(configManager, logger);
-  logger.info('核心服务初始化完成');
+  logger.log('info', '核心服务初始化完成', { category: 'system', source: 'Main' });
 
   // 创建 WiFi 适配器
   const wifiAdapter = createDesktopWifiAdapter();
   const networkDetector = createNetworkDetector(wifiAdapter, logger);
-  logger.info('网络检测服务初始化完成');
+  logger.log('info', '网络检测服务初始化完成', { category: 'system', source: 'Main' });
 
   return {
     authService,
@@ -187,7 +191,7 @@ function createWindow() {
       try {
         const currentStatus = await services.networkDetector.getNetworkStatus();
         win?.webContents.send('event:network:statusChanged', currentStatus);
-        services.logger.info('窗口加载完成，已发送初始网络状态');
+        services.logger.log('info', '窗口加载完成，已发送初始网络状态', { category: 'system', source: 'Main' });
       } catch (error) {
         services.logger.error('获取初始网络状态失败', error);
       }
@@ -239,7 +243,7 @@ app.on('before-quit', () => {
   }
   if (services) {
     stopBackgroundServices(services);
-    services.logger.info('应用退出');
+    services.logger.log('info', '应用退出', { category: 'system', source: 'Main' });
   }
 });
 
@@ -476,11 +480,11 @@ app.whenReady().then(async () => {
       services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
     }
 
-    services.logger.success('===== 应用初始化完成 =====');
+    services.logger.log('success', '===== 应用初始化完成 =====', { category: 'system', source: 'Main' });
   } catch (error) {
     console.error('Failed to initialize app:', error);
     if (services) {
-      services.logger.error('应用初始化失败', error);
+      services.logger.log('error', '应用初始化失败', { category: 'system', source: 'Main', data: error });
     }
     app.quit();
   }

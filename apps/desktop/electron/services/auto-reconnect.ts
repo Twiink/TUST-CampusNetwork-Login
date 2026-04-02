@@ -118,10 +118,14 @@ export class AutoReconnectService {
         return;
       }
 
-      this.logger.warn('检测到网络断开，启动自动重连', {
-        触发原因: isFirstCheck ? '冷启动检测' : '连接状态变化',
-        最大重试次数: this.options.maxRetries,
-        初始延迟: `${this.options.initialDelay}ms`,
+      this.logger.log('warn', '检测到网络断开，启动自动重连', {
+        category: 'network',
+        source: 'AutoReconnect',
+        data: {
+          触发原因: isFirstCheck ? '冷启动检测' : '连接状态变化',
+          最大重试次数: this.options.maxRetries,
+          初始延迟: `${this.options.initialDelay}ms`,
+        },
       });
       await this.attemptReconnect();
     }
@@ -164,10 +168,14 @@ export class AutoReconnectService {
       return;
     }
 
-    this.logger.info('===== 开始自动重连 =====', {
-      账号数: loginAccounts.length,
-      首选账户: loginAccounts[0].username,
-      最大重试: this.options.maxRetries,
+    this.logger.log('info', '===== 开始自动重连 =====', {
+      category: 'network',
+      source: 'AutoReconnect',
+      data: {
+        账号数: loginAccounts.length,
+        首选账户: loginAccounts[0].username,
+        最大重试: this.options.maxRetries,
+      },
     });
 
     this.isReconnecting = true;
@@ -221,13 +229,20 @@ export class AutoReconnectService {
         return result;
       });
 
-      this.logger.success('===== 自动重连成功 =====');
+      this.logger.log('success', '===== 自动重连成功 =====', {
+        category: 'network',
+        source: 'AutoReconnect',
+      });
       this.callbacks.onReconnectSuccess?.();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
-      this.logger.error(`===== 自动重连失败 =====`, {
-        总尝试次数: this.options.maxRetries + 1,
-        失败原因: errorMessage,
+      this.logger.log('error', `===== 自动重连失败 =====`, {
+        category: 'network',
+        source: 'AutoReconnect',
+        data: {
+          总尝试次数: this.options.maxRetries + 1,
+          失败原因: errorMessage,
+        },
       });
       this.callbacks.onReconnectFailed?.(error instanceof Error ? error : new Error(errorMessage));
     } finally {
