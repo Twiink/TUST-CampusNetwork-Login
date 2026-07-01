@@ -13,7 +13,7 @@ import type { ISP, AccountConfig } from '../types/config';
 import type { Logger } from '../models/Logger';
 import { httpGet, HttpError } from '../utils/httpClient';
 import { buildQueryString } from '../utils/urlEncode';
-import { DEFAULT_SERVER_URL } from '../constants/defaults';
+import { DEFAULT_SERVER_URL, DEFAULT_CONNECTIVITY_CHECK_URLS } from '../constants/defaults';
 import { ErrorCode, AppError } from '../constants/errors';
 
 /**
@@ -85,7 +85,7 @@ export class AuthService {
       wlan_ac_ip: '',
       wlan_ac_name: '',
       jsVersion: '4.1.3',
-      terminal_type: 1,
+      terminal_type: 3, // 对齐生产验证的参考实现（此前为 1）
       lang: 'zh-cn',
       v: Date.now(),
     };
@@ -103,16 +103,32 @@ export class AuthService {
 
   /**
    * 解析登录响应
-   * 响应格式: dr1005({"result":0,"msg":"...","ret_code":2})
-   * 根据抓包结果，ret_code=0 或 1 表示失败，ret_code=2 表示已在线
+   *
+   * 兼容并联多种成功标志（不同门户/版本返回字段不一致）：
+   * - JSONP `dr1005({...})` 内：`ret_code===0` 或 `2`、`status===1`、`result===1`
+   * - 原始文本包含 `"status":1` 或 `已经在线`
+   * 满足任一即视为"响应层成功"。最终是否真正联网由 login() 的二次连通性校验兜底。
+   *
+   * 说明：参考的生产实现用 `"status":1`/`已经在线` 判定，我们此前用 `ret_code`；
+   * 无实时抓包无法确定唯一正确字段，故取并集以兼容两种门户版本。
    */
   parseLoginResponse(response: string): LoginResult {
-    // 响应格式: dr1005({"result":0,"msg":"用户名或密码错误","ret_code":1})
+    // 原始文本层面的成功标志（无论能否解析 JSON 都先判一次）
+    const textIndicatesOnline = response.includes('已经在线');
+    const textIndicatesStatus = /"status"\s*:\s*1/.test(response);
 
     try {
       // 提取 JSON 部分
       const jsonMatch = response.match(/dr1005\((.*)\)/);
       if (!jsonMatch || !jsonMatch[1]) {
+        // 无法匹配 JSONP，回退到原始文本判断
+        if (textIndicatesOnline || textIndicatesStatus) {
+          return {
+            success: true,
+            message: textIndicatesOnline ? '账号已在线' : '登录成功',
+            rawResponse: response,
+          };
+        }
         return {
           success: false,
           message: '响应格式无效',
@@ -121,9 +137,15 @@ export class AuthService {
       }
 
       const data = JSON.parse(jsonMatch[1]);
-      // 根据抓包结果：ret_code=0 成功，ret_code=1 失败，ret_code=2 已在线
       const retCode = data.ret_code;
-      const isSuccess = retCode === 0 || retCode === 2;
+      // 多标志并联：任一命中即成功
+      const isSuccess =
+        retCode === 0 ||
+        retCode === 2 ||
+        data.status === 1 ||
+        data.result === 1 ||
+        textIndicatesOnline ||
+        textIndicatesStatus;
 
       return {
         success: isSuccess,
@@ -132,6 +154,14 @@ export class AuthService {
         rawResponse: response,
       };
     } catch {
+      // JSON 解析失败，回退到原始文本判断
+      if (textIndicatesOnline || textIndicatesStatus) {
+        return {
+          success: true,
+          message: textIndicatesOnline ? '账号已在线' : '登录成功',
+          rawResponse: response,
+        };
+      }
       return {
         success: false,
         message: '解析响应失败',
@@ -176,11 +206,23 @@ export class AuthService {
       const result = this.parseLoginResponse(response.rawText);
 
       if (result.success) {
-        this.logger?.log('success', `登录成功: ${result.message}`, {
-          category: 'auth',
-          source: 'AuthService',
-          data: { 用户: userAccount },
-        });
+        // 二次连通性校验：响应层成功后再确认是否真正联网。
+        // 对齐参考实现的保守策略——连通性失败不推翻登录结果，仅在消息/日志标注。
+        const reachable = await this.verifyConnectivity();
+        if (reachable) {
+          this.logger?.log('success', `登录成功: ${result.message}`, {
+            category: 'auth',
+            source: 'AuthService',
+            data: { 用户: userAccount, 连通性: '已确认' },
+          });
+        } else {
+          this.logger?.log('warn', `登录响应成功，但连通性未确认`, {
+            category: 'auth',
+            source: 'AuthService',
+            data: { 用户: userAccount, 连通性: '未确认' },
+          });
+          result.message = `${result.message}（响应成功，连通性未确认）`;
+        }
       } else {
         this.logger?.log('warn', `登录失败: ${result.message}`, {
           category: 'auth',
@@ -205,6 +247,72 @@ export class AuthService {
       }
       throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
+  }
+
+  /**
+   * 二次连通性校验：仅信任严格的 HTTP 204 响应。
+   * 未认证时门户会返回 200 页面，因此不能用 response.ok 判断。
+   * 任一探测点返回 204 即视为已联网。全部失败返回 false（不抛异常）。
+   */
+  private async verifyConnectivity(): Promise<boolean> {
+    for (const url of DEFAULT_CONNECTIVITY_CHECK_URLS) {
+      try {
+        const response = await httpGet(url, { timeout: 5000 });
+        if (response.status === 204) {
+          return true;
+        }
+      } catch {
+        // 尝试下一个探测点
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 带重试的登录封装
+   * 默认 3 次、固定间隔 2 秒，对齐生产验证的参考实现。
+   * 被 auto-reconnect 等已有重试层调用时可传 maxRetries=0 关闭内层重试，避免双重叠加。
+   * 与 login() 不同：任一次抛出的网络异常会被吸收并重试；仅在耗尽次数后返回最后结果。
+   */
+  async loginWithRetry(
+    config: LoginConfig,
+    options: { maxRetries?: number; delayMs?: number } = {}
+  ): Promise<LoginResult> {
+    const maxRetries = options.maxRetries ?? 2; // 额外重试次数，总尝试 = maxRetries + 1
+    const delayMs = options.delayMs ?? 2000;
+
+    let lastResult: LoginResult = {
+      success: false,
+      message: '登录失败',
+    };
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        this.logger?.log('info', `登录重试 第 ${attempt} 次`, {
+          category: 'auth',
+          source: 'AuthService',
+        });
+        await this.sleep(delayMs);
+      }
+
+      try {
+        lastResult = await this.login(config);
+        if (lastResult.success) {
+          return lastResult;
+        }
+      } catch (error) {
+        lastResult = {
+          success: false,
+          message: error instanceof Error ? error.message : '登录异常',
+        };
+      }
+    }
+
+    return lastResult;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

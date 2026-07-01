@@ -74,7 +74,8 @@ export function registerAuthIPC(
       };
 
       authService.setServerUrl(currentAccount.serverUrl);
-      const result = await authService.login(loginConfig);
+      // 手动登录使用带重试封装（3 次、间隔 2 秒），对齐生产验证的参考实现
+      const result = await authService.loginWithRetry(loginConfig);
 
       if (result.success) {
         logger.log('success', `IPC响应：登录成功 - ${result.message}`, {

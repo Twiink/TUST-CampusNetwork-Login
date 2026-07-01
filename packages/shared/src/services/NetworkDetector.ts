@@ -11,17 +11,9 @@ import type {
   WifiDetails,
 } from '../types/network';
 import { httpGet, isUrlReachable } from '../utils/httpClient';
+import { DEFAULT_CONNECTIVITY_CHECK_URLS } from '../constants/defaults';
 import type { WifiAdapter } from './WifiAdapter';
 import type { Logger } from '../models/Logger';
-
-/**
- * 网络探测 URL（使用国内服务）
- */
-const DEFAULT_CONNECTIVITY_CHECK_URLS = [
-  'https://www.baidu.com',
-  'https://www.speedtest.cn',
-  'http://connectivitycheck.platform.hicloud.com/generate_204',
-];
 
 /**
  * 延迟测试目标
@@ -113,10 +105,16 @@ export class NetworkDetector {
       try {
         this.logger?.debug(`尝试连接: ${url}`);
         const response = await httpGet(url, { timeout: this.options.connectivityTimeoutMs });
-        if (response.status === 204 || response.ok) {
+        // 仅信任严格的 204 响应：captive portal 拦截会返回 200 门户页，
+        // 用 response.ok 判定会将"未认证"误判为"已认证"。
+        if (response.status === 204) {
           this.logger?.success(`网络连通性检查成功`, { URL: url, 状态码: response.status });
           return true;
         }
+        this.logger?.debug(`探测点未返回 204（可能被门户拦截）`, {
+          URL: url,
+          状态码: response.status,
+        });
       } catch (error) {
         this.logger?.debug(`连接失败: ${url}`, {
           错误: error instanceof Error ? error.message : String(error),

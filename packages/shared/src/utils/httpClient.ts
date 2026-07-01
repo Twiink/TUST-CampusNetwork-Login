@@ -57,6 +57,14 @@ export class HttpError extends Error {
 const DEFAULT_TIMEOUT = 10000;
 
 /**
+ * 默认 User-Agent
+ * 部分校园网门户会依赖 UA 判断终端类型，缺失时可能拒绝或返回异常响应。
+ * 对齐生产验证的参考实现所用的桌面 Chrome UA。
+ */
+export const DEFAULT_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
+
+/**
  * 发送 HTTP 请求
  * @param url 请求 URL
  * @param options 请求选项
@@ -81,6 +89,7 @@ export async function httpRequest<T = unknown>(
     const requestInit: RequestInit = {
       method,
       headers: {
+        'User-Agent': DEFAULT_USER_AGENT,
         'Content-Type': 'application/x-www-form-urlencoded',
         ...headers,
       },

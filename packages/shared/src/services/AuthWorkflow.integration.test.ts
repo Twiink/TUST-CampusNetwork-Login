@@ -72,14 +72,26 @@ describe('认证集成流程', () => {
       .map((accountId) => accountManager.getAccountById(accountId))
       .filter((account): account is AccountConfig => account !== null);
 
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createFetchResponse('dr1005({"result":0,"msg":"密码错误","ret_code":1})')
-      )
-      .mockResolvedValueOnce(
-        createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})')
+    let loginCall = 0;
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      // 连通性探测点统一返回 204
+      if (url.includes('generate_204')) {
+        return Promise.resolve({
+          ok: false,
+          status: 204,
+          statusText: 'No Content',
+          text: async () => '',
+          headers: { forEach: () => undefined },
+        });
+      }
+      loginCall += 1;
+      return Promise.resolve(
+        loginCall === 1
+          ? createFetchResponse('dr1005({"result":0,"msg":"密码错误","ret_code":1})')
+          : createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})')
       );
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await authService.loginWithAccounts(selectedAccounts, {
@@ -94,6 +106,7 @@ describe('认证集成流程', () => {
       primaryAccount.id,
       fallbackAccount.id,
     ]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // 两个账号各发一次登录请求（连通性探测另计）
+    expect(loginCall).toBe(2);
   });
 });

@@ -410,7 +410,8 @@ app.whenReady().then(async () => {
             trayService?.setStatus('connecting');
             try {
               services.authService.setServerUrl(currentAccount.serverUrl);
-              const result = await services.authService.login({
+              // 托盘登录使用带重试封装（3 次、间隔 2 秒），对齐生产验证的参考实现
+              const result = await services.authService.loginWithRetry({
                 serverUrl: currentAccount.serverUrl,
                 userAccount: currentAccount.username,
                 userPassword: currentAccount.password,

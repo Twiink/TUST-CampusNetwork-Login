@@ -37,6 +37,32 @@ describe('NetworkDetector', () => {
     );
   });
 
+  it('captive portal 返回 200 时应判为未连通（严格 204）', async () => {
+    // 未认证时校园网门户拦截返回 200 门户页，不能误判为已联网
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(200, '<html>portal</html>'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detector = new NetworkDetector(undefined, undefined, {
+      connectivityCheckUrls: ['https://netmate.test/generate_204'],
+      connectivityTimeoutMs: 200,
+    });
+
+    await expect(detector.checkConnectivity()).resolves.toBe(false);
+  });
+
+  it('所有探测点均非 204 时应判为未连通', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(302));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detector = new NetworkDetector(undefined, undefined, {
+      connectivityCheckUrls: ['https://a.test/generate_204', 'https://b.test/generate_204'],
+      connectivityTimeoutMs: 200,
+    });
+
+    await expect(detector.checkConnectivity()).resolves.toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('首个延迟目标超时后应回退到备用目标', async () => {
     vi.useFakeTimers();
 

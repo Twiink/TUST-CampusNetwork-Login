@@ -76,7 +76,8 @@ export function startBackgroundServices(
     services.logger,
     pollingInterval,
     autoReconnectService,
-    enableHeartbeat
+    enableHeartbeat,
+    services.wifiManager
   );
 }
 
