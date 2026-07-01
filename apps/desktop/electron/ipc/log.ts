@@ -2,8 +2,9 @@
  * 日志相关 IPC 处理
  */
 
-import { ipcMain, BrowserWindow, dialog } from 'electron';
+import { ipcMain, BrowserWindow, dialog, shell, app } from 'electron';
 import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 import { Logger, LogEntry, LogQueryOptions } from '@repo/shared';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 import { collectSystemInfo } from '../services/system-info';
@@ -92,6 +93,29 @@ export function registerLogIPC(logger: Logger) {
         return { success: true, path: result.filePath };
       } catch (err) {
         const message = err instanceof Error ? err.message : '导出失败';
+        return { success: false, error: message };
+      }
+    }
+  );
+
+  /**
+   * 打开日志目录（userData/logs，与 FileLogger 落盘路径一致）
+   * 在系统文件管理器中定位日志文件，方便用户排查问题。
+   */
+  ipcMain.handle(
+    IPC_CHANNELS.LOG_OPEN_DIR,
+    async (): Promise<{ success: boolean; path?: string; error?: string }> => {
+      try {
+        const logDir = path.join(app.getPath('userData'), 'logs');
+        // 目录可能尚未创建（如刚启动无日志写入），先确保存在再打开
+        await fs.mkdir(logDir, { recursive: true });
+        const errMsg = await shell.openPath(logDir);
+        if (errMsg) {
+          return { success: false, error: errMsg };
+        }
+        return { success: true, path: logDir };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '打开日志目录失败';
         return { success: false, error: message };
       }
     }

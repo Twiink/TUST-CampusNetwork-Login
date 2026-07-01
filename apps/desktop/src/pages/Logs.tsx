@@ -10,6 +10,7 @@ import {
   XCircle,
   Bug,
   Download,
+  FolderOpen,
 } from 'lucide-react';
 
 type LogLevel = 'all' | 'info' | 'success' | 'warn' | 'error' | 'debug';
@@ -68,6 +69,14 @@ export const Logs: React.FC = () => {
       // 忽略导出错误
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleOpenLogDir = async () => {
+    try {
+      await window.electronAPI.log.openDir();
+    } catch {
+      // 忽略打开失败
     }
   };
 
@@ -148,6 +157,21 @@ export const Logs: React.FC = () => {
             <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
               共 {filteredLogs.length} 条{filterLevel !== 'all' && ` (筛选自 ${logs.length} 条)`}
             </span>
+            <button
+              onClick={handleOpenLogDir}
+              className="btn btn-secondary"
+              style={{
+                padding: '6px 12px',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+              title="在文件管理器中打开日志目录"
+            >
+              <FolderOpen size={14} />
+              日志目录
+            </button>
             <button
               onClick={() => handleExport('text')}
               disabled={exporting || logs.length === 0}

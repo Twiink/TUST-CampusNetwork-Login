@@ -138,6 +138,7 @@ export interface ElectronAPI {
     exportSave: (
       format?: 'text' | 'json'
     ) => Promise<{ success: boolean; path?: string; error?: string }>;
+    openDir: () => Promise<{ success: boolean; path?: string; error?: string }>;
   };
 
   settings: {
