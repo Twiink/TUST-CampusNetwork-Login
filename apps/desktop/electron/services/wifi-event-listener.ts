@@ -81,7 +81,7 @@ export class WifiEventListener {
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
-    this.checkInterval = options.checkInterval || 1000;
+    this.checkInterval = options.checkInterval || 3000;
     this.networkDetector = options.networkDetector;
     this.logger = options.logger;
     this.window = options.window;
@@ -145,6 +145,28 @@ export class WifiEventListener {
    */
   setWindow(window: BrowserWindow | null): void {
     this.window = window;
+  }
+
+  /**
+   * 动态调整检测间隔（用于窗口隐藏到托盘时降频，减少常驻 CPU 开销）。
+   * 仅在运行中且间隔确有变化时重建定时器。
+   */
+  setCheckInterval(intervalMs: number): void {
+    if (intervalMs <= 0 || intervalMs === this.checkInterval) {
+      return;
+    }
+    this.checkInterval = intervalMs;
+    if (this.isRunning && this.timer) {
+      clearInterval(this.timer);
+      this.timer = setInterval(async () => {
+        try {
+          await this.checkWifiChange();
+        } catch (error) {
+          this.logger.error('WiFi 状态检测失败', error);
+        }
+      }, this.checkInterval);
+      this.logger.info(`WiFi 检测间隔已调整为: ${this.checkInterval}ms`);
+    }
   }
 
   /**

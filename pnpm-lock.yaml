@@ -40,32 +40,13 @@ importers:
         version: 3.2.4(@types/debug@4.1.12)(@types/node@25.0.3)(jsdom@26.1.0)(terser@5.44.1)
 
   apps/desktop:
-    dependencies:
-      '@repo/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      auto-launch:
-        specifier: ^5.0.6
-        version: 5.0.6
-      electron-updater:
-        specifier: ^6.6.2
-        version: 6.6.2
-      iconv-lite:
-        specifier: ^0.7.1
-        version: 0.7.1
-      lucide-react:
-        specifier: ^0.562.0
-        version: 0.562.0(react@19.2.0)
-      react:
-        specifier: 19.2.0
-        version: 19.2.0
-      react-dom:
-        specifier: 19.2.0
-        version: 19.2.0(react@19.2.0)
     devDependencies:
       '@eslint/js':
         specifier: ^9.17.0
         version: 9.39.2
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@testing-library/jest-dom':
         specifier: 6.9.1
         version: 6.9.1
@@ -87,12 +68,18 @@ importers:
       '@vitest/coverage-v8':
         specifier: 3.2.4
         version: 3.2.4(vitest@3.2.4(@types/debug@4.1.12)(@types/node@25.0.3)(jsdom@26.1.0)(terser@5.44.1))
+      auto-launch:
+        specifier: ^5.0.6
+        version: 5.0.6
       electron:
         specifier: ^30.0.1
         version: 30.5.1
       electron-builder:
         specifier: ^24.13.3
         version: 24.13.3(electron-builder-squirrel-windows@24.13.3)
+      electron-updater:
+        specifier: ^6.6.2
+        version: 6.6.2
       eslint:
         specifier: ^9.17.0
         version: 9.39.2
@@ -108,12 +95,24 @@ importers:
       globals:
         specifier: ^15.14.0
         version: 15.15.0
+      iconv-lite:
+        specifier: ^0.7.1
+        version: 0.7.1
       jsdom:
         specifier: 26.1.0
         version: 26.1.0
+      lucide-react:
+        specifier: ^0.562.0
+        version: 0.562.0(react@19.2.0)
       prettier:
         specifier: ^3.4.2
         version: 3.7.4
+      react:
+        specifier: 19.2.0
+        version: 19.2.0
+      react-dom:
+        specifier: 19.2.0
+        version: 19.2.0(react@19.2.0)
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

@@ -57,6 +57,10 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 const IS_E2E_TEST = process.env['NETMATE_E2E'] === '1';
 
+// WiFi SSID 轮询间隔：前台正常检测，后台（隐藏到托盘）降频以减少常驻 CPU/进程开销
+const WIFI_CHECK_INTERVAL_FOREGROUND = 3000;
+const WIFI_CHECK_INTERVAL_BACKGROUND = 8000;
+
 let win: BrowserWindow | null;
 let services: AppServices | null = null;
 let trayService: TrayService | null = null;
@@ -173,7 +177,18 @@ function createWindow() {
       preload: path.join(MAIN_DIST, 'preload.mjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      // 窗口隐藏/最小化到托盘时不节流后台任务，保证心跳与重连不中断；
+      // WiFi 检测降频由 wifiEventListener.setCheckInterval 单独处理
+      backgroundThrottling: false,
     },
+  });
+
+  // 前后台调频：窗口隐藏到托盘时降低 WiFi 轮询频率，显示时恢复
+  win.on('hide', () => {
+    wifiEventListener?.setCheckInterval(WIFI_CHECK_INTERVAL_BACKGROUND);
+  });
+  win.on('show', () => {
+    wifiEventListener?.setCheckInterval(WIFI_CHECK_INTERVAL_FOREGROUND);
   });
 
   // 关闭窗口时最小化到托盘而非退出
@@ -252,6 +267,21 @@ app.on('before-quit', () => {
     services.logger.log('info', '应用退出', { category: 'system', source: 'Main' });
   }
 });
+
+// 单实例锁：避免多开导致的重复后台服务、重复 WiFi 轮询与端口/托盘冲突
+const gotSingleInstanceLock = IS_E2E_TEST ? true : app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  // 第二个实例启动时，聚焦已有窗口而非新开
+  app.on('second-instance', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      if (!win.isVisible()) win.show();
+      win.focus();
+    }
+  });
+}
 
 app.whenReady().then(async () => {
   try {
@@ -478,7 +508,7 @@ app.whenReady().then(async () => {
         networkDetector: services.networkDetector,
         logger: services.logger,
         window: win,
-        checkInterval: 1000, // 1秒检测一次 SSID 变化（更快响应断开事件）
+        checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台 3s 检测 SSID 变化（隐藏到托盘后自动降频至 8s）
         wifiManager: services.wifiManager,
         wifiSwitcherService: wifiSwitcherService,
         configManager: services.configManager,
