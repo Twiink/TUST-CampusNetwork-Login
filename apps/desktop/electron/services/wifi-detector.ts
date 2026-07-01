@@ -4,6 +4,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { devLog } from '../utils/dev-log';
 
 const execAsync = promisify(exec);
 
@@ -30,7 +31,7 @@ export async function getCurrentWifiSSID(): Promise<WifiStatus> {
         return { connected: false, ssid: null };
     }
   } catch (error) {
-    console.error('Failed to get WiFi SSID:', error);
+    devLog.error('Failed to get WiFi SSID:', error);
     return { connected: false, ssid: null };
   }
 }

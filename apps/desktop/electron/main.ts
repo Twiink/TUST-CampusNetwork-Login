@@ -21,6 +21,8 @@ import { createNotificationService, NotificationService } from './services/notif
 import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
+import { createFileLogger, FileLogger } from './services/file-logger';
+import { devLog } from './utils/dev-log';
 import { getResolvedAppVersion } from './utils/app-version';
 import {
   registerAllIPC,
@@ -70,39 +72,57 @@ let notificationService: NotificationService | null = null;
 let updaterService: UpdaterService | null = null;
 let wifiSwitcherService: WifiSwitcherService | null = null;
 let wifiEventListener: WifiEventListener | null = null;
+let fileLogger: FileLogger | null = null;
 let forceQuit = false;
 
 /**
  * 初始化服务
  */
 async function initServices(): Promise<AppServices> {
-  // 创建日志服务（保留7天，最多500条）
+  // 创建日志服务（保留7天，最多500条内存缓冲）
   const logger = createLogger(500, 7);
 
-  // 添加控制台日志监听器（输出到终端）
-  logger.addListener((entry) => {
-    const timestamp = entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false });
-    const level = entry.level.toUpperCase().padEnd(7);
-    const levelColors = {
-      DEBUG: '\x1b[36m', // Cyan
-      INFO: '\x1b[37m', // White
-      SUCCESS: '\x1b[32m', // Green
-      WARN: '\x1b[33m', // Yellow
-      ERROR: '\x1b[31m', // Red
-    };
-    const color = levelColors[entry.level.toUpperCase() as keyof typeof levelColors] || '\x1b[37m';
-    const reset = '\x1b[0m';
+  // 文件日志：全级别、详细，落盘到 userData/logs，按大小滚动。
+  // 打包后应用无终端，文件日志是排查问题的主要依据；开发态亦写盘，便于随时导出。
+  fileLogger = createFileLogger().attach(logger);
 
-    let message = `${color}[${timestamp}] [${level}]${reset} ${entry.message}`;
-    if (entry.data) {
-      message += ` ${reset}\x1b[90m${JSON.stringify(entry.data)}\x1b[0m`;
-    }
-    console.log(message);
-  });
+  // 控制台日志监听器：仅开发态输出，且跳过 debug 噪声，保持终端清爽。
+  // 打包态无终端，不再走 console（日志已由 fileLogger 落盘 + UI 内存缓冲承接）。
+  const isDev = !app.isPackaged;
+  if (isDev) {
+    logger.addListener((entry) => {
+      // 开发态终端只关心 info 及以上，debug 归档到文件即可，不刷屏
+      if (entry.level === 'debug') {
+        return;
+      }
+      const timestamp = entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false });
+      const level = entry.level.toUpperCase().padEnd(7);
+      const levelColors = {
+        DEBUG: '\x1b[36m', // Cyan
+        INFO: '\x1b[37m', // White
+        SUCCESS: '\x1b[32m', // Green
+        WARN: '\x1b[33m', // Yellow
+        ERROR: '\x1b[31m', // Red
+      };
+      const color =
+        levelColors[entry.level.toUpperCase() as keyof typeof levelColors] || '\x1b[37m';
+      const reset = '\x1b[0m';
+
+      let message = `${color}[${timestamp}] [${level}]${reset} ${entry.message}`;
+      if (entry.data) {
+        message += ` ${reset}\x1b[90m${JSON.stringify(entry.data)}\x1b[0m`;
+      }
+      console.log(message);
+    });
+  }
 
   logger.log('info', '===== NetMate 应用启动 =====', { category: 'system', source: 'Main' });
   logger.log('info', `运行平台: ${process.platform}`, { category: 'system', source: 'Main' });
   logger.log('info', `应用版本: ${getResolvedAppVersion()}`, {
+    category: 'system',
+    source: 'Main',
+  });
+  logger.log('info', `日志文件: ${fileLogger.getLogFile()}`, {
     category: 'system',
     source: 'Main',
   });
@@ -166,7 +186,7 @@ function createWindow() {
   };
 
   const iconPath = getIconPath();
-  console.log('[Main] Loading icon from:', iconPath); // 调试日志
+  devLog.info('[Main] Loading icon from:', iconPath); // 调试日志
 
   win = new BrowserWindow({
     width: 880,
@@ -266,6 +286,10 @@ app.on('before-quit', () => {
     stopBackgroundServices(services);
     services.logger.log('info', '应用退出', { category: 'system', source: 'Main' });
   }
+  if (fileLogger) {
+    fileLogger.close();
+    fileLogger = null;
+  }
 });
 
 // 单实例锁：避免多开导致的重复后台服务、重复 WiFi 轮询与端口/托盘冲突
@@ -289,7 +313,7 @@ app.whenReady().then(async () => {
     if (process.platform === 'darwin') {
       const dockIconPath = path.join(process.env.APP_ROOT!, 'build', 'png', '512x512.png');
       app.dock.setIcon(dockIconPath);
-      console.log('[Main] Dock icon set to:', dockIconPath);
+      devLog.info('[Main] Dock icon set to:', dockIconPath);
     }
 
     // 初始化服务
@@ -522,7 +546,7 @@ app.whenReady().then(async () => {
       source: 'Main',
     });
   } catch (error) {
-    console.error('Failed to initialize app:', error);
+    devLog.error('Failed to initialize app:', error);
     if (services) {
       services.logger.log('error', '应用初始化失败', {
         category: 'system',

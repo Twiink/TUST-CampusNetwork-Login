@@ -57,7 +57,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 def releaseVersionName = System.getenv("ANDROID_VERSION_NAME")
 def releaseVersionCode = System.getenv("ANDROID_VERSION_CODE")
 def releaseKeystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
@@ -124,7 +124,33 @@ android {
             // see https://reactnative.dev/docs/signed-apk-android.
             signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            // 资源压缩：随代码混淆一并移除未引用资源，进一步减小 APK
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    // ABI 分包：为各 CPU 架构分别产出 APK，用户仅下载匹配自身设备的包，显著减小单包体积。
+    // universalApk true 额外产出一个包含全部架构的通用包（便于无法识别 ABI 的分发渠道）。
+    splits {
+        abi {
+            enable true
+            reset()
+            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            universalApk true
+        }
+    }
+}
+
+// 为各 ABI 分包设置差异化 versionCode，避免同渠道分发时安装冲突。
+// 规则：基础 versionCode * 10 + ABI 序号（通用包保持基础值）。
+android.applicationVariants.all { variant ->
+    variant.outputs.each { output ->
+        def abiCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
+        def abi = output.getFilter(com.android.build.OutputFile.ABI)
+        if (abi != null) {
+            def base = variant.versionCode ?: resolvedVersionCode
+            output.versionCodeOverride = base * 10 + abiCodes.get(abi, 0)
         }
     }
 }

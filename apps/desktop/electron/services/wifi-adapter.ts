@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import type { WifiAdapter, WifiInfo, WifiDetails, NetworkInfo } from '@repo/shared';
 import * as os from 'node:os';
 import iconv from 'iconv-lite';
+import { devLog } from '../utils/dev-log';
 
 const execAsync = promisify(exec);
 
@@ -35,7 +36,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
           return null;
       }
     } catch (error) {
-      console.error('Failed to get WiFi info:', error);
+      devLog.error('Failed to get WiFi info:', error);
       return null;
     }
   }
@@ -124,7 +125,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
           return {};
       }
     } catch (error) {
-      console.error('Failed to get network info:', error);
+      devLog.error('Failed to get network info:', error);
       return {};
     }
   }
@@ -133,7 +134,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
    * 连接到指定 WiFi（暂不实现）
    */
   async connect(_ssid: string, _password: string): Promise<boolean> {
-    console.warn('WiFi connection not implemented on desktop');
+    devLog.warn('WiFi connection not implemented on desktop');
     return false;
   }
 
@@ -141,14 +142,14 @@ export class DesktopWifiAdapter implements WifiAdapter {
    * 断开 WiFi（暂不实现）
    */
   async disconnect(): Promise<void> {
-    console.warn('WiFi disconnection not implemented on desktop');
+    devLog.warn('WiFi disconnection not implemented on desktop');
   }
 
   /**
    * 获取可用 WiFi 列表（暂不实现）
    */
   async scan(): Promise<WifiInfo[]> {
-    console.warn('WiFi scanning not implemented on desktop');
+    devLog.warn('WiFi scanning not implemented on desktop');
     return [];
   }
 
@@ -304,7 +305,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         connected: true,
       };
     } catch (error) {
-      console.error('Failed to get macOS WiFi info with system_profiler:', error);
+      devLog.error('Failed to get macOS WiFi info with system_profiler:', error);
       // 如果 system_profiler 失败，尝试备选方法
       return await this.getMacOSWifiFallback();
     }
@@ -330,7 +331,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         };
       }
     } catch (error) {
-      console.error('Failed to get macOS WiFi info with networksetup:', error);
+      devLog.error('Failed to get macOS WiFi info with networksetup:', error);
     }
 
     return null;
@@ -385,7 +386,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
             finalSsid = ssidMatch[1].trim();
           }
         } catch (err) {
-          console.error('[WiFiAdapter] Failed to get SSID with GBK encoding:', err);
+          devLog.error('[WiFiAdapter] Failed to get SSID with GBK encoding:', err);
         }
       }
 
@@ -430,7 +431,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         connected: true,
       };
     } catch (error) {
-      console.error('Failed to get Windows WiFi info:', error);
+      devLog.error('Failed to get Windows WiFi info:', error);
       return null;
     }
   }
@@ -488,7 +489,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         // 忽略错误
       }
     } catch (error) {
-      console.error('Failed to get macOS network info:', error);
+      devLog.error('Failed to get macOS network info:', error);
     }
 
     return info;
@@ -600,7 +601,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
         }
       }
     } catch (error) {
-      console.error('Failed to get Windows network info:', error);
+      devLog.error('Failed to get Windows network info:', error);
     }
 
     return info;
