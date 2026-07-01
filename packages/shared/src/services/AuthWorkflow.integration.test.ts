@@ -89,7 +89,7 @@ describe('认证集成流程', () => {
       return Promise.resolve(
         loginCall === 1
           ? createFetchResponse('dr1005({"result":0,"msg":"密码错误","ret_code":1})')
-          : createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})')
+          : createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})')
       );
     });
     vi.stubGlobal('fetch', fetchMock);

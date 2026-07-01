@@ -104,70 +104,36 @@ export class AuthService {
   /**
    * 解析登录响应
    *
-   * 兼容并联多种成功标志（不同门户/版本返回字段不一致）：
-   * - JSONP `dr1005({...})` 内：`ret_code===0` 或 `2`、`status===1`、`result===1`
-   * - 原始文本包含 `"status":1` 或 `已经在线`
-   * 满足任一即视为"响应层成功"。最终是否真正联网由 login() 的二次连通性校验兜底。
-   *
-   * 说明：参考的生产实现用 `"status":1`/`已经在线` 判定，我们此前用 `ret_code`；
-   * 无实时抓包无法确定唯一正确字段，故取并集以兼容两种门户版本。
+   * 判定标准完全对齐生产验证的参考实现（真实抓包）：
+   * 响应文本含 `"status":1`（登录成功）或 `已经在线`（账号已在线）即视为成功，
+   * 否则判失败。不再依赖 `ret_code`/`result`（此前为抓包推测，已弃用）。
+   * 最终是否真正联网由 login() 的二次连通性校验兜底（参考实现同样如此）。
    */
   parseLoginResponse(response: string): LoginResult {
-    // 原始文本层面的成功标志（无论能否解析 JSON 都先判一次）
-    const textIndicatesOnline = response.includes('已经在线');
-    const textIndicatesStatus = /"status"\s*:\s*1/.test(response);
+    const indicatesOnline = response.includes('已经在线');
+    const indicatesStatus = /"status"\s*:\s*1/.test(response);
+    const isSuccess = indicatesStatus || indicatesOnline;
 
-    try {
-      // 提取 JSON 部分
-      const jsonMatch = response.match(/dr1005\((.*)\)/);
-      if (!jsonMatch || !jsonMatch[1]) {
-        // 无法匹配 JSONP，回退到原始文本判断
-        if (textIndicatesOnline || textIndicatesStatus) {
-          return {
-            success: true,
-            message: textIndicatesOnline ? '账号已在线' : '登录成功',
-            rawResponse: response,
-          };
-        }
-        return {
-          success: false,
-          message: '响应格式无效',
-          rawResponse: response,
-        };
+    // 尝试解析 JSONP 提取 msg / ret_code，仅用于日志诊断，不参与成功判定
+    let msg: string | undefined;
+    let code: number | undefined;
+    const jsonMatch = response.match(/dr1005\((.*)\)/);
+    if (jsonMatch && jsonMatch[1]) {
+      try {
+        const data = JSON.parse(jsonMatch[1]);
+        msg = typeof data.msg === 'string' ? data.msg : undefined;
+        code = typeof data.ret_code === 'number' ? data.ret_code : undefined;
+      } catch {
+        // 解析失败不影响判定（判定只看原始文本）
       }
-
-      const data = JSON.parse(jsonMatch[1]);
-      const retCode = data.ret_code;
-      // 多标志并联：任一命中即成功
-      const isSuccess =
-        retCode === 0 ||
-        retCode === 2 ||
-        data.status === 1 ||
-        data.result === 1 ||
-        textIndicatesOnline ||
-        textIndicatesStatus;
-
-      return {
-        success: isSuccess,
-        message: data.msg || (isSuccess ? '登录成功' : '登录失败'),
-        code: retCode,
-        rawResponse: response,
-      };
-    } catch {
-      // JSON 解析失败，回退到原始文本判断
-      if (textIndicatesOnline || textIndicatesStatus) {
-        return {
-          success: true,
-          message: textIndicatesOnline ? '账号已在线' : '登录成功',
-          rawResponse: response,
-        };
-      }
-      return {
-        success: false,
-        message: '解析响应失败',
-        rawResponse: response,
-      };
     }
+
+    return {
+      success: isSuccess,
+      message: msg || (isSuccess ? (indicatesOnline ? '账号已在线' : '登录成功') : '登录失败'),
+      code,
+      rawResponse: response,
+    };
   }
 
   /**

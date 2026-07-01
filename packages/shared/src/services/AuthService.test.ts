@@ -31,45 +31,41 @@ describe('AuthService', () => {
     vi.useRealTimers();
   });
 
-  describe('parseLoginResponse 多标志并联判定', () => {
+  describe('parseLoginResponse 判定（对齐真实抓包：status:1 / 已经在线）', () => {
     const service = new AuthService();
 
-    it('ret_code=0 应判成功', () => {
+    it('响应含 "status":1 应判成功', () => {
       expect(
-        service.parseLoginResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})')
-      ).toMatchObject({ success: true, code: 0 });
+        service.parseLoginResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})')
+      ).toMatchObject({ success: true });
     });
 
-    it('ret_code=2（已在线）应判成功', () => {
-      expect(
-        service.parseLoginResponse('dr1005({"result":0,"msg":"已在线","ret_code":2})')
-      ).toMatchObject({ success: true, code: 2 });
-    });
-
-    it('ret_code=1 应判失败', () => {
-      expect(
-        service.parseLoginResponse('dr1005({"result":0,"msg":"用户名错误","ret_code":1})')
-      ).toMatchObject({ success: false, code: 1 });
-    });
-
-    it('status:1 应判成功（对齐生产参考实现）', () => {
-      expect(service.parseLoginResponse('dr1005({"status":1,"msg":"ok","ret_code":1})')).toMatchObject(
-        { success: true }
-      );
-    });
-
-    it('result:1 应判成功', () => {
-      expect(service.parseLoginResponse('dr1005({"result":1,"ret_code":1})')).toMatchObject({
+    it('响应含 "已经在线" 应判成功', () => {
+      expect(service.parseLoginResponse('您的账号已经在线！')).toMatchObject({
         success: true,
       });
     });
 
-    it('原始文本含"已经在线"应判成功', () => {
-      expect(service.parseLoginResponse('您已经在线！')).toMatchObject({ success: true });
+    it('无 status:1 且无已经在线 应判失败（即使 ret_code=0）', () => {
+      expect(
+        service.parseLoginResponse('dr1005({"status":0,"msg":"用户名或密码错误","ret_code":0})')
+      ).toMatchObject({ success: false });
+    });
+
+    it('明确失败响应应判失败', () => {
+      expect(
+        service.parseLoginResponse('dr1005({"status":0,"msg":"密码错误","ret_code":1})')
+      ).toMatchObject({ success: false });
     });
 
     it('无法解析且无成功标志应判失败', () => {
       expect(service.parseLoginResponse('<html>error</html>')).toMatchObject({ success: false });
+    });
+
+    it('应从 JSONP 提取 msg 与 ret_code 用于诊断', () => {
+      expect(
+        service.parseLoginResponse('dr1005({"status":1,"msg":"欢迎","ret_code":0})')
+      ).toMatchObject({ success: true, message: '欢迎', code: 0 });
     });
   });
 
@@ -79,7 +75,7 @@ describe('AuthService', () => {
       loginCall += 1;
       return loginCall === 1
         ? createFetchResponse('dr1005({"result":0,"msg":"密码错误","ret_code":1})')
-        : createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})');
+        : createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})');
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -120,7 +116,7 @@ describe('AuthService', () => {
   it('登录响应成功但连通性未确认时，仍判成功并在消息中标注', async () => {
     // 连通性点返回非 204（模拟 captive portal），登录接口返回成功
     const fetchMock = vi.fn(() =>
-      Promise.resolve(createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})', 200))
+      Promise.resolve(createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})', 200))
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -144,7 +140,7 @@ describe('AuthService', () => {
       loginCall += 1;
       return loginCall < 2
         ? createFetchResponse('dr1005({"result":0,"msg":"密码错误","ret_code":1})')
-        : createFetchResponse('dr1005({"result":0,"msg":"认证成功","ret_code":0})');
+        : createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})');
     });
     vi.stubGlobal('fetch', fetchMock);
 
