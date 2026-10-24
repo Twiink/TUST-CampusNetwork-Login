@@ -4,9 +4,20 @@
 
 import { WifiConfig } from '../types/config';
 import { validateWifiConfig, createDefaultWifiConfig, generateId } from '../utils/validator';
+import { isCampusNetwork } from '../utils/campus';
 import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
 import type { Logger } from '../models/Logger';
+
+/** 认证需求解析结果：驱动自动重连的守卫字段 */
+export interface AuthRequirement {
+  /** 当前 WiFi 是否需要校园网认证 */
+  requiresAuth: boolean;
+  /** 是否在 WiFi 配置列表中（未配置时走校园网启发式） */
+  isConfigured: boolean;
+  /** 配置的 WiFi 是否关联了认证账号 */
+  hasLinkedAccount: boolean;
+}
 
 export interface WifiMatchInput {
   ssid: string;
@@ -249,6 +260,34 @@ export class WifiManager {
     }
 
     return this.findMatchingWifi(target);
+  }
+
+  /**
+   * 解析当前 WiFi 的认证需求（三级判定）
+   * 1. WiFi 在配置列表 → 用户显式配置的 requiresAuth（优先）
+   * 2. 未配置 → 校园网启发式（SSID 前缀 TUST/CU_TUST 且 IP 为 10.x，对齐参考实现，
+   *    使未配置的校园 WiFi 开箱即用）
+   * 3. 否则 → 无需认证（家庭 WiFi/热点不误触发）
+   */
+  resolveAuthRequirement(ssid: string | null | undefined, ipv4?: string | null): AuthRequirement {
+    if (!ssid) {
+      return { requiresAuth: false, isConfigured: false, hasLinkedAccount: false };
+    }
+
+    const wifi = this.getWifiBySsid(ssid);
+    if (wifi) {
+      return {
+        requiresAuth: wifi.requiresAuth,
+        isConfigured: true,
+        hasLinkedAccount: wifi.linkedAccountIds.length > 0,
+      };
+    }
+
+    return {
+      requiresAuth: isCampusNetwork(ssid, ipv4),
+      isConfigured: false,
+      hasLinkedAccount: false,
+    };
   }
 
   /**
