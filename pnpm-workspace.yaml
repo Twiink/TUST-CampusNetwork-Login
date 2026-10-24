@@ -2,6 +2,9 @@ packages:
   - apps/*
   - packages/*
 
-ignoredBuiltDependencies:
-  - electron
-  - esbuild
+# pnpm 12 起需显式声明依赖构建脚本许可。
+# electron 二进制由 scripts/ensure-electron-binary.mjs 按需补装，
+# esbuild 二进制经 optionalDependencies 分发，均无需 postinstall。
+allowBuilds:
+  electron: false
+  esbuild: false
