@@ -5,6 +5,7 @@
 
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { execWindowsText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
 
@@ -72,16 +73,11 @@ async function scanMacOS(): Promise<AvailableNetwork[]> {
 
 /**
  * Windows: 扫描可用 WiFi 网络
+ * 输出按 GBK 解码（中文系统「信号」「身份验证」等字段才可正确匹配）
  */
 async function scanWindows(): Promise<AvailableNetwork[]> {
   try {
-    const { stdout } = await execAsync('netsh wlan show networks mode=bssid', {
-      timeout: 10000,
-      encoding: 'buffer',
-    });
-
-    // Windows 可能使用 GBK 编码
-    const text = stdout.toString('utf8');
+    const text = await execWindowsText('netsh wlan show networks mode=bssid');
     const networks: AvailableNetwork[] = [];
 
     // 解析 netsh 输出
@@ -203,13 +199,11 @@ async function connectWindows(ssid: string, password?: string): Promise<boolean>
  */
 async function connectWindowsInternal(ssid: string, _password?: string): Promise<boolean> {
   try {
-    // 检查是否已有保存的配置文件
+    // 检查是否已有保存的配置文件（输出按 GBK 解码，中文 SSID 才能正确匹配）
     let hasProfile = false;
     try {
-      const profileResult = await execAsync(`netsh wlan show profile name="${ssid}"`, {
-        timeout: 3000,
-      });
-      hasProfile = profileResult.stdout.includes(ssid);
+      const profileOutput = await execWindowsText(`netsh wlan show profile name="${ssid}"`, 3000);
+      hasProfile = profileOutput.includes(ssid);
     } catch {
       hasProfile = false;
     }

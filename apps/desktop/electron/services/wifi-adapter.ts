@@ -7,7 +7,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { WifiAdapter, WifiInfo, WifiDetails, NetworkInfo } from '@repo/shared';
 import * as os from 'node:os';
-import iconv from 'iconv-lite';
+import { decodeWindowsText } from '../utils/win-exec';
 import { devLog } from '../utils/dev-log';
 
 const execAsync = promisify(exec);
@@ -379,8 +379,8 @@ export class DesktopWifiAdapter implements WifiAdapter {
           const { stdout: rawOutput } = await execAsync('netsh wlan show interfaces', {
             encoding: 'buffer',
           });
-          // 使用 iconv-lite 解码 GBK
-          const gbkOutput = iconv.decode(rawOutput, 'gbk');
+          // 使用内置 TextDecoder 解码 GBK（与 win-exec 统一）
+          const gbkOutput = decodeWindowsText(rawOutput as Buffer);
           const ssidMatch = gbkOutput.match(/^\s*SSID\s*:\s*(.+)$/m);
           if (ssidMatch && ssidMatch[1]) {
             finalSsid = ssidMatch[1].trim();

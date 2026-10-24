@@ -5,6 +5,7 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { devLog } from '../utils/dev-log';
+import { execWindowsText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
 
@@ -92,27 +93,36 @@ async function getMacOSWifiSSIDFallback(): Promise<WifiStatus> {
 }
 
 /**
- * Windows: 使用 netsh 命令获取 SSID
+ * 从 netsh wlan show interfaces 输出解析当前 SSID。
+ * 多网卡时优先取含「已连接/connected」状态的接口块（对齐参考实现），避免取到
+ * 未连接网卡的 SSID；BSSID 行因键名不同不会被误匹配。
  */
-async function getWindowsWifiSSID(): Promise<WifiStatus> {
-  try {
-    const { stdout } = await execAsync('netsh wlan show interfaces');
+export function parseNetshSsid(stdout: string): string | null {
+  const blocks = stdout.split(/\r?\n\s*\r?\n/);
+  const connectedBlock = blocks.find((block) => /已连接|connected/i.test(block));
+  const searchBlocks = connectedBlock ? [connectedBlock] : blocks;
 
-    // 英文系统: SSID : xxx
-    let match = stdout.match(/^\s*SSID\s*:\s*(.+)$/m);
-    if (!match) {
-      // 中文系统: SSID : xxx
-      match = stdout.match(/^\s*SSID\s*:\s*(.+)$/im);
-    }
-
+  for (const block of searchBlocks) {
+    const match = block.match(/^\s*SSID\s*:\s*(.+)$/m);
     if (match && match[1]) {
       const ssid = match[1].trim();
       if (ssid && ssid !== '') {
-        return { connected: true, ssid };
+        return ssid;
       }
     }
+  }
+  return null;
+}
 
-    return { connected: false, ssid: null };
+/**
+ * Windows: 使用 netsh 命令获取 SSID
+ * 输出按 GBK 解码，避免中文系统上 SSID 值乱码
+ */
+async function getWindowsWifiSSID(): Promise<WifiStatus> {
+  try {
+    const stdout = await execWindowsText('netsh wlan show interfaces');
+    const ssid = parseNetshSsid(stdout);
+    return ssid ? { connected: true, ssid } : { connected: false, ssid: null };
   } catch {
     return { connected: false, ssid: null };
   }
