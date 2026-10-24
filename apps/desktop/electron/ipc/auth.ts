@@ -11,7 +11,7 @@ import {
   LoginConfig,
   LoginResult,
 } from '@repo/shared';
-import { getNetworkInfo } from '../services/network';
+import { resolveNetworkInfo } from '../services/network';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 
 /**
@@ -39,7 +39,7 @@ export function registerAuthIPC(
         return { success: false, message: '请先选择或添加账户' };
       }
 
-      const networkInfo = getNetworkInfo();
+      const networkInfo = await resolveNetworkInfo();
       if (!networkInfo.ipv4) {
         logger.log('error', 'IPC错误：登录失败，无法获取IP地址', {
           category: 'auth',
@@ -110,14 +110,8 @@ export function registerAuthIPC(
     logger.log('info', 'IPC请求：用户登出', { category: 'auth', source: 'IPC:Auth' });
 
     try {
-      const networkInfo = getNetworkInfo();
-      if (!networkInfo.ipv4) {
-        logger.log('error', 'IPC错误：登出失败，无法获取IP地址', {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-        return { success: false, message: '无法获取本机 IP 地址' };
-      }
+      // 登出不强制要求 IP（注销请求不依赖本机 IP），但仍尽力获取用于日志
+      const networkInfo = await resolveNetworkInfo();
 
       logger.log('info', 'IPC处理：开始登出', {
         category: 'auth',
@@ -125,7 +119,7 @@ export function registerAuthIPC(
         data: { IP: networkInfo.ipv4 },
       });
 
-      const result = await authService.logout(networkInfo.ipv4);
+      const result = await authService.logout(networkInfo.ipv4 || undefined);
 
       if (result.success) {
         logger.log('success', 'IPC响应：登出成功', { category: 'auth', source: 'IPC:Auth' });
