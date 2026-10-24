@@ -12,7 +12,7 @@ import {
 } from '@repo/shared';
 
 import { createElectronStorage } from './services/store';
-import { getNetworkInfo } from './services/network';
+import { resolveNetworkInfo } from './services/network';
 import { createDesktopWifiAdapter } from './services/wifi-adapter';
 import { createTrayService, TrayService } from './services/tray';
 import { createAutoReconnectService, AutoReconnectService } from './services/auto-reconnect';
@@ -455,7 +455,7 @@ app.whenReady().then(async () => {
           // 获取当前账户并登录
           const currentAccount = services?.accountManager.getCurrentAccount();
           if (currentAccount && services) {
-            const networkInfo = getNetworkInfo();
+            const networkInfo = await resolveNetworkInfo();
             if (!networkInfo.ipv4) {
               services.logger.error('托盘登录失败：无法获取 IP 地址');
               return;
@@ -489,14 +489,11 @@ app.whenReady().then(async () => {
         },
         onLogout: async () => {
           if (services) {
-            const networkInfo = getNetworkInfo();
-            if (!networkInfo.ipv4) {
-              services.logger.error('托盘登出失败：无法获取 IP 地址');
-              return;
-            }
+            // 注销请求不依赖本机 IP，获取仅用于日志
+            const networkInfo = await resolveNetworkInfo();
 
             try {
-              const result = await services.authService.logout(networkInfo.ipv4);
+              const result = await services.authService.logout(networkInfo.ipv4 || undefined);
               if (result.success) {
                 trayService?.setStatus('disconnected');
                 services.logger.info('托盘登出成功');
@@ -527,7 +524,8 @@ app.whenReady().then(async () => {
       }
 
       // 创建并启动 WiFi 事件监听器
-      // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连
+      // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连；
+      // 同时接入认证重连服务，WiFi 连接/切换后立即认证（快速路径）
       wifiEventListener = createWifiEventListener({
         networkDetector: services.networkDetector,
         logger: services.logger,
@@ -536,6 +534,7 @@ app.whenReady().then(async () => {
         wifiManager: services.wifiManager,
         wifiSwitcherService: wifiSwitcherService,
         configManager: services.configManager,
+        autoReconnectService: autoReconnectService ?? undefined,
       });
       wifiEventListener.start();
       services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');

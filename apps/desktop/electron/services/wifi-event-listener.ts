@@ -13,6 +13,10 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { BrowserWindow } from 'electron';
 import type { NetworkDetector, Logger, WifiManager, ConfigManager } from '@repo/shared';
+import { enrichStatusAuthFields } from './network';
+import { parseNetshSsid } from './wifi-detector';
+import { execWindowsText } from '../utils/win-exec';
+import type { AutoReconnectService } from './auto-reconnect';
 import type { WifiSwitcherService } from './wifi-switcher';
 import { IPC_EVENTS } from '../ipc/channels';
 
@@ -33,6 +37,8 @@ export interface WifiEventListenerOptions {
   wifiSwitcherService?: WifiSwitcherService;
   /** 配置管理器（可选，用于获取maxRetries等设置） */
   configManager?: ConfigManager;
+  /** 认证自动重连服务（可选）：WiFi 连接/切换后立即触发认证检测，不再等待心跳周期 */
+  autoReconnectService?: AutoReconnectService;
 }
 
 /**
@@ -78,6 +84,7 @@ export class WifiEventListener {
   private isRunning = false;
   private isReconnecting = false; // 防止重复重连
   private lastErrorLogged = false; // 防止错误日志过多
+  private autoReconnectService?: AutoReconnectService;
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
@@ -88,6 +95,7 @@ export class WifiEventListener {
     this.wifiManager = options.wifiManager;
     this.wifiSwitcherService = options.wifiSwitcherService;
     this.configManager = options.configManager;
+    this.autoReconnectService = options.autoReconnectService;
   }
 
   /**
@@ -512,26 +520,15 @@ export class WifiEventListener {
   }
 
   /**
-   * Windows: 快速获取 SSID
+   * Windows: 快速获取 SSID（GBK 解码 + 已连接块优先解析，与 wifi-detector 共用逻辑）
    */
   private async getWindowsSsid(): Promise<string | null> {
     try {
-      const { stdout } = await execAsync('netsh wlan show interfaces', {
-        timeout: 2000,
-      });
-
-      const match = stdout.match(/^\s*SSID\s*:\s*(.+)$/m);
-      if (match && match[1]) {
-        const ssid = match[1].trim();
-        if (ssid) {
-          return ssid;
-        }
-      }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (_error) {
-      // 忽略错误
+      const stdout = await execWindowsText('netsh wlan show interfaces', 2000);
+      return parseNetshSsid(stdout);
+    } catch {
+      return null;
     }
-    return null;
   }
 
   /**
@@ -579,8 +576,23 @@ export class WifiEventListener {
         authenticated: networkStatus.authenticated,
       });
 
+      // 补齐认证判定字段（已配置 WiFi 用配置，未配置走校园网启发式）
+      if (this.wifiManager && networkStatus.ssid) {
+        enrichStatusAuthFields(networkStatus, this.wifiManager);
+      }
+
       // 发送完整网络状态到渲染进程
       this.window.webContents.send('event:network:statusChanged', networkStatus);
+
+      // WiFi 连接/切换后立即触发认证检测与自动登录（快速路径，不等心跳周期）。
+      // 异步执行，避免登录重试阻塞状态推送；重入由 AutoReconnectService.isReconnecting 防护。
+      if (this.autoReconnectService) {
+        void this.autoReconnectService.handleStatusChange(networkStatus).catch((error) => {
+          this.logger.error('认证自动重连处理失败', {
+            错误: error instanceof Error ? error.message : String(error),
+          });
+        });
+      }
     } catch (error) {
       this.logger.error('获取或发送网络状态失败', error);
     }

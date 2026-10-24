@@ -12,7 +12,7 @@ import {
   createLogger,
   AccountConfig,
 } from '@repo/shared';
-import { getNetworkInfo } from './network';
+import { resolveNetworkInfo } from './network';
 
 export interface AutoReconnectOptions {
   /** 是否启用自动重连 */
@@ -85,6 +85,7 @@ export class AutoReconnectService {
       当前状态: status.connected ? '已连接' : '未连接',
       WiFi连接: status.wifiConnected ? '是' : '否',
       WiFi名称: status.ssid || '无',
+      需认证: status.requiresAuth ? '是' : '否',
     });
 
     // 如果未启用自动重连，或者正在重连中，则跳过
@@ -100,11 +101,15 @@ export class AutoReconnectService {
       return;
     }
 
-    // 触发重连的两种场景：
-    // 1. 之前已连接，现在断开（正常掉线）
+    // 触发重连的场景（对齐参考实现的「需要登录就登」自愈语义）：
+    // 1. 之前已连接，现在断开（正常掉线/认证过期）
     // 2. 首次检测（lastStatus 为 null）且当前已断开（冷启动时网络不通）
+    // 3. 状态驱动自愈：当前 WiFi 需要认证且未联网——不依赖状态跳变，
+    //    每个检测周期检查一次，首轮失败（如 IP 未就绪）后仍会自动补登
     const isFirstCheck = this.lastStatus === null;
-    const shouldReconnect = (wasConnected && isDisconnected) || (isFirstCheck && isDisconnected);
+    const edgeTriggered = (wasConnected && isDisconnected) || (isFirstCheck && isDisconnected);
+    const selfHealing = status.requiresAuth && isDisconnected;
+    const shouldReconnect = edgeTriggered || selfHealing;
 
     this.lastStatus = status;
 
@@ -118,11 +123,24 @@ export class AutoReconnectService {
         return;
       }
 
+      // 无可用账号时静默跳过（自愈路径每个周期都会经过，避免日志刷屏）
+      const hasAccount =
+        this.accountManager.getCurrentAccount() !== null ||
+        (status.ssid
+          ? (this.wifiManager?.getWifiBySsid(status.ssid)?.linkedAccountIds.length ?? 0) > 0
+          : false);
+      if (!hasAccount) {
+        this.logger.debug('未配置认证账号，跳过自动重连', {
+          ssid: status.ssid || '未知',
+        });
+        return;
+      }
+
       this.logger.log('warn', '检测到网络断开，启动自动重连', {
         category: 'network',
         source: 'AutoReconnect',
         data: {
-          触发原因: isFirstCheck ? '冷启动检测' : '连接状态变化',
+          触发原因: edgeTriggered ? (isFirstCheck ? '冷启动检测' : '连接状态变化') : '状态驱动自愈',
           最大重试次数: this.options.maxRetries,
           初始延迟: `${this.options.initialDelay}ms`,
         },
@@ -198,7 +216,7 @@ export class AutoReconnectService {
     try {
       await retryPolicy.execute(async () => {
         this.logger.debug('获取网络信息');
-        const networkInfo = getNetworkInfo();
+        const networkInfo = await resolveNetworkInfo();
         if (!networkInfo.ipv4) {
           this.logger.error('无法获取本机IP地址');
           throw new Error('无法获取本机 IP 地址');

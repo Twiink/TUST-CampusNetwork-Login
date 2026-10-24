@@ -4,7 +4,12 @@
 
 import { ipcMain, BrowserWindow } from 'electron';
 import { NetworkDetector, NetworkStatus, WifiManager, createLogger } from '@repo/shared';
-import { getNetworkInfo, getCurrentWifiSSID, getFullNetworkInfo } from '../services/network';
+import {
+  getNetworkInfo,
+  getCurrentWifiSSID,
+  getFullNetworkInfo,
+  enrichStatusAuthFields,
+} from '../services/network';
 import { AutoReconnectService } from '../services/auto-reconnect';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 
@@ -119,20 +124,10 @@ export function startNetworkPolling(
 
   // 定义状态处理回调
   const statusCallback = async (status: NetworkStatus) => {
-    // 用已记录的 WiFi 配置补齐认证相关字段。
-    // 关键修复：此前 requiresAuth 从无赋值，导致认证层自动重连守卫恒真跳过。
+    // 用已记录的 WiFi 配置补齐认证相关字段（未配置 WiFi 走校园网启发式，
+    // 对齐参考实现，使未配置的校园 WiFi 也能自动登录）
     if (wifiManager && status.ssid) {
-      const wifiConfig = wifiManager.getWifiBySsid(status.ssid);
-      if (wifiConfig) {
-        status.isConfigured = true;
-        status.requiresAuth = wifiConfig.requiresAuth;
-        status.hasLinkedAccount = wifiConfig.linkedAccountIds.length > 0;
-      } else {
-        // 未记录的 WiFi：视为无需认证，避免对家庭 WiFi/热点误触发认证重连
-        status.isConfigured = false;
-        status.requiresAuth = false;
-        status.hasLinkedAccount = false;
-      }
+      enrichStatusAuthFields(status, wifiManager);
     }
 
     // 保存最新的网络状态（用于心跳倒计时）
