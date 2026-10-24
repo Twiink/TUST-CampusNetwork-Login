@@ -204,6 +204,22 @@ NetMate/
 pnpm install
 ```
 
+### Git Hooks
+
+首次开发时运行以下命令安装仓库 Git hooks：
+
+```bash
+sh shell/install-git-hooks.sh
+```
+
+安装后 Git 会使用 `.githooks/` 目录下的钩子：
+
+- **pre-commit**：对暂存的源码文件执行 ESLint（按所属包）与 Prettier 检查，并阻止暂存区与工作区不一致的部分暂存提交。
+- **commit-msg**：自动移除 AI co-author 尾注；校验提交信息需符合 `<scope>: <中文主题>` 单行格式（scope 如 `desktop` / `mobile` / `shared` / `ci` 等，多个范围用 `+` 组合）。
+- **pre-push**：推送前执行 `pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm type-check`（与 CI 质量门禁对齐）。
+- **post-merge**：合并后若 hooks 或依赖定义发生变化，自动刷新 hooks 并提示 `pnpm install`。
+- **pre-rebase**：禁止在 `master` / `main` / `release/*` 分支上直接 rebase（如确需操作，可临时设置 `NETMATE_ALLOW_PROTECTED_REBASE=1`）。
+
 ### 开发模式
 
 ```bash

@@ -1,0 +1,66 @@
+#!/usr/bin/env sh
+
+set -eu
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+. "$ROOT_DIR/shell/git-hooks/common.sh"
+cd "$ROOT_DIR"
+
+ensure_command pnpm || exit 1
+
+# 可被 ESLint 检查的暂存文件（仅 apps/ 与 packages/ 内的源码）。
+STAGED_LINT="$(git diff --cached --name-only --diff-filter=ACMR -- \
+  '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' \
+  | grep -E '^(apps|packages)/' \
+  | grep -Ev '/(dist|dist-electron|build|coverage|test-results)/' \
+  | grep -Ev '^apps/mobile/(android|ios)/' \
+  || true)"
+
+if [ -z "$STAGED_LINT" ]; then
+  print_skip '没有暂存的源码文件，跳过 ESLint 检查。'
+else
+  # 暂存区与工作区同时修改同一文件会导致 lint 结果与提交内容不一致。
+  UNSTAGED_LINT="$(git diff --name-only --diff-filter=ACMR -- \
+    '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' \
+    | grep -E '^(apps|packages)/' \
+    | grep -Ev '/(dist|dist-electron|build|coverage|test-results)/' \
+    | grep -Ev '^apps/mobile/(android|ios)/' \
+    || true)"
+
+  PARTIALLY_STAGED="$(printf '%s\n' "$STAGED_LINT" | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    if printf '%s\n' "$UNSTAGED_LINT" | grep -Fxq "$file"; then
+      printf '%s\n' "$file"
+    fi
+  done)"
+
+  if [ -n "$PARTIALLY_STAGED" ]; then
+    print_error '暂存区与工作区同时修改了源码文件；请先整理为全量暂存，再提交。'
+    printf '%s\n' "$PARTIALLY_STAGED" | sed 's/^/  /' >&2
+    exit 1
+  fi
+
+  print_section '检查暂存的源码文件（ESLint）'
+  printf '%s\n' "$STAGED_LINT" | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    pkg_dir="$(printf '%s' "$file" | cut -d/ -f1-2)"
+    rel_path="${file#"$pkg_dir"/}"
+    printf '· %s\n' "$file"
+    pnpm -C "$pkg_dir" exec eslint "$rel_path"
+  done
+fi
+
+# Prettier 格式检查（与 CI 的 format:check 对齐，仅检查暂存文件）。
+STAGED_FORMAT="$(git diff --cached --name-only --diff-filter=ACMR -- \
+  '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.cjs' '*.json' '*.css' '*.md' \
+  || true)"
+
+if [ -z "$STAGED_FORMAT" ]; then
+  print_skip '没有暂存的格式化目标文件，跳过 Prettier 检查。'
+else
+  print_section '检查暂存文件格式（Prettier）'
+  printf '%s\n' "$STAGED_FORMAT" | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    pnpm exec prettier --check "$file"
+  done
+fi

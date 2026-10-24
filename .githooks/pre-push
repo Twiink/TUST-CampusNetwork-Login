@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+
+set -eu
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+. "$ROOT_DIR/shell/git-hooks/common.sh"
+cd "$ROOT_DIR"
+
+ensure_command pnpm || exit 1
+
+print_section '推送前检查（与 CI 质量门禁对齐）'
+pnpm install --frozen-lockfile --prefer-offline
+pnpm lint
+pnpm type-check
+
+printf '%s\n' '推送前检查通过。'

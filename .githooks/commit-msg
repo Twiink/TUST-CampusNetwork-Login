@@ -1,14 +1,51 @@
-#!/bin/sh
+#!/usr/bin/env sh
+
+set -eu
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+. "$ROOT_DIR/shell/git-hooks/common.sh"
+
+MESSAGE_FILE="${1:?commit message file is required}"
+
 # 自动移除 commit message 中的 AI co-author 尾注
 # 防止 GitHub 贡献者列表出现 AI 账号（Claude、Anthropic、Copilot 等）
-
-MSG_FILE="$1"
-
-# 移除常见 AI co-author 行
-sed -i.bak '/^[[:space:]]*Co-[Aa]uthored-[Bb]y:.*\(Claude\|Anthropic\|noreply@anthropic\.com\|Copilot\|copilot\|GitHub Copilot\|OpenAI\|GPT\|Gemini\|google\.com\)/d' "$MSG_FILE"
+sed -i.bak '/^[[:space:]]*Co-[Aa]uthored-[Bb]y:.*\(Claude\|Anthropic\|noreply@anthropic\.com\|Copilot\|copilot\|GitHub Copilot\|OpenAI\|GPT\|Gemini\|google\.com\)/d' "$MESSAGE_FILE"
 
 # 清理可能残留的末尾空行
-sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$MSG_FILE"
+sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$MESSAGE_FILE"
 
 # 删除 sed 备份文件
-rm -f "${MSG_FILE}.bak"
+rm -f "${MESSAGE_FILE}.bak"
+
+FIRST_LINE="$(sed -n '1p' "$MESSAGE_FILE" | tr -d '\r')"
+
+if printf '%s' "$FIRST_LINE" | grep -Eq '^(Merge|Revert|fixup!|squash!|amend!) '; then
+  exit 0
+fi
+
+# 提交风格：<scope>: <中文主题>，多个范围用 + 组合（如 shared+desktop:）。
+SCOPE='desktop|mobile|shared|ci|release|docs|chore|build|test|deps|repo'
+if ! printf '%s' "$FIRST_LINE" | grep -Eq "^($SCOPE)(\\+$SCOPE)*: .+"; then
+  printf '%s\n' '提交信息格式不正确，需要符合 <scope>: <subject>。' >&2
+  printf '%s\n' 'scope 可取 desktop / mobile / shared / ci / release / docs / chore 等，多个范围用 + 组合。' >&2
+  printf '%s\n' '示例：desktop: 新增自动重连开关' >&2
+  printf '%s\n' '示例：shared+desktop: 优化校园网登录逻辑' >&2
+  exit 1
+fi
+
+SUBJECT="${FIRST_LINE#*: }"
+if ! printf '%s' "$SUBJECT" | LC_ALL=C grep -q "$(printf '[\344\270\200-\351\277\277]')"; then
+  printf '%s\n' '提交主题必须包含中文。' >&2
+  exit 1
+fi
+
+EXTRA="$(sed '/^# -\{24\} >8 -\{24\}$/,$d' "$MESSAGE_FILE" \
+  | sed '1d' \
+  | grep -v '^#' \
+  | grep -v '^[[:space:]]*$' || true)"
+
+if [ -n "$EXTRA" ]; then
+  printf '%s\n' '提交信息只能有一行，不能包含正文或尾签。' >&2
+  printf '%s\n' "$EXTRA" | sed 's/^/  /' >&2
+  exit 1
+fi
