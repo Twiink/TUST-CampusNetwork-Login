@@ -18,7 +18,11 @@ export interface LoginConfig {
   wlanUserIp: string;
   /** 用户 IPv6 地址 (可选) */
   wlanUserIpv6?: string;
-  /** 用户 MAC 地址 (可选) */
+  /**
+   * 用户 MAC 地址
+   * @deprecated 对齐参考实现：登录 URL 固定传全零 000000000000，
+   * 该字段不再参与请求构建，仅为兼容既有调用方保留
+   */
   wlanUserMac?: string;
   /** 服务商 */
   isp: ISP;

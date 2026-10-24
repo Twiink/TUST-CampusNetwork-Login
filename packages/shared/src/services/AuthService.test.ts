@@ -116,7 +116,9 @@ describe('AuthService', () => {
   it('登录响应成功但连通性未确认时，仍判成功并在消息中标注', async () => {
     // 连通性点返回非 204（模拟 captive portal），登录接口返回成功
     const fetchMock = vi.fn(() =>
-      Promise.resolve(createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})', 200))
+      Promise.resolve(
+        createFetchResponse('dr1005({"status":1,"msg":"认证成功","ret_code":0})', 200)
+      )
     );
     vi.stubGlobal('fetch', fetchMock);
 
@@ -186,5 +188,118 @@ describe('AuthService', () => {
     const result = await promise;
 
     expect(result.success).toBe(false);
+  });
+
+  describe('buildLoginUrl（完全对齐生产验证的参考实现）', () => {
+    it('应包含 v=9303 固定值且不携带 wlan_ac_ip/wlan_ac_name', () => {
+      const service = new AuthService('http://10.10.102.50:801');
+      const url = service.buildLoginUrl({
+        userAccount: '23103421',
+        userPassword: 'pwd',
+        wlanUserIp: '10.1.2.3',
+        wlanUserMac: '000000000000',
+        isp: 'cucc',
+      });
+
+      expect(url).toContain('v=9303');
+      expect(url).not.toContain('wlan_ac_ip');
+      expect(url).not.toContain('wlan_ac_name');
+      expect(url).toContain('callback=dr1005');
+      expect(url).toContain('terminal_type=3');
+      expect(url).toContain('jsVersion=4.1.3');
+      expect(url).toContain('user_password=pwd');
+      // 联通账号：,0,<学号>@unicom（逗号会被编码为 %2C）
+      expect(url).toContain('user_account=%2C0%2C23103421%40unicom');
+      // MAC 固定全零（对齐参考实现，忽略调用方传入值）
+      expect(url).toContain('wlan_user_mac=000000000000');
+    });
+
+    it('调用方传入真实 MAC 时仍应固定传全零（对齐参考实现）', () => {
+      const service = new AuthService('http://10.10.102.50:801');
+      const url = service.buildLoginUrl({
+        userAccount: '23103421',
+        userPassword: 'pwd',
+        wlanUserIp: '10.1.2.3',
+        wlanUserMac: 'aabbccddeeff',
+        isp: 'campus',
+      });
+
+      expect(url).toContain('wlan_user_mac=000000000000');
+      expect(url).not.toContain('aabbccddeeff');
+    });
+
+    it('校园网账号无运营商后缀，携带 IPv6 时应包含 wlan_user_ipv6', () => {
+      const service = new AuthService('http://10.10.102.50:801');
+      const url = service.buildLoginUrl({
+        userAccount: '23103421',
+        userPassword: 'pwd',
+        wlanUserIp: '10.1.2.3',
+        wlanUserIpv6: '2409:8800::1',
+        isp: 'campus',
+      });
+
+      expect(url).toContain('user_account=%2C0%2C23103421');
+      expect(url).not.toContain('%40');
+      expect(url).toContain('wlan_user_ipv6=2409%3A8800%3A%3A1');
+    });
+  });
+
+  describe('logout 判定（对齐真实抓包：jsonpReturn + result:1）', () => {
+    it('真实抓包响应 result:1 应判成功并透出 msg', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(
+          createFetchResponse('jsonpReturn({"result":1,"msg":"Radius注销成功！"});')
+        );
+      vi.stubGlobal('fetch', fetchMock);
+
+      const service = new AuthService('http://10.10.102.50:801');
+      const result = await service.logout('10.1.2.3');
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Radius注销成功！');
+      // 对齐参考实现：注销请求为裸端点，不携带查询参数
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        'http://10.10.102.50:801/eportal/portal/logout'
+      );
+    });
+
+    it('result:0 应判失败', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValue(createFetchResponse('jsonpReturn({"result":0,"msg":"注销失败"});'))
+      );
+
+      const service = new AuthService();
+      const result = await service.logout('10.1.2.3');
+
+      expect(result.success).toBe(false);
+    });
+
+    it('dr1005 回调名的成功响应同样应判成功（不依赖 callback 名）', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(createFetchResponse('dr1005({"result":1,"msg":"ok"});'))
+      );
+
+      const service = new AuthService();
+      const result = await service.logout('10.1.2.3');
+
+      expect(result.success).toBe(true);
+    });
+
+    it('非 JSONP 响应时回退文本匹配 "result":1', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(createFetchResponse('{"result":1,"msg":"ok"}'))
+      );
+
+      const service = new AuthService();
+      const result = await service.logout('10.1.2.3');
+
+      expect(result.success).toBe(true);
+    });
   });
 });

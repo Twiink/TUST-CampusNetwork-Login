@@ -62,7 +62,7 @@ const DEFAULT_TIMEOUT = 10000;
  * 对齐生产验证的参考实现所用的桌面 Chrome UA。
  */
 export const DEFAULT_USER_AGENT =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36';
 
 /**
  * 发送 HTTP 请求

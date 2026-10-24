@@ -70,24 +70,24 @@ export class AuthService {
 
   /**
    * 构建登录 URL
-   * 根据抓包结果，callback 为 dr1005
+   * 完全对齐生产验证的参考实现（真实抓包）：callback=dr1005、v=9303（固定值）、
+   * 不携带 wlan_ac_ip/wlan_ac_name（参考实现均无这两个参数）。
    */
   buildLoginUrl(config: LoginConfig): string {
     const userAccount = this.buildUserAccount(config.userAccount, config.isp);
 
     const params: Record<string, string | number> = {
-      callback: 'dr1005', // 抓包结果显示为 dr1005
+      callback: 'dr1005',
       login_method: 1,
       user_account: userAccount,
       user_password: config.userPassword,
       wlan_user_ip: config.wlanUserIp,
-      wlan_user_mac: config.wlanUserMac || '000000000000',
-      wlan_ac_ip: '',
-      wlan_ac_name: '',
+      // 对齐参考实现：固定传全零。官方门户 JS 拿不到真实 MAC，门户实际忽略该字段。
+      wlan_user_mac: '000000000000',
       jsVersion: '4.1.3',
       terminal_type: 3, // 对齐生产验证的参考实现（此前为 1）
       lang: 'zh-cn',
-      v: Date.now(),
+      v: 9303,
     };
 
     // 添加 IPv6（buildQueryString 会自动 URL 编码，无需手动处理）
@@ -114,13 +114,14 @@ export class AuthService {
     const indicatesStatus = /"status"\s*:\s*1/.test(response);
     const isSuccess = indicatesStatus || indicatesOnline;
 
-    // 尝试解析 JSONP 提取 msg / ret_code，仅用于日志诊断，不参与成功判定
+    // 尝试解析 JSONP 提取 msg / ret_code，仅用于日志诊断，不参与成功判定。
+    // 提取方式与参考实现一致：取第一个 '(' 到最后一个 ')' 之间，不依赖 callback 名。
     let msg: string | undefined;
     let code: number | undefined;
-    const jsonMatch = response.match(/dr1005\((.*)\)/);
-    if (jsonMatch && jsonMatch[1]) {
+    const payload = extractJsonpPayload(response);
+    if (payload) {
       try {
-        const data = JSON.parse(jsonMatch[1]);
+        const data = JSON.parse(payload);
         msg = typeof data.msg === 'string' ? data.msg : undefined;
         code = typeof data.ret_code === 'number' ? data.ret_code : undefined;
       } catch {
@@ -335,79 +336,84 @@ export class AuthService {
 
   /**
    * 构建登出 URL
+   * 对齐生产验证的参考实现：直接 GET 注销端点，不携带查询参数。
+   * @param _wlanUserIp 仅用于日志（参考实现的注销请求不依赖本机 IP）
    */
-  buildLogoutUrl(wlanUserIp: string): string {
-    const params: Record<string, string | number> = {
-      callback: 'dr1005', // 抓包结果显示为 dr1005
-      wlan_user_ip: wlanUserIp,
-      wlan_user_mac: '000000000000',
-      v: Date.now(),
-    };
-
-    const queryString = buildQueryString(params);
-    return `${this.serverUrl}/eportal/portal/logout?${queryString}`;
+  buildLogoutUrl(_wlanUserIp?: string): string {
+    return `${this.serverUrl}/eportal/portal/logout`;
   }
 
   /**
    * 执行登出
+   * 判定对齐生产验证的参考实现与真实抓包：
+   * 响应为 JSONP（如 `jsonpReturn({"result":1,"msg":"Radius注销成功！"})`），
+   * result === 1 即注销成功（此前误用 result === 0 判定，且依赖 dr1005 回调名，
+   * 会把真实成功响应判为失败）。解析不依赖 callback 名，取括号内 JSON。
    */
-  async logout(wlanUserIp: string): Promise<LogoutResult> {
+  async logout(wlanUserIp?: string): Promise<LogoutResult> {
     this.logger?.log('info', `开始登出认证`, {
       category: 'auth',
       source: 'AuthService',
-      data: { IP: wlanUserIp, 服务器: this.serverUrl },
+      data: { IP: wlanUserIp || '未提供', 服务器: this.serverUrl },
     });
 
     try {
       const url = this.buildLogoutUrl(wlanUserIp);
-      this.logger?.log('debug', `请求登出 URL: ${url.substring(0, 100)}...`, {
+      this.logger?.log('debug', `请求登出 URL: ${url}`, {
         category: 'request',
         source: 'AuthService',
       });
 
       const response = await httpGet<string>(url, { timeout: 10000 });
+      const body = response.rawText;
+      this.logger?.log('debug', `登出响应: ${body.substring(0, 200)}`, {
+        category: 'request',
+        source: 'AuthService',
+      });
 
-      // 解析 JSONP 响应判断登出结果
-      // 协议：result=0 表示请求被接受，ret_code=0 或无 ret_code 表示成功
-      const jsonMatch = response.rawText.match(/dr1005\((.*)\)/);
       let success = false;
-      if (jsonMatch && jsonMatch[1]) {
+      let message = '登出失败';
+
+      const payload = extractJsonpPayload(body);
+      if (payload) {
         try {
-          const data = JSON.parse(jsonMatch[1]);
-          // result=0 且无错误码，或 ret_code=0 视为成功
-          success = data.result === 0 && data.ret_code !== 1;
+          const data = JSON.parse(payload);
+          success = data.result === 1;
+          if (typeof data.msg === 'string' && data.msg) {
+            message = data.msg;
+          }
         } catch {
-          // 解析失败，回退到文本匹配
-          success = response.rawText.includes('"result":0');
+          // JSON 解析失败，继续走文本匹配回退
         }
-      } else {
-        success = response.rawText.includes('成功');
+      }
+      if (!success) {
+        success = body.includes('"result":1') || body.includes('"result": 1');
       }
 
       if (success) {
-        this.logger?.log('success', `登出成功`, {
+        this.logger?.log('success', `登出成功: ${message}`, {
           category: 'auth',
           source: 'AuthService',
-          data: { IP: wlanUserIp },
+          data: { IP: wlanUserIp || '未知' },
         });
       } else {
-        this.logger?.log('warn', `登出失败`, {
+        this.logger?.log('warn', `登出失败: ${message}`, {
           category: 'auth',
           source: 'AuthService',
-          data: { IP: wlanUserIp },
+          data: { IP: wlanUserIp || '未知', 响应: body.substring(0, 200) },
         });
       }
 
       return {
         success,
-        message: success ? '登出成功' : '登出失败',
+        message: success ? message : '登出失败',
       };
     } catch (error) {
       this.logger?.log('error', `登出异常`, {
         category: 'auth',
         source: 'AuthService',
         data: {
-          IP: wlanUserIp,
+          IP: wlanUserIp || '未知',
           错误: error instanceof Error ? error.message : String(error),
         },
       });
@@ -418,6 +424,19 @@ export class AuthService {
       throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
   }
+}
+
+/**
+ * 提取 JSONP 响应的括号内 JSON 载荷（不依赖 callback 名）。
+ * 与参考实现一致：取第一个 '(' 到最后一个 ')' 之间的内容。
+ */
+function extractJsonpPayload(body: string): string | null {
+  const start = body.indexOf('(');
+  const end = body.lastIndexOf(')');
+  if (start < 0 || end <= start) {
+    return null;
+  }
+  return body.slice(start + 1, end).trim() || null;
 }
 
 /**
