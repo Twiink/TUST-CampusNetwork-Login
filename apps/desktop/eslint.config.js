@@ -7,10 +7,19 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'dist-electron', 'out', 'node_modules', '*.config.js'],
+    ignores: ['dist', 'dist-electron', 'out', 'node_modules', 'coverage', '*.config.js'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ['e2e/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
