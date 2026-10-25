@@ -155,7 +155,7 @@ app.whenReady().then(async () => {
     // macOS: 设置 Dock 图标（开发模式下必需）
     if (process.platform === 'darwin') {
       const dockIconPath = path.join(process.env.APP_ROOT!, 'build', 'png', '512x512.png');
-      app.dock.setIcon(dockIconPath);
+      app.dock?.setIcon(dockIconPath);
       devLog.info('[Main] Dock icon set to:', dockIconPath);
     }
 

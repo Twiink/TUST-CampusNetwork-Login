@@ -6,7 +6,7 @@
   appId: 'com.netmate.app',
   productName: 'NetMate',
   // 钉住打包用的 Electron 版本，避免随 node_modules 里的 electron 漂移。
-  electronVersion: '30.0.1',
+  electronVersion: '45.0.0',
   asar: true,
   compression: 'maximum',
   electronLanguages: ['zh-CN', 'en-US'],

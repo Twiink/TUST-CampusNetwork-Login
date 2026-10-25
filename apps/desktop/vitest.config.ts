@@ -4,8 +4,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   resolve: {
     alias: {
-      '@repo/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
-      '@repo/native': path.resolve(__dirname, '../../packages/native/index.ts'),
+      '@repo/shared': path.resolve(import.meta.dirname, '../../packages/shared/src/index.ts'),
+      '@repo/native': path.resolve(import.meta.dirname, '../../packages/native/index.ts'),
     },
   },
   test: {

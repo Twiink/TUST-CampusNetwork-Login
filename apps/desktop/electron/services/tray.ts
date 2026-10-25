@@ -5,6 +5,7 @@
 import { Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { devLog } from '../utils/dev-log';
 
 export type TrayStatus = 'connected' | 'disconnected' | 'connecting';
 
@@ -73,7 +74,8 @@ export class TrayService {
 
       this.updateMenu();
       return true;
-    } catch {
+    } catch (error) {
+      devLog.error('Tray init failed:', error);
       this.tray = null;
       return false;
     }

@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   resolve: {
     alias: {
-      '@repo/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@repo/shared': path.resolve(import.meta.dirname, '../../packages/shared/src/index.ts'),
     },
   },
   plugins: [
@@ -26,7 +26,7 @@ export default defineConfig({
       preload: {
         // Shortcut of `build.rollupOptions.input`.
         // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-        input: path.join(__dirname, 'electron/preload.ts'),
+        input: path.join(import.meta.dirname, 'electron/preload.ts'),
         vite: {
           build: {
             minify: 'esbuild',

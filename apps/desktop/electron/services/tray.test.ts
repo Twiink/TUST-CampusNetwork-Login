@@ -25,7 +25,9 @@ const {
   return {
     trayInstance,
     nativeImageInstance,
-    TrayMock: vi.fn(),
+    TrayMock: vi.fn(function TrayMock() {
+      return trayInstance;
+    }),
     buildFromTemplateMock: vi.fn(() => ({})),
     createFromPathMock: vi.fn(() => nativeImageInstance),
     createFromDataUrlMock: vi.fn(() => nativeImageInstance),
@@ -33,6 +35,7 @@ const {
 });
 
 vi.mock('electron', () => ({
+  app: { isPackaged: false },
   Tray: TrayMock,
   Menu: {
     buildFromTemplate: buildFromTemplateMock,
@@ -43,9 +46,16 @@ vi.mock('electron', () => ({
   },
 }));
 
+vi.mock('node:fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  existsSync: vi.fn(() => false),
+}));
+
 describe('TrayService', () => {
   beforeEach(() => {
-    TrayMock.mockReset();
+    TrayMock.mockImplementation(function TrayMock() {
+      return trayInstance;
+    });
     buildFromTemplateMock.mockClear();
     createFromPathMock.mockClear();
     createFromDataUrlMock.mockClear();
@@ -78,7 +88,9 @@ describe('TrayService', () => {
   });
 
   it('当 Tray 构造成功时应返回 true 并初始化菜单', () => {
-    TrayMock.mockImplementation(() => trayInstance);
+    TrayMock.mockImplementation(function Tray() {
+      return trayInstance;
+    });
 
     const service = createTrayService('/tmp', {
       onLogin: vi.fn(async () => {}),
