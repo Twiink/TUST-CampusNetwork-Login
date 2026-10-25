@@ -30,6 +30,7 @@ export class NetworkDetector {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private isPolling = false;
   private tickInFlight = false;
+  private latencyCache: { result: LatencyResult; expiresAt: number } | null = null;
   private wifiAdapter?: WifiAdapter;
   private logger: Logger | null;
   private options: ResolvedNetworkDetectorOptions;
@@ -51,6 +52,7 @@ export class NetworkDetector {
       connectivityTimeoutMs: options.connectivityTimeoutMs ?? 3000,
       pingTargets: pingTargets.map((target) => ({ ...target })),
       latencyTimeoutMs: options.latencyTimeoutMs ?? 5000,
+      latencyCacheMs: options.latencyCacheMs ?? 60_000,
     };
   }
 
@@ -65,16 +67,21 @@ export class NetworkDetector {
    * 检查网络连通性 (是否有互联网连接)
    */
   async checkConnectivity(): Promise<boolean> {
-    // 严格 204 语义不变；所有探测点并行，最坏耗时等于单点超时而不是串行累加。
+    // 严格 204 语义不变；任一探测点成功立即返回，全部失败才判定离线。
     const urls = this.options.connectivityCheckUrls;
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       urls.map((url) =>
         httpGet(url, { timeout: this.options.connectivityTimeoutMs })
           .then((response) => response.status === 204)
-          .catch(() => false)
+          .then((is204) => {
+            if (!is204) {
+              throw new Error('non-204 response');
+            }
+            return true;
+          })
       )
     );
-    const connected = results.some(Boolean);
+    const connected = results.some((result) => result.status === 'fulfilled');
     this.logger?.debug('网络探测完成', {
       探测点数: urls.length,
       结果: connected ? '在线' : '离线',
@@ -96,8 +103,18 @@ export class NetworkDetector {
    * 测量网络延迟(委托 latency.ts,多目标并行)
    */
   async measureLatency(): Promise<LatencyResult> {
+    const cached = this.latencyCache;
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+
     this.logger?.debug('开始测量网络延迟');
-    return measureLatency(this.logger, this.options);
+    const result = await measureLatency(this.logger, this.options);
+    // 超时结果缓存减半，网络恢复后能尽快拿到真实延迟。
+    const cacheMs =
+      result.status === 'timeout' ? this.options.latencyCacheMs / 2 : this.options.latencyCacheMs;
+    this.latencyCache = { result, expiresAt: Date.now() + cacheMs };
+    return result;
   }
 
   /**

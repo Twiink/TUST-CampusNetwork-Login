@@ -49,10 +49,14 @@ export function useLogs() {
     }
   }, []);
 
-  // 监听新日志
+  // 监听批量新日志：主进程 250ms 合并推送，避免高频日志逐条唤醒渲染层。
   useEffect(() => {
-    const unsubscribe = window.electronAPI.on(IPC_EVENTS.LOG_ADDED, (entry: unknown) => {
-      setLogs((prev) => [entry as LogEntry, ...prev].slice(0, 500));
+    const unsubscribe = window.electronAPI.on(IPC_EVENTS.LOG_BATCHED, (entries: unknown) => {
+      const incoming = Array.isArray(entries) ? (entries as LogEntry[]) : [];
+      if (incoming.length === 0) {
+        return;
+      }
+      setLogs((prev) => [...incoming.slice().reverse(), ...prev].slice(0, 500));
     });
 
     return () => {

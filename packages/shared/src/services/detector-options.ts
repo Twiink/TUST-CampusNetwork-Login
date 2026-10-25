@@ -19,6 +19,7 @@ export interface NetworkDetectorOptions {
   connectivityTimeoutMs?: number;
   pingTargets?: LatencyTarget[];
   latencyTimeoutMs?: number;
+  latencyCacheMs?: number;
 }
 
 export interface ResolvedNetworkDetectorOptions {
@@ -26,6 +27,7 @@ export interface ResolvedNetworkDetectorOptions {
   connectivityTimeoutMs: number;
   pingTargets: LatencyTarget[];
   latencyTimeoutMs: number;
+  latencyCacheMs: number;
 }
 
 export { DEFAULT_CONNECTIVITY_CHECK_URLS };

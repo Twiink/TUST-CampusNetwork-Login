@@ -85,6 +85,7 @@ export const IPC_EVENTS = {
   RECONNECT_PROGRESS: 'event:reconnect:progress',
   // 日志更新
   LOG_ADDED: 'event:log:added',
+  LOG_BATCHED: 'event:log:batched',
   // 认证状态变化
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   // 更新状态变化

@@ -50,8 +50,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 const IS_E2E_TEST = process.env['NETMATE_E2E'] === '1';
 
 // WiFi SSID 轮询间隔：前台正常检测，后台（隐藏到托盘）降频以减少常驻 CPU/进程开销
-const WIFI_CHECK_INTERVAL_FOREGROUND = 3000;
-const WIFI_CHECK_INTERVAL_BACKGROUND = 8000;
+const WIFI_CHECK_INTERVAL_FOREGROUND = 5000;
+const WIFI_CHECK_INTERVAL_BACKGROUND = 15000;
 
 let win: BrowserWindow | null;
 let services: AppServices | null = null;
@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
         updaterService?.checkForUpdates().catch(() => {
           // 忽略更新检查错误
         });
-      }, 5000);
+      }, 30_000);
     }
 
     // 创建自动重连服务

@@ -53,6 +53,7 @@ const IPC_EVENTS = {
   HEARTBEAT_COUNTDOWN: 'event:heartbeat:countdown',
   RECONNECT_PROGRESS: 'event:reconnect:progress',
   LOG_ADDED: 'event:log:added',
+  LOG_BATCHED: 'event:log:batched',
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
   WIFI_RECONNECT_PROGRESS: 'event:wifi:reconnectProgress',

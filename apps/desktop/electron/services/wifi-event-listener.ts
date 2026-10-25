@@ -105,8 +105,8 @@ export class WifiEventListener {
     // 原生事件驱动优先（nl80211 组播 / WlanRegisterNotification / CoreWLAN diff）
     const nativeWatchSupported = this.startNativeWatch();
 
-    // 兜底轮询：原生事件可用时降频到 5s，不可用时保持原 3s 间隔
-    const fallbackInterval = nativeWatchSupported ? 5000 : this.checkInterval;
+    // 原生事件承担实时性；兜底轮询只做状态一致性校验，降到 30s。
+    const fallbackInterval = nativeWatchSupported ? 30_000 : this.checkInterval;
     this.timer = setInterval(async () => {
       try {
         await this.checkWifiChange();

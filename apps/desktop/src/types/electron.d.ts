@@ -21,6 +21,7 @@ export const IPC_EVENTS = {
   NETWORK_STATUS_CHANGED: 'event:network:statusChanged',
   NETWORK_STATUS_LOADING: 'event:network:statusLoading',
   LOG_ADDED: 'event:log:added',
+  LOG_BATCHED: 'event:log:batched',
   AUTH_STATUS_CHANGED: 'event:auth:statusChanged',
   UPDATE_STATUS_CHANGED: 'event:update:statusChanged',
   WIFI_RECONNECT_PROGRESS: 'event:wifi:reconnectProgress',

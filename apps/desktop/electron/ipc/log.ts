@@ -13,11 +13,27 @@ import { collectSystemInfo } from '../services/system-info';
  * 注册日志 IPC 处理器
  */
 export function registerLogIPC(logger: Logger) {
-  // 监听日志变化，推送到渲染进程
-  logger.addListener((entry: LogEntry) => {
+  // 日志合并推送：突发写入只跨一次 IPC，且隐藏窗口不产生渲染端唤醒。
+  const pendingEntries: LogEntry[] = [];
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  const flush = () => {
+    flushTimer = null;
+    if (pendingEntries.length === 0) {
+      return;
+    }
+    const entries = pendingEntries.splice(0, pendingEntries.length);
     BrowserWindow.getAllWindows().forEach((win) => {
-      win.webContents.send(IPC_EVENTS.LOG_ADDED, entry);
+      if (!win.isDestroyed() && win.isVisible()) {
+        win.webContents.send(IPC_EVENTS.LOG_BATCHED, entries);
+      }
     });
+  };
+
+  logger.addListener((entry: LogEntry) => {
+    pendingEntries.push(entry);
+    if (!flushTimer) {
+      flushTimer = setTimeout(flush, 250);
+    }
   });
 
   /**
