@@ -2,21 +2,14 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import {
   AppConfig,
   DEFAULT_APP_SETTINGS,
-  createAuthService,
-  createConfigManager,
-  createAccountManager,
-  createWifiManager,
-  createNetworkDetector,
-  createLogger,
+  type AccountConfig,
+  type AccountManager,
   type AuthService,
   type ConfigManager,
-  type AccountManager,
-  type WifiManager,
-  type NetworkDetector,
   type Logger,
-  type AccountConfig,
+  type NetworkDetector,
+  type WifiManager,
 } from '@repo/shared';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getNetworkInfo,
   requestLocationPermission,
@@ -24,13 +17,14 @@ import {
   isNativeModuleAvailable,
   type NetworkInfo,
 } from '../native/WifiModule';
-import { createMobileWifiAdapter } from '../services/MobileWifiAdapter';
 import {
   isBackgroundServiceAvailable,
   isBackgroundServiceRunning,
   startBackgroundService,
   stopBackgroundService,
 } from '../native/BackgroundService';
+import { createMobileServices } from './mobileServices';
+import { useAccountActions } from './useAccountActions';
 import { isAutoStartAvailable, setAutoStartEnabled } from '../native/AutoStart';
 
 export interface LogEntry {
@@ -87,35 +81,6 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-/**
- * 创建 React Native 存储适配器
- */
-function createReactNativeStorage() {
-  return {
-    async get<T>(key: string): Promise<T | null> {
-      try {
-        const value = await AsyncStorage.getItem(key);
-        return value ? JSON.parse(value) : null;
-      } catch {
-        return null;
-      }
-    },
-    async set<T>(key: string, value: T): Promise<void> {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-    },
-    async remove(key: string): Promise<void> {
-      await AsyncStorage.removeItem(key);
-    },
-    async clear(): Promise<void> {
-      await AsyncStorage.clear();
-    },
-    async keys(): Promise<string[]> {
-      const keys = await AsyncStorage.getAllKeys();
-      return [...keys];
-    },
-  };
-}
 
 const defaultNetworkInfo: NetworkInfo = {
   wifiEnabled: false,
@@ -178,16 +143,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         addLog('info', '正在初始化应用...');
 
-        // 创建存储适配器
-        const storage = createReactNativeStorage();
-
         // 创建服务
-        logger = createLogger(500);
-        const configManager = createConfigManager(storage);
-        const authService = createAuthService();
-        const accountManager = createAccountManager(configManager);
-        const wifiManager = createWifiManager(configManager);
-        const networkDetector = createNetworkDetector(createMobileWifiAdapter());
+        const services = createMobileServices();
+        logger = services.logger;
+        const { configManager, authService, accountManager, wifiManager, networkDetector } =
+          services;
 
         // 加载配置
         await configManager.load();
@@ -402,80 +362,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [networkInfo.ipv4, addLog]);
 
   // 账户管理
-  const addAccount = useCallback(
-    async (account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
-      if (!servicesRef.current) {
-        throw new Error('服务未初始化');
-      }
-
-      const newAccount = await servicesRef.current.accountManager.addAccount(account);
-      setAccounts(prev => [...prev, newAccount]);
-
-      // 如果是第一个账户，自动设为当前账户
-      if (accounts.length === 0) {
-        await servicesRef.current.accountManager.switchAccount(newAccount.id);
-        setCurrentAccount(newAccount);
-      }
-
-      addLog('success', `添加账户: ${newAccount.username}`);
-      return newAccount;
-    },
-    [accounts.length, addLog]
-  );
-
-  const updateAccount = useCallback(
-    async (id: string, updates: Partial<AccountConfig>): Promise<AccountConfig> => {
-      if (!servicesRef.current) {
-        throw new Error('服务未初始化');
-      }
-
-      const updated = await servicesRef.current.accountManager.updateAccount(id, updates);
-      setAccounts(prev => prev.map(a => (a.id === id ? updated : a)));
-
-      if (currentAccount?.id === id) {
-        setCurrentAccount(updated);
-      }
-
-      addLog('info', `更新账户: ${updated.username}`);
-      return updated;
-    },
-    [currentAccount?.id, addLog]
-  );
-
-  const removeAccount = useCallback(
-    async (id: string): Promise<void> => {
-      if (!servicesRef.current) {
-        throw new Error('服务未初始化');
-      }
-
-      const account = servicesRef.current.accountManager.getAccountById(id);
-      await servicesRef.current.accountManager.removeAccount(id);
-      setAccounts(prev => prev.filter(a => a.id !== id));
-
-      if (currentAccount?.id === id) {
-        setCurrentAccount(null);
-      }
-
-      addLog('warn', `删除账户: ${account?.username || id}`);
-    },
-    [currentAccount?.id, addLog]
-  );
-
-  const switchAccount = useCallback(
-    async (id: string): Promise<void> => {
-      if (!servicesRef.current) {
-        throw new Error('服务未初始化');
-      }
-
-      await servicesRef.current.accountManager.switchAccount(id);
-      const account = servicesRef.current.accountManager.getAccountById(id);
-      setCurrentAccount(account);
-
-      addLog('info', `切换到账户: ${account?.username || id}`);
-    },
-    [addLog]
-  );
-
+  const { addAccount, updateAccount, removeAccount, switchAccount } = useAccountActions({
+    servicesRef,
+    accounts,
+    currentAccount,
+    setAccounts,
+    setCurrentAccount,
+    addLog,
+  });
   const ipAddress = networkInfo.ipv4 || '0.0.0.0';
 
   return (
