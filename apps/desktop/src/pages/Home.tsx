@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { useNetwork } from '../hooks/useNetwork';
 import { useHeartbeat } from '../hooks/useHeartbeat';
 import { useWifiReconnect } from '../hooks/useWifiReconnect';
 import {
@@ -23,15 +22,18 @@ import { ReconnectProgressBanner } from '../components/heartbeat/ReconnectProgre
 import { HomeNoticeCard, HomeToast } from '../components/notice/HomeNoticeCard';
 
 export const Home: React.FC = () => {
-  const { networkStatus, login, logout, config } = useApp();
   const {
+    networkStatus,
+    login,
+    logout,
+    config,
     status: fullNetworkStatus,
     wifiConnected,
     wifiSSID,
     fetchStatus,
     loading,
     initialCheckDone,
-  } = useNetwork();
+  } = useApp();
   const { heartbeat, reconnectProgress } = useHeartbeat();
   const { progress: wifiReconnectProgress, allFailed, clearAllFailed } = useWifiReconnect();
   const [refreshing, setRefreshing] = useState(false);

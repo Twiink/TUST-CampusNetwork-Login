@@ -12,7 +12,6 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, on
   const [isDark, setIsDark] = useState(value === 'dark');
   const [isClicked, setIsClicked] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const intervalRef = useRef<number | null>(null);
 
   // Ref to hold DOM elements for direct manipulation
   const domRef = useRef<{
@@ -53,20 +52,6 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, on
     { right: '74em', bottom: '-64em' },
     { right: '110em', bottom: '-55em' },
   ];
-
-  const getRandomDirection = useCallback(() => {
-    const directions = ['2em', '-2em'];
-    return directions[Math.floor(Math.random() * directions.length)];
-  }, []);
-
-  const moveElementRandomly = useCallback(
-    (element: HTMLElement) => {
-      const randomDirectionX = getRandomDirection();
-      const randomDirectionY = getRandomDirection();
-      element.style.transform = `translate(${randomDirectionX}, ${randomDirectionY})`;
-    },
-    [getRandomDirection]
-  );
 
   const clearInlineStyles = useCallback(() => {
     const dom = domRef.current;
@@ -157,7 +142,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, on
     clearInlineStyles();
   }, [value, clearInlineStyles]);
 
-  // Initialize DOM elements and Cloud floating animation
+  // Initialize DOM elements. Cloud drift is CSS-driven and needs no JS timer.
   useEffect(() => {
     if (containerRef.current) {
       domRef.current = {
@@ -166,21 +151,8 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({ value = 'light', size = 3, on
         cloudSons: containerRef.current.querySelectorAll('.cloud-son'),
         stars: containerRef.current.querySelectorAll('.star'),
       };
-
-      const cloudSons = domRef.current.cloudSons;
-      if (cloudSons) {
-        intervalRef.current = window.setInterval(() => {
-          cloudSons.forEach(moveElementRandomly);
-        }, 1000);
-      }
     }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [moveElementRandomly]);
+  }, []);
 
   // System theme listener
   useEffect(() => {

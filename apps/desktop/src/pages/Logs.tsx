@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { VirtualLogList } from '../components/logs/VirtualLogList';
 import {
   FileText,
   Trash2,
@@ -38,28 +39,6 @@ export const Logs: React.FC = () => {
     if (filterLevel === 'all') return logs;
     return logs.filter((log) => log.level === filterLevel);
   }, [logs, filterLevel]);
-
-  const getLogIcon = (level: string) => {
-    switch (level) {
-      case 'info':
-        return <Info size={14} />;
-      case 'success':
-        return <CheckCircle2 size={14} />;
-      case 'warn':
-        return <AlertTriangle size={14} />;
-      case 'error':
-        return <XCircle size={14} />;
-      case 'debug':
-        return <Bug size={14} />;
-      default:
-        return <Info size={14} />;
-    }
-  };
-
-  const getLogColor = (level: string) => {
-    const option = LOG_LEVEL_OPTIONS.find((opt) => opt.value === level);
-    return option ? option.color : '#3b82f6';
-  };
 
   const handleExport = async (format: 'text' | 'json') => {
     setExporting(true);
@@ -224,71 +203,12 @@ export const Logs: React.FC = () => {
           className="logs-content"
           style={{
             flex: 1,
-            overflowY: 'auto',
+            minHeight: 0,
             padding: '16px 24px',
-            backgroundColor: 'var(--log-container-bg)',
-            fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace',
           }}
         >
           {filteredLogs.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {filteredLogs.map((log) => (
-                <div
-                  key={log.id}
-                  className="log-entry"
-                  style={{
-                    marginBottom: '8px',
-                    fontSize: '0.85rem',
-                    lineHeight: '1.4',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '10px',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    backgroundColor: 'var(--log-bg)',
-                    border: `1px solid ${getLogColor(log.level)}30`, // Use level color for log entry border
-                  }}
-                >
-                  <span
-                    className="log-timestamp"
-                    style={{
-                      color: 'var(--log-timestamp)',
-                      whiteSpace: 'nowrap',
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    [{log.timestamp}]
-                  </span>
-                  <span
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      minWidth: '70px',
-                      color: getLogColor(log.level),
-                    }}
-                  >
-                    {getLogIcon(log.level)}
-                    <span style={{ fontWeight: 600, fontSize: '0.8rem' }}>
-                      {log.level.toUpperCase()}
-                    </span>
-                  </span>
-                  <span
-                    className="log-message"
-                    style={{
-                      color: 'var(--log-message)',
-                      flex: 1,
-                      minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {log.message}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <VirtualLogList logs={filteredLogs} />
           ) : (
             <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '4rem' }}>
               {filterLevel === 'all'

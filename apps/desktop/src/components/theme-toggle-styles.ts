@@ -1,5 +1,16 @@
 /** 主题切换按钮的全部 CSS(动画/布局),自组件抽出便于维护 */
 export const themeToggleStyles = `
+@keyframes netmate-cloud-drift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(2em, -1em); }
+  50% { transform: translate(-1em, 1em); }
+  75% { transform: translate(1em, 2em); }
+  100% { transform: translate(0, 0); }
+}
+.theme-toggle-container .cloud-son {
+  animation: netmate-cloud-drift 6s ease-in-out infinite;
+}
+
   .theme-toggle-container * {
     margin: 0;
     padding: 0;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LatencyResult } from '@repo/shared';
 
 export interface HeartbeatState {
@@ -9,6 +9,7 @@ export interface HeartbeatState {
   authenticated: boolean;
   latency: LatencyResult | null;
   lastCheckTime: number | null;
+  nextHeartbeatAt?: number;
 }
 
 export interface ReconnectProgress {
@@ -38,13 +39,32 @@ export function useHeartbeat() {
     message: '',
   });
 
+  const scheduleRef = useRef<HeartbeatState | null>(null);
+
+  const recomputeCountdown = useCallback(() => {
+    const schedule = scheduleRef.current;
+    if (!schedule?.nextHeartbeatAt) {
+      return;
+    }
+    setHeartbeat({
+      ...schedule,
+      remainingSeconds: Math.max(0, Math.ceil((schedule.nextHeartbeatAt - Date.now()) / 1000)),
+    });
+  }, []);
+
   useEffect(() => {
-    // 监听心跳检测倒计时
+    // 主进程只推送下一次检测时间戳；倒计时由渲染层本地推导，避免 1Hz IPC。
     const unsubscribeHeartbeat = window.electronAPI.on(
       'event:heartbeat:countdown',
       (data: unknown) => {
         const heartbeatData = data as HeartbeatState;
-        setHeartbeat(heartbeatData);
+        scheduleRef.current = heartbeatData;
+        setHeartbeat({
+          ...heartbeatData,
+          remainingSeconds: heartbeatData.nextHeartbeatAt
+            ? Math.max(0, Math.ceil((heartbeatData.nextHeartbeatAt - Date.now()) / 1000))
+            : heartbeatData.remainingSeconds,
+        });
       }
     );
 
@@ -69,11 +89,14 @@ export function useHeartbeat() {
       }
     );
 
+    const countdownTimer = window.setInterval(recomputeCountdown, 1000);
+
     return () => {
+      clearInterval(countdownTimer);
       unsubscribeHeartbeat();
       unsubscribeReconnect();
     };
-  }, []);
+  }, [recomputeCountdown]);
 
   return {
     heartbeat,

@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useCallback, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useState, useEffect } from 'react';
 import { DEFAULT_APP_SETTINGS, type AppConfig, type ConnectionStatus } from '@repo/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useNetwork } from '../hooks/useNetwork';
 import { useLogs } from '../hooks/useLogs';
 import { useConfig } from '../hooks/useConfig';
 
-interface DisplayLogEntry {
+export interface DisplayLogEntry {
   id: string;
   timestamp: string;
   level: 'info' | 'success' | 'warn' | 'error' | 'debug';
@@ -16,12 +16,21 @@ interface AppContextType {
   config: AppConfig | null;
   setConfig: (config: AppConfig) => void;
   networkStatus: ConnectionStatus;
+  status: ReturnType<typeof useNetwork>['status'];
+  info: ReturnType<typeof useNetwork>['info'];
+  wifiStatus: ReturnType<typeof useNetwork>['wifiStatus'];
+  fetchStatus: ReturnType<typeof useNetwork>['fetchStatus'];
+  loading: boolean;
+  initialCheckDone: boolean;
+  isConnected: boolean;
+  wifiConnected: boolean;
+  wifiSSID: string | null;
   ipAddress: string;
+  isAuthenticated: boolean;
   logs: DisplayLogEntry[];
   login: () => Promise<void>;
   logout: () => Promise<void>;
   clearLogs: () => void;
-  loading: boolean;
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
 }
@@ -36,7 +45,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logout: authLogout,
     loading: authLoading,
   } = useAuth();
-  const { isAuthenticated, ipAddress } = useNetwork();
+  const {
+    status: networkStatusDetail,
+    info: networkInfo,
+    wifiStatus,
+    fetchStatus,
+    loading: networkLoading,
+    initialCheckDone,
+    isConnected,
+    isAuthenticated,
+    ipAddress,
+    wifiConnected,
+    wifiSSID,
+  } = useNetwork();
   const { logs, clearLogs: clearLogsAction, loading: logsLoading } = useLogs();
   const { config, updateConfig, loading: configLoading } = useConfig();
 
@@ -85,15 +106,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   // 转换日志格式以兼容旧接口
-  const formattedLogs: DisplayLogEntry[] = logs.map((log) => ({
-    id: log.id,
-    level: log.level,
-    message: log.message,
-    timestamp:
-      log.timestamp instanceof Date
-        ? log.timestamp.toLocaleTimeString()
-        : new Date(log.timestamp).toLocaleTimeString(),
-  }));
+  const formattedLogs: DisplayLogEntry[] = useMemo(
+    () =>
+      logs.map((log) => ({
+        id: log.id,
+        level: log.level,
+        message: log.message,
+        timestamp:
+          log.timestamp instanceof Date
+            ? log.timestamp.toLocaleTimeString()
+            : new Date(log.timestamp).toLocaleTimeString(),
+      })),
+    [logs]
+  );
 
   return (
     <AppContext.Provider
@@ -106,12 +131,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         setConfig,
         networkStatus: getConnectionStatus(),
+        status: networkStatusDetail,
+        info: networkInfo,
+        wifiStatus,
+        fetchStatus,
+        loading: authLoading || logsLoading || configLoading || networkLoading,
+        initialCheckDone,
+        isConnected,
+        isAuthenticated,
         ipAddress: ipAddress,
+        wifiConnected,
+        wifiSSID,
         logs: formattedLogs,
         login,
         logout,
         clearLogs,
-        loading: authLoading || logsLoading || configLoading,
         theme,
         setTheme,
       }}
