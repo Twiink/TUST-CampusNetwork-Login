@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, CheckCircle2, WifiOff, XCircle } from 'lucide-react';
 import type { HeartbeatState } from '../../hooks/useHeartbeat';
 import { getLatencyStatus } from '../../utils/statusDisplay';
@@ -7,12 +7,43 @@ import { getLatencyStatus } from '../../utils/statusDisplay';
  * 心跳状态卡片：检测间隔、网络状态、延迟与检测 URL 列表。
  * WiFi 未连接时显示暂停提示。原 Home 页五个分支的重复区块收敛于此。
  */
-export const HeartbeatStatusCard: React.FC<{
+const HeartbeatStatusCardInner: React.FC<{
   enabled: boolean;
   wifiConnected: boolean;
   heartbeat: HeartbeatState;
   pollingInterval: number;
 }> = ({ enabled, wifiConnected, pollingInterval, heartbeat }) => {
+  const nextHeartbeatAt = heartbeat.nextHeartbeatAt;
+  const [remainingSeconds, setRemainingSeconds] = useState(() =>
+    nextHeartbeatAt
+      ? Math.max(0, Math.ceil((nextHeartbeatAt - Date.now()) / 1000))
+      : heartbeat.remainingSeconds
+  );
+
+  useEffect(() => {
+    if (!nextHeartbeatAt) {
+      setRemainingSeconds(heartbeat.remainingSeconds);
+      return;
+    }
+
+    const recompute = () => {
+      setRemainingSeconds(Math.max(0, Math.ceil((nextHeartbeatAt - Date.now()) / 1000)));
+    };
+    recompute();
+
+    // 对齐秒边界，避免固定间隔累计漂移，也避免 Home 整页每秒重渲染。
+    let timer = 0;
+    const schedule = () => {
+      const alignMs = 1000 - (Date.now() % 1000);
+      timer = window.setTimeout(function tick() {
+        recompute();
+        schedule();
+      }, alignMs);
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [nextHeartbeatAt, heartbeat.remainingSeconds]);
+
   return (
     <>
       {enabled && (
@@ -35,7 +66,7 @@ export const HeartbeatStatusCard: React.FC<{
               />
               心跳检测{!wifiConnected && ' (已暂停)'}
             </span>
-            {wifiConnected && heartbeat.remainingSeconds > 0 && (
+            {wifiConnected && remainingSeconds > 0 && (
               <span
                 style={{
                   fontSize: '0.85rem',
@@ -46,7 +77,7 @@ export const HeartbeatStatusCard: React.FC<{
                   borderRadius: '12px',
                 }}
               >
-                下次检测: {heartbeat.remainingSeconds}s
+                下次检测: {remainingSeconds}s
               </span>
             )}
           </h3>
@@ -236,3 +267,5 @@ export const HeartbeatStatusCard: React.FC<{
     </>
   );
 };
+
+export const HeartbeatStatusCard = React.memo(HeartbeatStatusCardInner);

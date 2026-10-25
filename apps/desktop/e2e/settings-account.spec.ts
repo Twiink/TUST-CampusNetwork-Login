@@ -12,7 +12,7 @@ test('设置页添加账户后列表展示新账户', async () => {
   try {
     const window = await electronApp.firstWindow();
 
-    await window.getByText('配置设置').click();
+    await window.getByText('配置设置', { exact: true }).click();
 
     const usernameInput = window.getByPlaceholder('请输入学号/用户名');
     await expect(usernameInput).toBeVisible();

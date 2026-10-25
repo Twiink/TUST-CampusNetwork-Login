@@ -12,7 +12,7 @@ test('空表单提交不会新增账户', async () => {
   try {
     const window = await electronApp.firstWindow();
 
-    await window.getByText('配置设置').click();
+    await window.getByText('配置设置', { exact: true }).click();
 
     // 初始只有一个账户（桩里的 20250001，列表与关联选择区共出现两处）
     await expect(window.getByText('20250001').first()).toBeVisible();
