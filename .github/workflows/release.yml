@@ -443,7 +443,7 @@ jobs:
         run: pnpm build:shared
 
       - name: 校验 Hermes 编译器
-        run: test -x apps/mobile/node_modules/hermes-compiler/hermesc/linux64-bin/hermesc
+        run: test -x node_modules/hermes-compiler/hermesc/linux64-bin/hermesc
 
       - name: 校验 Android 发布签名 secrets
         env:
