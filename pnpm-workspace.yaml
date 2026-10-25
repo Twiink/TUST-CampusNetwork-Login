@@ -5,6 +5,9 @@ packages:
 # pnpm 12 起需显式声明依赖构建脚本许可。
 # electron 二进制由 scripts/ensure-electron-binary.mjs 按需补装，
 # esbuild 二进制经 optionalDependencies 分发，均无需 postinstall。
+# electron-winstaller 是 electron-builder 的传递依赖（当前 NSIS 打包未使用 Squirrel），
+# install 仅选择 7z 架构，不写系统状态；显式禁用避免 pnpm 12 阻塞 frozen install。
 allowBuilds:
   electron: false
   esbuild: false
+  electron-winstaller: false
