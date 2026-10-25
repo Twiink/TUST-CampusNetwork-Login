@@ -50,11 +50,11 @@ const defaultWifiStatus: WifiStatus = {
  * 网络信息 Hook
  *
  * @param autoRefresh 是否自动刷新，默认 true
- * @param refreshInterval 刷新间隔（毫秒），默认 10000
+ * @param refreshInterval 刷新间隔（毫秒），默认 30000
  */
 export function useNetwork(
   autoRefresh: boolean = true,
-  refreshInterval: number = 10000
+  refreshInterval: number = 30000
 ): UseNetworkResult {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo>(defaultNetworkInfo);
   const [wifiStatus, setWifiStatus] = useState<WifiStatus>(defaultWifiStatus);
