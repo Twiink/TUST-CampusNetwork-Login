@@ -145,6 +145,30 @@ jobs:
       - name: 安装依赖
         run: pnpm install --frozen-lockfile
 
+      - name: 设置 Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 验证原生模块 API
+        run: |
+          cargo test -p netmate-native
+          cargo build -p netmate-native --release
+          binary="$(find target/release -type f \( -name 'libnetmate_native.so' -o -name 'netmate_native.dll' -o -name 'libnetmate_native.dylib' \) | head -n1)"
+          destination="$(node -p "require('./packages/native/resolve-native.cjs').resolveNativeRequest(process.platform, process.arch).request.replace('./','packages/native/')")"
+          mkdir -p "$(dirname "$destination")"
+          cp "$binary" "$destination"
+          node - <<'NODE'
+          const n = require('./packages/native');
+          if (n.__loadError) throw new Error(n.__loadError);
+          for (const fn of ['currentWifi', 'networkInfo', 'watchNetwork']) {
+            if (typeof n[fn] !== 'function') throw new Error(`missing export: ${fn}`);
+          }
+          const wifi = n.currentWifi();
+          const info = n.networkInfo();
+          if (wifi !== null && typeof wifi !== 'object') throw new Error('invalid currentWifi result');
+          if (info !== null && typeof info !== 'object') throw new Error('invalid networkInfo result');
+          console.log(`native API ok: wifi=${wifi ? 'object' : 'null'}, info=${info ? 'object' : 'null'}`);
+          NODE
+
       - name: 构建 shared + desktop
         run: pnpm build
 
