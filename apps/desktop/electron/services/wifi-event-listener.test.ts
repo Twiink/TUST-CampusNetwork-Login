@@ -176,6 +176,7 @@ describe('WifiEventListener', () => {
 
     listener.start();
     await flush();
+    (logger.info as unknown as ReturnType<typeof vi.fn>).mockClear();
 
     listener.setCheckInterval(0);
     listener.setCheckInterval(-5);

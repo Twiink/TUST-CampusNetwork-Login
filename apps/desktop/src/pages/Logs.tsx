@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../context/AppContext';
+import type { LogEntry } from '@repo/shared';
+import { useLogs } from '../hooks/useLogs';
 import { VirtualLogList } from '../components/logs/VirtualLogList';
 import {
   FileText,
@@ -31,7 +32,7 @@ const LOG_LEVEL_OPTIONS: {
 ];
 
 export const Logs: React.FC = () => {
-  const { logs, clearLogs } = useApp();
+  const { logs, clearLogs } = useLogs();
   const [filterLevel, setFilterLevel] = useState<LogLevel>('all');
   const [exporting, setExporting] = useState(false);
 
@@ -221,3 +222,5 @@ export const Logs: React.FC = () => {
     </div>
   );
 };
+
+export type DisplayLogEntry = LogEntry;

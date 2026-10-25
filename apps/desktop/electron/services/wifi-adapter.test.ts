@@ -5,9 +5,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecException } from 'node:child_process';
 
-const { execMock, nativeCurrentWifiMock } = vi.hoisted(() => ({
+const { execMock, nativeCurrentWifiMock, nativeNetworkInfoMock } = vi.hoisted(() => ({
   execMock: vi.fn(),
   nativeCurrentWifiMock: vi.fn(() => null),
+  nativeNetworkInfoMock: vi.fn((): Record<string, unknown> | null => null),
 }));
 
 vi.mock('node:child_process', () => ({
@@ -27,6 +28,7 @@ vi.mock('../utils/dev-log', () => ({
 
 vi.mock('@repo/native', () => ({
   currentWifi: nativeCurrentWifiMock,
+  networkInfo: nativeNetworkInfoMock,
 }));
 
 import { DesktopWifiAdapter, resetNativeWifiModuleForTests } from './wifi-adapter';
@@ -77,8 +79,51 @@ const makeAdapter = (platform: NodeJS.Platform): DesktopWifiAdapter => {
 beforeEach(() => {
   vi.clearAllMocks();
   nativeCurrentWifiMock.mockReturnValue(null);
+  nativeNetworkInfoMock.mockReturnValue(null);
   mockExecOutput('');
   resetNativeWifiModuleForTests();
+});
+
+describe('DesktopWifiAdapter.getNetworkInfo', () => {
+  it('原生 networkInfo 优先且 15s 内复用缓存，不触发 spawn', async () => {
+    const adapter = makeAdapter('linux');
+    nativeNetworkInfoMock.mockReturnValue({
+      ipv4: '10.48.27.111',
+      ipv6: '2001:da8::17ce',
+      mac: 'AA:BB:CC:DD:EE:FF',
+      gateway: '10.48.16.1',
+      dns: ['202.113.96.10', ''],
+      subnetMask: '255.255.240.0',
+    });
+
+    const first = await adapter.getNetworkInfo();
+    const second = await adapter.getNetworkInfo();
+
+    expect(first).toEqual({
+      ipv4: '10.48.27.111',
+      ipv6: '2001:da8::17ce',
+      mac: 'aabbccddeeff',
+      gateway: '10.48.16.1',
+      dns: ['202.113.96.10'],
+      subnetMask: '255.255.240.0',
+    });
+    expect(second).toBe(first);
+    expect(nativeNetworkInfoMock).toHaveBeenCalledTimes(1);
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it('原生返回空对象时回退 TS spawn 路径', async () => {
+    const adapter = makeAdapter('win32');
+    nativeNetworkInfoMock.mockReturnValue({});
+    mockExecOutput(
+      Buffer.from('无线局域网适配器 WLAN:\r\n IPv4 地址 . . . : 10.1.2.3\r\n', 'utf8')
+    );
+
+    const info = await adapter.getNetworkInfo();
+
+    expect(info.ipv4).toBe('10.1.2.3');
+    expect(execMock).toHaveBeenCalled();
+  });
 });
 
 describe('DesktopWifiAdapter.getCurrentWifi', () => {

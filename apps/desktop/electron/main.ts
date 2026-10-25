@@ -287,7 +287,16 @@ app.whenReady().then(async () => {
     );
 
     // 挂起恢复后路由/DHCP 可能刚变化，立即做一次轻量检测，不等完整心跳周期。
+    powerMonitor.on('suspend', () => {
+      services?.logger.info('系统挂起，暂停后台心跳检测');
+      if (services && services.configManager.getSettings().enableHeartbeat) {
+        stopBackgroundServices(services);
+      }
+    });
+
     powerMonitor.on('resume', () => {
+      const resumeSettings = services?.configManager.getSettings();
+      services?.logger.info('系统恢复，重启后台心跳检测');
       services?.networkDetector
         .getNetworkStatus()
         .then((status) => {
@@ -296,6 +305,16 @@ app.whenReady().then(async () => {
         .catch((error) => {
           services?.logger.error('系统恢复后的网络检测失败', error);
         });
+      const pollingInterval =
+        (resumeSettings?.heartbeatIntervalSeconds ?? resumeSettings?.pollingInterval ?? 30) * 1000;
+      if (services && resumeSettings?.enableHeartbeat) {
+        startBackgroundServices(
+          services,
+          pollingInterval,
+          autoReconnectService ?? undefined,
+          resumeSettings.enableHeartbeat
+        );
+      }
     });
 
     // 启动后台服务（带自动重连和心跳检测设置）

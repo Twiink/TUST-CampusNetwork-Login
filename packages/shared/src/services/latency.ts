@@ -1,5 +1,5 @@
 /**
- * 网络延迟测量(自 NetworkDetector 抽出):多目标并行 + HEAD 探测 + 延迟分级。
+ * 网络延迟测量(自 NetworkDetector 抽出):HEAD 单目标 + 延迟分级。
  */
 
 import type { LatencyResult, LatencyStatus } from '../types/network';
@@ -7,19 +7,18 @@ import type { Logger } from '../models/Logger';
 import type { LatencyTarget, ResolvedNetworkDetectorOptions } from './detector-options';
 
 /**
- * 测量网络延迟（Ping），多目标并行，全部超时返回最后的超时结果。
+ * 测量网络延迟（HEAD 单目标，全部超时返回最后的超时结果）。
  */
 export async function measureLatency(
   logger: Logger | null,
   options: ResolvedNetworkDetectorOptions
 ): Promise<LatencyResult> {
-  logger?.debug('开始并行测量网络延迟');
+  logger?.debug('开始测量网络延迟');
 
   const results = await Promise.all(
     options.pingTargets.map((target) => testSingleTarget(options, target))
   );
-  const success = results.filter((result) => result.status !== 'timeout');
-  const best = success.sort((left, right) => left.value - right.value)[0];
+  const best = [...results].sort((left, right) => left.value - right.value)[0];
 
   if (best) {
     logger?.debug('网络状态检测完成', {
@@ -35,7 +34,7 @@ export async function measureLatency(
   });
 
   return (
-    results[results.length - 1] || {
+    results.find((result) => result.status === 'timeout') ?? {
       value: 9999,
       status: 'timeout',
       target: options.pingTargets[0]?.url || 'unknown',

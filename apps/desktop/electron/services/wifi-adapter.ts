@@ -25,14 +25,23 @@ interface NativeWifiSnapshot {
 
 type NativeModule = {
   currentWifi?: () => NativeWifiSnapshot | null;
-  networkInfo?: () => unknown | null;
+  networkInfo?: () => NativeNetworkSnapshot | null;
   __loadError?: string;
 };
+
+interface NativeNetworkSnapshot {
+  ipv4?: string | null;
+  ipv6?: string | null;
+  mac?: string | null;
+  gateway?: string | null;
+  dns?: string[] | null;
+  subnetMask?: string | null;
+}
 
 let nativeModule:
   | {
       currentWifi?: () => NativeWifiSnapshot | null;
-      networkInfo?: () => unknown | null;
+      networkInfo?: () => NativeNetworkSnapshot | null;
     }
   | null
   | undefined;
@@ -42,6 +51,24 @@ let nativeModule:
  */
 export function resetNativeWifiModuleForTests(): void {
   nativeModule = undefined;
+}
+
+function hasAnyNetworkValue(info: NetworkInfo | NativeNetworkSnapshot | null): boolean {
+  return Boolean(
+    info &&
+    (info.ipv4 ||
+      info.ipv6 ||
+      info.mac ||
+      info.gateway ||
+      info.subnetMask ||
+      (Array.isArray(info.dns) && info.dns.length > 0))
+  );
+}
+
+function normalizeMac(mac?: string | null): string | undefined {
+  if (!mac) return undefined;
+  const normalized = mac.replace(/[:-]/g, '').toLowerCase();
+  return normalized && normalized !== '000000000000' ? normalized : undefined;
 }
 
 function loadNativeModule() {
@@ -78,6 +105,7 @@ async function resolveNativeWifiInfo(): Promise<WifiInfo | null> {
  * 桌面端 WiFi 适配器
  */
 const WIFI_SNAPSHOT_TTL_MS = 1500;
+const NETWORK_INTERFACE_TTL_MS = 15_000;
 
 /**
  * 桌面端 WiFi 适配器
@@ -87,6 +115,9 @@ export class DesktopWifiAdapter implements WifiAdapter {
   private snapshot: WifiInfo | null = null;
   private snapshotAt = 0;
   private snapshotPromise: Promise<WifiInfo | null> | null = null;
+  private networkSnapshot: NetworkInfo | null = null;
+  private networkSnapshotAt = 0;
+  private networkSnapshotPromise: Promise<NetworkInfo> | null = null;
 
   constructor() {
     this.platform = process.platform;
@@ -206,20 +237,54 @@ export class DesktopWifiAdapter implements WifiAdapter {
    * 获取网络配置信息
    */
   async getNetworkInfo(): Promise<NetworkInfo> {
-    try {
-      switch (this.platform) {
-        case 'darwin':
-          return await resolveMacOSNetworkInfo();
-        case 'win32':
-          return await resolveWindowsNetworkInfo();
-        case 'linux':
-          return await resolveLinuxNetworkInfo();
-        default:
-          return {};
+    const now = Date.now();
+    if (now - this.networkSnapshotAt < NETWORK_INTERFACE_TTL_MS) {
+      return this.networkSnapshot ?? {};
+    }
+    if (this.networkSnapshotPromise) {
+      return this.networkSnapshotPromise;
+    }
+
+    this.networkSnapshotPromise = (async () => {
+      const native = loadNativeModule();
+      const nativeInfo: NativeNetworkSnapshot | null = native?.networkInfo?.() ?? null;
+      if (hasAnyNetworkValue(nativeInfo) && nativeInfo) {
+        return {
+          ipv4: nativeInfo.ipv4 || undefined,
+          ipv6: nativeInfo.ipv6 || undefined,
+          mac: normalizeMac(nativeInfo.mac),
+          gateway: nativeInfo.gateway || undefined,
+          dns: nativeInfo.dns?.filter(Boolean) ?? undefined,
+          subnetMask: nativeInfo.subnetMask || undefined,
+        };
       }
+      return this.resolveFallbackNetworkInfo();
+    })();
+
+    try {
+      const result = await this.networkSnapshotPromise;
+      this.networkSnapshot = result;
+      // Native interfaces are stable enough for 15s; route/DNS data can be held for 60s.
+      this.networkSnapshotAt = Date.now();
+      return result;
     } catch (error) {
       devLog.error('Failed to get network info:', error);
       return {};
+    } finally {
+      this.networkSnapshotPromise = null;
+    }
+  }
+
+  private async resolveFallbackNetworkInfo(): Promise<NetworkInfo> {
+    switch (this.platform) {
+      case 'darwin':
+        return resolveMacOSNetworkInfo();
+      case 'win32':
+        return resolveWindowsNetworkInfo();
+      case 'linux':
+        return resolveLinuxNetworkInfo();
+      default:
+        return {};
     }
   }
 

@@ -145,27 +145,25 @@ try {
     websocket.addEventListener('open', resolve, { once: true });
     websocket.addEventListener('error', reject, { once: true });
   });
-  await new Promise((resolve, reject) => {
+  const evaluated = new Promise((resolve) => {
+    websocket.addEventListener('close', resolve, { once: true });
     websocket.addEventListener(
       'message',
       (event) => {
         const payload = JSON.parse(String(event.data));
-        if (payload.id === 1) {
-          if (payload.error) reject(new Error(payload.error.message));
-          else resolve();
-          websocket.close();
-        }
+        if (payload.id === 1) resolve();
       },
       { once: true }
     );
-    websocket.send(
-      JSON.stringify({
-        id: 1,
-        method: 'Runtime.evaluate',
-        params: { expression: 'window.close()', returnByValue: true },
-      })
-    );
   });
+  websocket.send(
+    JSON.stringify({
+      id: 1,
+      method: 'Runtime.evaluate',
+      params: { expression: 'window.close()', returnByValue: true },
+    })
+  );
+  await evaluated;
   await waitMs(hiddenDelayMs);
   await wait(hiddenSeconds);
   result.hidden = await readProcessTree(app.pid);

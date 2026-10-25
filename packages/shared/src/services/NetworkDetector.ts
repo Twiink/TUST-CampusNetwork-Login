@@ -51,7 +51,7 @@ export class NetworkDetector {
       ],
       connectivityTimeoutMs: options.connectivityTimeoutMs ?? 3000,
       pingTargets: pingTargets.map((target) => ({ ...target })),
-      latencyTimeoutMs: options.latencyTimeoutMs ?? 5000,
+      latencyTimeoutMs: options.latencyTimeoutMs ?? 2000,
       latencyCacheMs: options.latencyCacheMs ?? 60_000,
     };
   }
@@ -69,19 +69,17 @@ export class NetworkDetector {
   async checkConnectivity(): Promise<boolean> {
     // 严格 204 语义不变；任一探测点成功立即返回，全部失败才判定离线。
     const urls = this.options.connectivityCheckUrls;
-    const results = await Promise.allSettled(
-      urls.map((url) =>
-        httpGet(url, { timeout: this.options.connectivityTimeoutMs })
-          .then((response) => response.status === 204)
-          .then((is204) => {
-            if (!is204) {
-              throw new Error('non-204 response');
-            }
-            return true;
-          })
-      )
+    const probes = urls.map(async (url) => {
+      const response = await httpGet(url, { timeout: this.options.connectivityTimeoutMs });
+      if (response.status !== 204) {
+        throw new Error('non-204 response');
+      }
+      return true;
+    });
+    const connected = await Promise.any(probes).then(
+      () => true,
+      () => false
     );
-    const connected = results.some((result) => result.status === 'fulfilled');
     this.logger?.debug('网络探测完成', {
       探测点数: urls.length,
       结果: connected ? '在线' : '离线',
@@ -374,5 +372,8 @@ export class NetworkDetector {
  * 创建网络探测服务实例
  */
 export function createNetworkDetector(wifiAdapter?: WifiAdapter, logger?: Logger): NetworkDetector {
-  return new NetworkDetector(wifiAdapter, logger);
+  return new NetworkDetector(wifiAdapter, logger, {
+    // UI 展示值不需要多目标竞争；单目标 + 缓存足以覆盖心跳展示。
+    pingTargets: [DEFAULT_PING_TARGETS[0]],
+  });
 }

@@ -106,17 +106,12 @@ export class WifiEventListener {
     const nativeWatchSupported = this.startNativeWatch();
 
     // 原生事件承担实时性；兜底轮询只做状态一致性校验，降到 30s。
-    const fallbackInterval = nativeWatchSupported ? 30_000 : this.checkInterval;
-    this.timer = setInterval(async () => {
-      try {
-        await this.checkWifiChange();
-      } catch (error) {
-        this.logger.error('WiFi 状态检测失败', error);
-      }
-    }, fallbackInterval);
+    this.restartTimer();
 
     this.logger.info(
-      `WiFi 事件监听器已启动，原生事件: ${nativeWatchSupported ? '已启用' : '不可用'}，兜底间隔: ${fallbackInterval}ms`
+      `WiFi 事件监听器已启动，原生事件: ${nativeWatchSupported ? '已启用' : '不可用'}，兜底间隔: ${
+        this.nativeWatchStarted ? 30_000 : this.checkInterval
+      }ms`
     );
   }
 
@@ -186,16 +181,28 @@ export class WifiEventListener {
       return;
     }
     this.checkInterval = intervalMs;
-    if (this.isRunning && this.timer) {
-      clearInterval(this.timer);
-      this.timer = setInterval(async () => {
-        try {
-          await this.checkWifiChange();
-        } catch (error) {
-          this.logger.error('WiFi 状态检测失败', error);
-        }
-      }, this.checkInterval);
-      this.logger.info(`WiFi 检测间隔已调整为: ${this.checkInterval}ms`);
+    if (this.isRunning) {
+      this.restartTimer();
+    }
+  }
+
+  private restartTimer(): void {
+    const existingTimer = this.timer;
+    if (existingTimer) {
+      clearInterval(existingTimer);
+      this.timer = null;
+    }
+    if (!this.isRunning) return;
+    const interval = this.nativeWatchStarted ? 30_000 : this.checkInterval;
+    this.timer = setInterval(async () => {
+      try {
+        await this.checkWifiChange();
+      } catch (error) {
+        this.logger.error('WiFi 状态检测失败', error);
+      }
+    }, interval);
+    if (existingTimer) {
+      this.logger.info(`WiFi 检测间隔已调整为: ${interval}ms`);
     }
   }
 

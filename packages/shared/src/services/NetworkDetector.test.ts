@@ -102,4 +102,40 @@ describe('NetworkDetector', () => {
     expect(result.status).not.toBe('timeout');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('任一探测点返回 204 时应立即判为在线', async () => {
+    const fetchMock = vi.fn((input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes('fast')) {
+        return Promise.resolve(createFetchResponse(204));
+      }
+      return new Promise((resolve) => setTimeout(() => resolve(createFetchResponse(204)), 2000));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detector = new NetworkDetector(undefined, undefined, {
+      connectivityCheckUrls: ['https://slow.test/generate_204', 'https://fast.test/generate_204'],
+      connectivityTimeoutMs: 3000,
+    });
+
+    await expect(detector.checkConnectivity()).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('延迟结果在缓存期内不应重复发起 HEAD 请求', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(createFetchResponse(204));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detector = new NetworkDetector(undefined, undefined, {
+      pingTargets: [{ url: 'https://latency.test/head', source: '延迟目标' }],
+      latencyTimeoutMs: 100,
+      latencyCacheMs: 60_000,
+    });
+
+    const first = await detector.measureLatency();
+    const second = await detector.measureLatency();
+
+    expect(second).toBe(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

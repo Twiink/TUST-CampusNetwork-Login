@@ -2,7 +2,6 @@ import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { DEFAULT_APP_SETTINGS, type AppConfig, type ConnectionStatus } from '@repo/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useNetwork } from '../hooks/useNetwork';
-import { useLogs } from '../hooks/useLogs';
 import { useConfig } from '../hooks/useConfig';
 
 export interface DisplayLogEntry {
@@ -27,10 +26,8 @@ interface AppContextType {
   wifiSSID: string | null;
   ipAddress: string;
   isAuthenticated: boolean;
-  logs: DisplayLogEntry[];
   login: () => Promise<void>;
   logout: () => Promise<void>;
-  clearLogs: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -56,7 +53,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     wifiConnected,
     wifiSSID,
   } = useNetwork();
-  const { logs, clearLogs: clearLogsAction, loading: logsLoading } = useLogs();
   const { config, updateConfig, loading: configLoading } = useConfig();
 
   // 计算连接状态
@@ -74,10 +70,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await authLogout();
   }, [authLogout]);
 
-  const clearLogs = useCallback(() => {
-    clearLogsAction();
-  }, [clearLogsAction]);
-
   const setConfig = useCallback(
     (newConfig: AppConfig) => {
       updateConfig(newConfig);
@@ -85,52 +77,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     [updateConfig]
   );
 
-  // 转换日志格式以兼容旧接口
-  const formattedLogs: DisplayLogEntry[] = useMemo(
-    () =>
-      logs.map((log) => ({
-        id: log.id,
-        level: log.level,
-        message: log.message,
-        timestamp:
-          log.timestamp instanceof Date
-            ? log.timestamp.toLocaleTimeString()
-            : new Date(log.timestamp).toLocaleTimeString(),
-      })),
-    [logs]
+  const value = useMemo(
+    () => ({
+      config: config || {
+        accounts: [],
+        currentAccountId: null,
+        wifiList: [],
+        settings: DEFAULT_APP_SETTINGS,
+      },
+      setConfig,
+      networkStatus: getConnectionStatus(),
+      status: networkStatusDetail,
+      info: networkInfo,
+      wifiStatus,
+      fetchStatus,
+      loading: authLoading || configLoading || networkLoading,
+      initialCheckDone,
+      isConnected,
+      isAuthenticated,
+      ipAddress: ipAddress,
+      wifiConnected,
+      wifiSSID,
+      login,
+      logout,
+    }),
+    [
+      config,
+      setConfig,
+      getConnectionStatus,
+      networkStatusDetail,
+      networkInfo,
+      wifiStatus,
+      fetchStatus,
+      authLoading,
+      configLoading,
+      networkLoading,
+      initialCheckDone,
+      isConnected,
+      isAuthenticated,
+      ipAddress,
+      wifiConnected,
+      wifiSSID,
+      login,
+      logout,
+    ]
   );
 
-  return (
-    <AppContext.Provider
-      value={{
-        config: config || {
-          accounts: [],
-          currentAccountId: null,
-          wifiList: [],
-          settings: DEFAULT_APP_SETTINGS,
-        },
-        setConfig,
-        networkStatus: getConnectionStatus(),
-        status: networkStatusDetail,
-        info: networkInfo,
-        wifiStatus,
-        fetchStatus,
-        loading: authLoading || logsLoading || configLoading || networkLoading,
-        initialCheckDone,
-        isConnected,
-        isAuthenticated,
-        ipAddress: ipAddress,
-        wifiConnected,
-        wifiSSID,
-        logs: formattedLogs,
-        login,
-        logout,
-        clearLogs,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
