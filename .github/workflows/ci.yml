@@ -149,6 +149,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 验证原生模块 API
+        shell: bash
         run: |
           cargo test -p netmate-native
           cargo build -p netmate-native --release

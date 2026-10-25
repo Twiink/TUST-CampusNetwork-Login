@@ -180,6 +180,7 @@ jobs:
           mkdir -p packages/native/win32-x64
           cp target/release/netmate_native.dll packages/native/win32-x64/netmate_native.win32-x64-msvc.node
       - name: 验证原生模块加载与 API 冒烟
+        shell: bash
         run: |
           node - <<'NODE'
           const n = require('./packages/native');
@@ -271,6 +272,7 @@ jobs:
           cp target/aarch64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-arm64/netmate_native.darwin-arm64.node
           cp target/x86_64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-x64/netmate_native.darwin-x64.node
       - name: 验证原生模块加载与 API 冒烟
+        shell: bash
         run: |
           node - <<'NODE'
           const n = require('./packages/native');
@@ -360,6 +362,7 @@ jobs:
           mkdir -p packages/native/linux-x64-gnu
           cp target/release/libnetmate_native.so packages/native/linux-x64-gnu/netmate_native.linux-x64-gnu.node
       - name: 验证原生模块加载与 API 冒烟
+        shell: bash
         run: |
           node - <<'NODE'
           const n = require('./packages/native');
