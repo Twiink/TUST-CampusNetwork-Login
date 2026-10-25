@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { DEFAULT_APP_SETTINGS, type AppConfig, type ConnectionStatus } from '@repo/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useNetwork } from '../hooks/useNetwork';
@@ -31,8 +31,6 @@ interface AppContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   clearLogs: () => void;
-  theme: 'light' | 'dark';
-  setTheme: (theme: 'light' | 'dark') => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -60,24 +58,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   } = useNetwork();
   const { logs, clearLogs: clearLogsAction, loading: logsLoading } = useLogs();
   const { config, updateConfig, loading: configLoading } = useConfig();
-
-  // Theme state
-  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
-
-  const setTheme = useCallback((newTheme: 'light' | 'dark') => {
-    setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
-  }, []);
-
-  // Apply theme to body
-  useEffect(() => {
-    document.body.classList.remove('light', 'dark');
-    document.body.classList.add(theme);
-  }, [theme]);
 
   // 计算连接状态
   const getConnectionStatus = useCallback((): ConnectionStatus => {
@@ -146,8 +126,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         login,
         logout,
         clearLogs,
-        theme,
-        setTheme,
       }}
     >
       {children}

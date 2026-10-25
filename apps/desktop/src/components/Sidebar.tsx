@@ -1,7 +1,7 @@
 import React from 'react';
 import { Globe, Settings, FileText, Wifi, Info } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
-import { useApp } from '../context/AppContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -9,7 +9,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
-  const { theme, setTheme } = useApp();
+  const { theme, setTheme } = useTheme();
 
   return (
     <div className="sidebar">
