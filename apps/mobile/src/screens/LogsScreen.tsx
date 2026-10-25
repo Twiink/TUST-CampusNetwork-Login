@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Platform, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Platform, TouchableOpacity } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { GlassView } from '../components/GlassView';
@@ -108,35 +108,37 @@ export const LogsScreen: React.FC = () => {
           )}
         </View>
 
-        {/* Logs Content */}
-        <ScrollView style={styles.logsContainer} showsVerticalScrollIndicator={false}>
-          {filteredLogs.length > 0 ? (
-            filteredLogs.map(log => (
-              <View
-                key={log.id}
-                style={[
-                  styles.logItem,
-                  {
-                    backgroundColor: theme.colors.cardBg + '40',
-                    borderColor: theme.colors.border + '20',
-                  },
-                ]}
-              >
-                <View style={styles.logHeader}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <View style={[styles.logDot, { backgroundColor: getLogColor(log.level) }]} />
-                    <Text style={[styles.level, { color: getLogColor(log.level) }]}>
-                      {log.level.toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-                    {log.timestamp}
+        {/* Logs Content — FlatList 虚拟化替代 ScrollView 全量渲染 */}
+        <FlatList
+          style={styles.logsContainer}
+          showsVerticalScrollIndicator={false}
+          data={filteredLogs}
+          keyExtractor={log => log.id}
+          renderItem={({ item: log }) => (
+            <View
+              style={[
+                styles.logItem,
+                {
+                  backgroundColor: theme.colors.cardBg + '40',
+                  borderColor: theme.colors.border + '20',
+                },
+              ]}
+            >
+              <View style={styles.logHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={[styles.logDot, { backgroundColor: getLogColor(log.level) }]} />
+                  <Text style={[styles.level, { color: getLogColor(log.level) }]}>
+                    {log.level.toUpperCase()}
                   </Text>
                 </View>
-                <Text style={[styles.message, { color: theme.colors.text }]}>{log.message}</Text>
+                <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
+                  {log.timestamp}
+                </Text>
               </View>
-            ))
-          ) : (
+              <Text style={[styles.message, { color: theme.colors.text }]}>{log.message}</Text>
+            </View>
+          )}
+          ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={{ fontSize: 40, marginBottom: 16 }}>📝</Text>
               <Text style={[styles.noLogs, { color: theme.colors.textSecondary }]}>
@@ -145,9 +147,9 @@ export const LogsScreen: React.FC = () => {
                   : `暂无 ${LOG_LEVEL_OPTIONS.find(o => o.value === filterLevel)?.label} 级别的日志`}
               </Text>
             </View>
-          )}
-          <View style={{ height: 40 }} />
-        </ScrollView>
+          }
+          contentContainerStyle={{ paddingBottom: 40 }}
+        />
       </GlassView>
     </View>
   );

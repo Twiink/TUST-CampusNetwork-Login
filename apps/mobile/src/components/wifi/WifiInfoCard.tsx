@@ -45,7 +45,7 @@ export const WifiInfoCard: React.FC<{
   theme: any;
   onRefresh: () => void;
   refreshing: boolean;
-}> = ({ wifiInfo, theme, onRefresh, refreshing }) => {
+}> = React.memo(({ wifiInfo, theme, onRefresh, refreshing }) => {
   const { themeMode } = useTheme();
   const isDark = themeMode === 'dark';
 
@@ -308,4 +308,4 @@ export const WifiInfoCard: React.FC<{
       )}
     </View>
   );
-};
+});

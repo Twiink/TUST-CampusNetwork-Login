@@ -5,9 +5,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import {
   getNetworkInfo,
-  getWifiStatus,
   requestLocationPermission,
   hasLocationPermission,
   isNativeModuleAvailable,
@@ -69,14 +69,12 @@ export function useNetwork(
     }
 
     try {
-      const [info, status, permission] = await Promise.all([
-        getNetworkInfo(),
-        getWifiStatus(),
-        hasLocationPermission(),
-      ]);
+      // getNetworkInfo 已包含 connected/ssid，不再额外调用 getWifiStatus
+      // （其内部会再触发 isConnected + getCurrentSSID 两次原生桥调用）。
+      const [info, permission] = await Promise.all([getNetworkInfo(), hasLocationPermission()]);
 
       setNetworkInfo(info);
-      setWifiStatus(status);
+      setWifiStatus({ connected: info.connected, ssid: info.ssid });
       setHasPermission(permission);
     } catch (error) {
       console.warn('Failed to refresh network info:', error);
@@ -100,14 +98,31 @@ export function useNetwork(
     refresh();
   }, [refresh]);
 
-  // 自动刷新
+  // 自动刷新；后台态暂停，回前台立即刷新一次再恢复定时器
   useEffect(() => {
     if (!autoRefresh || !isModuleAvailable) {
       return;
     }
 
-    const intervalId = setInterval(refresh, refreshInterval);
-    return () => clearInterval(intervalId);
+    let intervalId: ReturnType<typeof setInterval> | null = setInterval(refresh, refreshInterval);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        refresh().catch(() => undefined);
+        if (!intervalId) {
+          intervalId = setInterval(refresh, refreshInterval);
+        }
+      } else if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    });
+
+    return () => {
+      subscription.remove();
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [autoRefresh, refreshInterval, refresh, isModuleAvailable]);
 
   return {

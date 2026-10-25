@@ -3,6 +3,9 @@ import { View, StyleSheet, ViewStyle } from 'react-native';
 import { BlurView } from '@react-native-community/blur';
 import { useTheme } from '../context/ThemeContext';
 
+// 性能模式：半透明替代 BlurView 毛玻璃，消除每帧 GPU 采样开销
+export const THEME_PERF_MODE = true;
+
 /* eslint-disable react-native/no-inline-styles */
 // Inline styles necessary for dynamic theme-based colors
 
@@ -34,15 +37,17 @@ export const GlassView: React.FC<GlassViewProps> = ({
         style,
       ]}
     >
-      {/* Blur layer */}
-      <BlurView
-        style={[StyleSheet.absoluteFill, { borderRadius }]}
-        blurType={isDark ? 'dark' : 'light'}
-        blurAmount={intensity}
-        reducedTransparencyFallbackColor={
-          isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.9)'
-        }
-      />
+      {/* 性能模式下用半透明底色替代 BlurView；关闭 THEME_PERF_MODE 可恢复毛玻璃 */}
+      {!THEME_PERF_MODE && (
+        <BlurView
+          style={[StyleSheet.absoluteFill, { borderRadius }]}
+          blurType={isDark ? 'dark' : 'light'}
+          blurAmount={intensity}
+          reducedTransparencyFallbackColor={
+            isDark ? 'rgba(30, 41, 59, 0.85)' : 'rgba(255, 255, 255, 0.9)'
+          }
+        />
+      )}
 
       {/* Glass overlay - semi-transparent tint */}
       <View

@@ -7,13 +7,15 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.mobile.MainActivity
 import com.mobile.R
-import java.util.Timer
-import java.util.TimerTask
 
 /**
  * 后台服务
@@ -33,8 +35,8 @@ class BackgroundService : Service() {
         fun isServiceRunning(): Boolean = isRunning
     }
 
-    private var heartbeatTimer: Timer? = null
-    private var heartbeatInterval: Long = 30000 // 默认 30 秒
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastNotifiedAt = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -51,9 +53,7 @@ class BackgroundService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_START -> {
-                intent.getLongExtra("interval", 30000).let {
-                    heartbeatInterval = it
-                }
+                // interval 参数保留兼容旧调用；检测节奏由网络事件驱动
             }
         }
 
@@ -61,7 +61,7 @@ class BackgroundService : Service() {
         startForeground(NOTIFICATION_ID, notification)
         isRunning = true
 
-        startHeartbeat()
+        startNetworkWatch()
 
         return START_STICKY
     }
@@ -70,7 +70,7 @@ class BackgroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
-        stopHeartbeat()
+        stopNetworkWatch()
         isRunning = false
     }
 
@@ -124,36 +124,52 @@ class BackgroundService : Service() {
     }
 
     /**
-     * 启动心跳检测
+     * 监听系统网络事件，仅在实际变化时更新通知，替代固定间隔定时唤醒
      */
-    private fun startHeartbeat() {
-        stopHeartbeat()
+    private fun startNetworkWatch() {
+        stopNetworkWatch()
 
-        heartbeatTimer = Timer().apply {
-            scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    performHeartbeat()
-                }
-            }, 0, heartbeatInterval)
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = notifyNetworkState(true)
+            override fun onLost(network: Network) = notifyNetworkState(false)
         }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        connectivityManager.registerNetworkCallback(request, callback)
+        networkCallback = callback
+
+        val activeNetwork = connectivityManager.activeNetwork
+        val connected = connectivityManager.getNetworkCapabilities(activeNetwork)
+            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        notifyNetworkState(connected)
     }
 
-    /**
-     * 停止心跳检测
-     */
-    private fun stopHeartbeat() {
-        heartbeatTimer?.cancel()
-        heartbeatTimer = null
+    private fun stopNetworkWatch() {
+        networkCallback?.let {
+            try {
+                connectivityManager.unregisterNetworkCallback(it)
+            } catch (_: Exception) {
+                // callback 未注册时忽略
+            }
+        }
+        networkCallback = null
     }
 
-    /**
-     * 执行心跳检测
-     */
-    private fun performHeartbeat() {
-        // 这里只是更新通知，实际的网络检测由 React Native 层处理
-        // 通过 HeadlessJS 或 EventEmitter 与 JS 层通信
+    private val connectivityManager: ConnectivityManager
+        get() = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+    private fun notifyNetworkState(connected: Boolean) {
+        val now = System.currentTimeMillis()
+        if (now - lastNotifiedAt < 1000) return
+        lastNotifiedAt = now
+
         val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
             .format(java.util.Date())
-        updateNotification("NetMate 后台运行中", "上次检测: $timestamp")
+        if (connected) {
+            updateNotification("NetMate 后台运行中", "WiFi 已连接 · $timestamp")
+        } else {
+            updateNotification("NetMate 网络变化", "WiFi 未连接 · $timestamp")
+        }
     }
 }

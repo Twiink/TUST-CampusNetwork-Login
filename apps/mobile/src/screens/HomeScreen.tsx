@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, AppState } from 'react-native';
 import {
   useSharedValue,
   useAnimatedStyle,
@@ -27,6 +27,7 @@ export const HomeScreen: React.FC = () => {
   const [wifiInfo, setWifiInfo] = useState<WifiModule.NetworkInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
+  const fallbackTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Pulse animation for status badge
   const pulseScale = useSharedValue(1);
@@ -37,14 +38,14 @@ export const HomeScreen: React.FC = () => {
   const wifiSSID = wifiInfo?.ssid || '';
 
   // 加载WiFi信息
-  const loadWifiInfo = async () => {
+  const loadWifiInfo = useCallback(async () => {
     try {
       const info = await WifiModule.getNetworkInfo();
       setWifiInfo(info);
     } catch (error) {
       console.error('Failed to load WiFi info:', error);
     }
-  };
+  }, []);
 
   // 手动刷新WiFi信息
   const handleRefresh = async () => {
@@ -69,13 +70,39 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  // 原生 netmate:wifiChanged 事件驱动 + 30s 兜底轮询；后台态暂停
   useEffect(() => {
-    loadWifiInfo();
+    WifiModule.startWatching().catch(() => undefined);
+    loadWifiInfo().catch(() => undefined);
 
-    // 定时刷新WiFi信息
-    const interval = setInterval(loadWifiInfo, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    const subscription = WifiModule.onWifiChanged(() => {
+      loadWifiInfo().catch(() => undefined);
+    });
+
+    const appStateSubscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        loadWifiInfo().catch(() => undefined);
+        if (!fallbackTimer.current) {
+          fallbackTimer.current = setInterval(loadWifiInfo, 30000);
+        }
+      } else if (fallbackTimer.current) {
+        clearInterval(fallbackTimer.current);
+        fallbackTimer.current = null;
+      }
+    });
+
+    fallbackTimer.current = setInterval(loadWifiInfo, 30000);
+
+    return () => {
+      subscription?.remove();
+      appStateSubscription.remove();
+      if (fallbackTimer.current) {
+        clearInterval(fallbackTimer.current);
+        fallbackTimer.current = null;
+      }
+      WifiModule.stopWatching().catch(() => undefined);
+    };
+  }, [loadWifiInfo]);
 
   useEffect(() => {
     if (networkStatus === 'connecting') {

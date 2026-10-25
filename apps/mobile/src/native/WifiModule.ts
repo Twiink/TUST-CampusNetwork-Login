@@ -4,7 +4,13 @@
  * 提供跨平台的 WiFi 信息获取能力
  */
 
-import { NativeModules, Platform, PermissionsAndroid } from 'react-native';
+import {
+  NativeModules,
+  Platform,
+  PermissionsAndroid,
+  NativeEventEmitter,
+  EmitterSubscription,
+} from 'react-native';
 
 /**
  * 网络信息接口（扩展版）
@@ -76,10 +82,41 @@ interface WifiModuleInterface {
   connectToWifi(ssid: string, password?: string): Promise<boolean>;
   disconnectWifi(): Promise<boolean>;
   scanWifiNetworks(): Promise<ScannedWifiNetwork[]>;
+  startWatching(): Promise<boolean>;
+  stopWatching(): Promise<boolean>;
 }
 
 // 获取原生模块
 const { WifiModule } = NativeModules as { WifiModule: WifiModuleInterface | undefined };
+
+const emitter = WifiModule ? new NativeEventEmitter(WifiModule as never) : null;
+
+export type WifiChangedHandler = (reason: string) => void;
+
+export function onWifiChanged(handler: WifiChangedHandler): EmitterSubscription | null {
+  if (!emitter) return null;
+  return emitter.addListener('netmate:wifiChanged', handler);
+}
+
+export async function startWatching(): Promise<boolean> {
+  if (!WifiModule?.startWatching) return false;
+  try {
+    return await WifiModule.startWatching();
+  } catch (error) {
+    console.warn('startWatching error:', error);
+    return false;
+  }
+}
+
+export async function stopWatching(): Promise<boolean> {
+  if (!WifiModule?.stopWatching) return false;
+  try {
+    return await WifiModule.stopWatching();
+  } catch (error) {
+    console.warn('stopWatching error:', error);
+    return false;
+  }
+}
 
 /**
  * 检查并请求 Android 位置权限
@@ -343,5 +380,8 @@ export default {
   connectToWifi,
   disconnectWifi,
   scanWifiNetworks,
+  startWatching,
+  stopWatching,
+  onWifiChanged,
   isNativeModuleAvailable,
 };

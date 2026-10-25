@@ -10,12 +10,34 @@ import * as WifiModule from '../native/WifiModule';
  * 移动端 WiFi 适配器
  */
 export class MobileWifiAdapter implements WifiAdapter {
+  private networkInfoCache: {
+    data: Awaited<ReturnType<typeof WifiModule.getNetworkInfo>>;
+    expiresAt: number;
+  } | null = null;
+  private inFlightNetworkInfo: Promise<
+    Awaited<ReturnType<typeof WifiModule.getNetworkInfo>>
+  > | null = null;
+
+  private async getNetworkInfoSnapshot(ttlMs = 2000) {
+    if (this.networkInfoCache && Date.now() < this.networkInfoCache.expiresAt) {
+      return this.networkInfoCache.data;
+    }
+    if (this.inFlightNetworkInfo) return this.inFlightNetworkInfo;
+
+    this.inFlightNetworkInfo = WifiModule.getNetworkInfo().finally(() => {
+      this.inFlightNetworkInfo = null;
+    });
+    const data = await this.inFlightNetworkInfo;
+    this.networkInfoCache = { data, expiresAt: Date.now() + ttlMs };
+    return data;
+  }
+
   /**
    * 获取当前连接的 WiFi 信息
    */
   async getCurrentWifi(): Promise<WifiInfo | null> {
     try {
-      const networkInfo = await WifiModule.getNetworkInfo();
+      const networkInfo = await this.getNetworkInfoSnapshot();
 
       if (!networkInfo.connected || !networkInfo.ssid) {
         return null;
@@ -47,7 +69,7 @@ export class MobileWifiAdapter implements WifiAdapter {
     }
 
     try {
-      const networkInfo = await WifiModule.getNetworkInfo();
+      const networkInfo = await this.getNetworkInfoSnapshot();
 
       return {
         ...wifiInfo,
@@ -119,7 +141,7 @@ export class MobileWifiAdapter implements WifiAdapter {
    */
   async getNetworkInfo(): Promise<NetworkInfo> {
     try {
-      const networkInfo = await WifiModule.getNetworkInfo();
+      const networkInfo = await this.getNetworkInfoSnapshot();
 
       return {
         ipv4: networkInfo.ipv4 || undefined,

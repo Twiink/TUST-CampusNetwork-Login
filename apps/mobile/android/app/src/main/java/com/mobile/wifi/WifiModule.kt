@@ -2,15 +2,21 @@ package com.mobile.wifi
 
 import android.Manifest
 import android.content.Context
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Network
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -24,6 +30,99 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
 
     private val connectivityManager: ConnectivityManager by lazy {
         reactApplicationContext.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var wifiStateReceiver: BroadcastReceiver? = null
+    private var listenersInstalled = false
+
+    /**
+     * 网络变化事件监听：变化时向 JS 发送 netmate:wifiChanged 事件。
+     * 相比 JS 定时轮询，事件驱动可消除持续唤醒并降低功耗。
+     */
+    @ReactMethod
+    fun startWatching(promise: Promise) {
+        try {
+            installListeners()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("WIFI_WATCH_ERROR", "Failed to start watching: ${e.message}", e)
+        }
+    }
+
+    @ReactMethod
+    fun stopWatching(promise: Promise) {
+        try {
+            removeListeners()
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("WIFI_WATCH_ERROR", "Failed to stop watching: ${e.message}", e)
+        }
+    }
+
+    private fun installListeners() {
+        if (listenersInstalled) return
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = emitWifiChanged("available")
+            override fun onLost(network: Network) = emitWifiChanged("lost")
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                    emitWifiChanged("capabilities")
+                }
+            }
+        }
+        val request = NetworkRequest.Builder()
+            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+            .build()
+        connectivityManager.registerNetworkCallback(request, callback)
+        networkCallback = callback
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    WifiManager.NETWORK_STATE_CHANGED_ACTION,
+                    WifiManager.WIFI_STATE_CHANGED_ACTION -> emitWifiChanged("state")
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
+        }
+        reactApplicationContext.registerReceiver(receiver, filter)
+        wifiStateReceiver = receiver
+        listenersInstalled = true
+    }
+
+    private fun removeListeners() {
+        networkCallback?.let {
+            try {
+                connectivityManager.unregisterNetworkCallback(it)
+            } catch (_: Exception) {
+                // callback 未注册时忽略
+            }
+        }
+        networkCallback = null
+
+        wifiStateReceiver?.let {
+            try {
+                reactApplicationContext.unregisterReceiver(it)
+            } catch (_: Exception) {
+                // receiver 未注册时忽略
+            }
+        }
+        wifiStateReceiver = null
+        listenersInstalled = false
+    }
+
+    private fun emitWifiChanged(reason: String) {
+        reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("netmate:wifiChanged", reason)
+    }
+
+    override fun onCatalystInstanceDestroy() {
+        removeListeners()
     }
 
     /**
