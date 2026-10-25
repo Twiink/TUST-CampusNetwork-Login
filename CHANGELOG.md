@@ -19,6 +19,7 @@
 ### 变更
 
 - **全平台性能优化**：网络探测并行化（最坏 15s→3s）、Logger 环形缓冲 + 500ms 批量持久化（持久化写入放大 2,375,250 条→500 条）、WiFi 快照 1.5s TTL 缓存、主进程移除 1Hz 倒计时 IPC、托盘图标常驻缓存、存储防抖原子写、挂起恢复立即检测。
+- **第二轮极限性能优化**：三平台原生 WiFi/网络信息优先 + TS 自动回退、Linux `getifaddrs`/netlink 与 Windows `GetAdaptersAddresses` 原生网络信息、首个 204 即判定在线、延迟 HEAD 单目标 2s 超时 + 60s 缓存、日志 250ms 批量 IPC、隐藏窗口不广播、原生事件可用时 WiFi 兜底轮询降为 30s、系统挂起暂停心跳、托盘隐藏 120s 后销毁渲染进程（`destroyHiddenWindowAfterMs` 可配置）、日志订阅仅在日志页激活、`perf-memory.mjs` 进程树基准。
 - **桌面渲染层优化**：移除重复 useNetwork 订阅、主题动画改纯 CSS、日志页窗口化虚拟列表、心跳倒计时本地推导。
 - **Rust 原生模块（Linux）**：新增 `@repo/native` nl80211 netlink 实现，Linux WiFi 快照零 spawn；加载失败自动回退 TS 路径。
 - **移动端优化**：Kotlin NetworkCallback 事件驱动替代 5s JS 轮询、AppState 后台暂停、静态渐变替代无限 SVG 动画（`THEME_PERF_MODE` 可回退）、BlurView 改半透明、LogsScreen FlatList 虚拟化、后台服务原生事件驱动通知。

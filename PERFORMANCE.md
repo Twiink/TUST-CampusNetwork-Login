@@ -15,9 +15,13 @@
 | WifiManager 读取 ×100k                      |                   68ms |                          13ms |    **-81%** |
 | Linux WiFi 快照                             |    spawn nmcli ~100ms+ | 原生 nl80211 ~200ms（无进程） |    零 spawn |
 | 主进程空闲唤醒                              | 1Hz IPC + 3s WiFi 轮询 |                 30s 轻量 tick |    **-97%** |
+| 桌面进程树（前台 45s）                      |                      — |          8 进程 / RSS 728MB\* |           — |
+| 托盘隐藏销毁后（25s）                       |                      — |          7 进程 / RSS 604MB\* |    **-17%** |
 | 移动端 WiFi 轮询                            |      JS 5s setInterval |       原生事件驱动 + 30s 兜底 |    **-94%** |
 
-完整数据：`shell/perf-baseline.json` / `shell/perf-after.json`，复现命令 `node shell/perf-bench.mjs`。
+完整数据：`shell/perf-baseline.json` / `shell/perf-after.json`；复现命令 `node shell/perf-bench.mjs`、`node shell/perf-memory.mjs`。
+
+\* 内存基准包含 `--remote-debugging-port` 的调试进程与 V8 调试堆开销，绝对值偏保守；对比同为调试模式下的差值。
 
 ## 优化清单
 

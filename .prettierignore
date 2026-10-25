@@ -8,3 +8,5 @@ pnpm-lock.yaml
 *.min.css
 .cache/
 apps/desktop/test-results/
+
+apps/desktop/release/

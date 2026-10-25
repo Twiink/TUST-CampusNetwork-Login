@@ -178,6 +178,8 @@ jobs:
           cargo build -p netmate-native --release
           mkdir -p packages/native/win32-x64
           cp target/release/netmate_native.dll packages/native/win32-x64/netmate_native.win32-x64-msvc.node
+      - name: 验证原生模块加载
+        run: node -e "const n=require('./packages/native'); if (n.__loadError) throw new Error(n.__loadError)"
       - name: 构建 Windows 安装包
         run: pnpm dist:win
 
@@ -245,6 +247,8 @@ jobs:
           cargo build -p netmate-native --release --target x86_64-apple-darwin
           cp target/aarch64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-arm64/netmate_native.darwin-arm64.node
           cp target/x86_64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-x64/netmate_native.darwin-x64.node
+      - name: 验证原生模块加载
+        run: node -e "const n=require('./packages/native'); if (n.__loadError) throw new Error(n.__loadError)"
       - name: 构建 macOS 安装包
         run: pnpm dist:mac
 
@@ -310,6 +314,8 @@ jobs:
           cargo build -p netmate-native --release
           mkdir -p packages/native/linux-x64-gnu
           cp target/release/libnetmate_native.so packages/native/linux-x64-gnu/netmate_native.linux-x64-gnu.node
+      - name: 验证原生模块加载
+        run: node -e "const n=require('./packages/native'); if (n.__loadError) throw new Error(n.__loadError)"
       - name: 构建 Linux 安装包
         run: pnpm dist:linux
 

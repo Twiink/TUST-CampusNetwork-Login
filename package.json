@@ -20,14 +20,15 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "pnpm -r type-check",
-    "test": "pnpm test:shared && pnpm test:desktop && pnpm test:mobile",
+    "test": "pnpm test:shared && pnpm test:desktop && pnpm test:native && pnpm test:mobile",
     "test:shared": "pnpm -C packages/shared test",
     "test:network": "pnpm -C packages/shared test:network",
     "test:desktop": "pnpm -C apps/desktop test",
     "test:mobile": "pnpm -C apps/mobile test --runInBand",
     "test:e2e": "pnpm -C apps/desktop test:e2e",
     "release:prepare-version": "node ./shell/prepare-release-version.mjs",
-    "coverage": "pnpm test:shared -- --coverage && pnpm test:desktop -- --coverage"
+    "coverage": "pnpm test:shared -- --coverage && pnpm test:desktop -- --coverage",
+    "test:native": "pnpm -C packages/native test"
   },
   "repository": {
     "type": "git",
