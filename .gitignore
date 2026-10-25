@@ -2,6 +2,10 @@
 node_modules/
 .pnp
 .pnp.js
+.pnpm-store/
+
+# 本地包管理器锁文件（monorepo 统一使用 pnpm-lock.yaml）
+apps/mobile/package-lock.json
 
 # Build outputs
 dist/
@@ -25,6 +29,8 @@ lerna-debug.log*
 # Testing
 coverage/
 .nyc_output
+test-results/
+playwright-report/
 
 # Environment files
 .env
@@ -66,3 +72,6 @@ Thumbs.db
 CLAUDE.md
 GEMINI.md
 AGENTS.md
+
+# ZCode
+.zcode/

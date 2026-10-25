@@ -61,9 +61,15 @@ function main() {
 
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const projectRoot = path.resolve(currentDir, '..');
-  const desktopPackagePath = path.join(projectRoot, 'apps', 'desktop', 'package.json');
+  // monorepo 固定版本策略：所有包随发布统一 bump，避免版本漂移。
+  const packagePaths = [
+    path.join(projectRoot, 'package.json'),
+    path.join(projectRoot, 'packages', 'shared', 'package.json'),
+    path.join(projectRoot, 'apps', 'desktop', 'package.json'),
+    path.join(projectRoot, 'apps', 'mobile', 'package.json'),
+  ];
 
-  const changedFiles = [updateJsonVersion(desktopPackagePath, version, dryRun)];
+  const changedFiles = packagePaths.map((filePath) => updateJsonVersion(filePath, version, dryRun));
 
   console.log(`[prepare-release-version] tag=${tag}`);
   console.log(`[prepare-release-version] version=${version}`);

@@ -52,8 +52,6 @@ NetMate 是一款专注于 **WiFi 连接管理**的智能工具，提供 WiFi �
 
 ## 需求进度
 
-详细需求文档请参阅 [docs/requirements.md](./docs/requirements.md)
-
 ### WiFi 管理功能
 
 | 功能                | 描述                                   | 完成 | 报错 |
