@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron';
 import { AccountManager, AccountConfig, createLogger } from '@repo/shared';
 import { IPC_CHANNELS } from './channels';
+import { assertAccountInput } from './validate';
 
 /**
  * 注册账户 IPC 处理器
@@ -34,6 +35,7 @@ export function registerAccountIPC(
     IPC_CHANNELS.ACCOUNT_ADD,
     async (_, account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
       try {
+        assertAccountInput(account, '添加账户');
         const newAccount = await accountManager.addAccount(account);
         logger.info(`账户已添加: ${newAccount.name}`);
         return newAccount;
@@ -51,6 +53,7 @@ export function registerAccountIPC(
     IPC_CHANNELS.ACCOUNT_UPDATE,
     async (_, id: string, updates: Partial<AccountConfig>): Promise<AccountConfig> => {
       try {
+        assertAccountInput({ ...updates, id }, '更新账户', true);
         const updated = await accountManager.updateAccount(id, updates);
         logger.info(`账户已更新: ${updated.name}`);
         return updated;

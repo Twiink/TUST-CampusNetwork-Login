@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron';
 import { ConfigManager, AppConfig, AppSettings, createLogger } from '@repo/shared';
 import { IPC_CHANNELS } from './channels';
+import { assertAppConfigInput } from './validate';
 
 /**
  * 注册配置 IPC 处理器
@@ -30,6 +31,7 @@ export function registerConfigIPC(
    */
   ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_, config: AppConfig): Promise<boolean> => {
     try {
+      assertAppConfigInput(config, '保存配置');
       await configManager.save(config);
       logger.info('配置已保存');
       return true;

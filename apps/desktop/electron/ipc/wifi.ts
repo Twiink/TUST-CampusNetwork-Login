@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron';
 import { WifiManager, WifiConfig, createLogger } from '@repo/shared';
 import { IPC_CHANNELS } from './channels';
+import { assertWifiInput } from './validate';
 import {
   WifiSwitcherService,
   scanAvailableNetworks,
@@ -33,6 +34,7 @@ export function registerWifiIPC(
     IPC_CHANNELS.WIFI_ADD,
     async (_, wifi: Omit<WifiConfig, 'id'>): Promise<WifiConfig> => {
       try {
+        assertWifiInput(wifi, '添加 WiFi');
         const newWifi = await wifiManager.addWifi(wifi);
         logger.info(`WiFi 已添加: ${newWifi.ssid}`);
 
@@ -63,6 +65,7 @@ export function registerWifiIPC(
     IPC_CHANNELS.WIFI_UPDATE,
     async (_, id: string, updates: Partial<WifiConfig>): Promise<WifiConfig> => {
       try {
+        assertWifiInput({ ...updates, id }, '更新 WiFi', true);
         const updated = await wifiManager.updateWifi(id, updates);
         logger.info(`WiFi 已更新: ${updated.ssid}`);
 

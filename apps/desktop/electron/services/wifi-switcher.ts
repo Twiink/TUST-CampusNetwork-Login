@@ -3,11 +3,13 @@
  * 提供 WiFi 扫描和切换功能（跨平台）
  */
 
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { execWindowsText } from '../utils/win-exec';
+import { execWindowsText, execWindowsFileText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
+// 连接命令的参数含用户配置的 SSID/密码，统一走 execFile 参数数组，不经 shell，杜绝注入
+const execFileAsync = promisify(execFile);
 
 export interface AvailableNetwork {
   ssid: string;
@@ -168,15 +170,11 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
     const iface = ifaceOutput.trim() || 'en0';
 
     // 如果提供了密码，使用密码连接；否则尝试连接已保存的网络
+    const connectArgs = ['-setairportnetwork', iface, ssid];
     if (password) {
-      await execAsync(`networksetup -setairportnetwork ${iface} "${ssid}" "${password}"`, {
-        timeout: 30000,
-      });
-    } else {
-      await execAsync(`networksetup -setairportnetwork ${iface} "${ssid}"`, {
-        timeout: 30000,
-      });
+      connectArgs.push(password);
     }
+    await execFileAsync('networksetup', connectArgs, { timeout: 30000 });
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -202,7 +200,11 @@ async function connectWindowsInternal(ssid: string, _password?: string): Promise
     // 检查是否已有保存的配置文件（输出按 GBK 解码，中文 SSID 才能正确匹配）
     let hasProfile = false;
     try {
-      const profileOutput = await execWindowsText(`netsh wlan show profile name="${ssid}"`, 3000);
+      const profileOutput = await execWindowsFileText(
+        'netsh',
+        ['wlan', 'show', 'profile', `name="${ssid}"`],
+        3000
+      );
       hasProfile = profileOutput.includes(ssid);
     } catch {
       hasProfile = false;
@@ -210,9 +212,7 @@ async function connectWindowsInternal(ssid: string, _password?: string): Promise
 
     // 只使用已保存的配置文件连接
     if (hasProfile) {
-      await execAsync(`netsh wlan connect name="${ssid}"`, {
-        timeout: 30000,
-      });
+      await execFileAsync('netsh', ['wlan', 'connect', `name="${ssid}"`], { timeout: 30000 });
       return true;
     }
 
@@ -231,17 +231,12 @@ async function connectWindowsInternal(ssid: string, _password?: string): Promise
  */
 async function connectLinux(ssid: string, password?: string): Promise<boolean> {
   try {
+    const connectArgs = ['dev', 'wifi', 'connect', ssid];
     if (password) {
       // 使用密码连接
-      await execAsync(`nmcli dev wifi connect "${ssid}" password "${password}"`, {
-        timeout: 30000,
-      });
-    } else {
-      // 连接已保存的网络
-      await execAsync(`nmcli dev wifi connect "${ssid}"`, {
-        timeout: 30000,
-      });
+      connectArgs.push('password', password);
     }
+    await execFileAsync('nmcli', connectArgs, { timeout: 30000 });
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

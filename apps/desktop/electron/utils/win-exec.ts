@@ -7,10 +7,11 @@
  * GBK 与 ASCII 兼容，英文系统输出不受影响。
  */
 
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execBufferAsync = promisify(exec);
+const execFileBufferAsync = promisify(execFile);
 
 /** 简体中文 Windows 控制台默认代码页（GBK/CP936） */
 const windowsConsoleDecoder = new TextDecoder('gbk');
@@ -28,6 +29,23 @@ export function decodeWindowsText(output: Buffer): string {
  */
 export async function execWindowsText(command: string, timeout = 10000): Promise<string> {
   const { stdout } = await execBufferAsync(command, {
+    timeout,
+    encoding: 'buffer',
+    windowsHide: true,
+  });
+  return decodeWindowsText(stdout as Buffer);
+}
+
+/**
+ * 以 execFile（参数数组、不经 shell）执行 Windows 命令并按 GBK 解码输出。
+ * 用于参数含外部输入（SSID 等）的场景，杜绝 shell 注入。
+ */
+export async function execWindowsFileText(
+  file: string,
+  args: string[],
+  timeout = 10000
+): Promise<string> {
+  const { stdout } = await execFileBufferAsync(file, args, {
     timeout,
     encoding: 'buffer',
     windowsHide: true,

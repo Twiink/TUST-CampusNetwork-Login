@@ -9,18 +9,25 @@
  * 注意：这里使用轻量级轮询（仅检测 SSID 变化），不是完整的网络状态轮询
  */
 
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import { BrowserWindow } from 'electron';
 import type { NetworkDetector, Logger, WifiManager, ConfigManager } from '@repo/shared';
 import { enrichStatusAuthFields } from './network';
-import { parseNetshSsid } from './wifi-detector';
-import { execWindowsText } from '../utils/win-exec';
 import type { AutoReconnectService } from './auto-reconnect';
 import type { WifiSwitcherService } from './wifi-switcher';
 import { IPC_EVENTS } from '../ipc/channels';
+import { executeAutoReconnect } from './wifi-event-listener/reconnect-flow';
+import type {
+  WifiReconnectProgress,
+  WifiReconnectFailure,
+  WifiAllReconnectsFailed,
+} from './wifi-event-listener/reconnect-flow';
+import { probeCurrentSsid } from './wifi-event-listener/ssid-probe';
 
-const execAsync = promisify(exec);
+export type {
+  WifiReconnectProgress,
+  WifiReconnectFailure,
+  WifiAllReconnectsFailed,
+} from './wifi-event-listener/reconnect-flow';
 
 export interface WifiEventListenerOptions {
   /** 检测间隔（毫秒），默认 1000ms (1秒) */
@@ -39,32 +46,6 @@ export interface WifiEventListenerOptions {
   configManager?: ConfigManager;
   /** 认证自动重连服务（可选）：WiFi 连接/切换后立即触发认证检测，不再等待心跳周期 */
   autoReconnectService?: AutoReconnectService;
-}
-
-/**
- * WiFi 重连进度事件
- */
-export interface WifiReconnectProgress {
-  ssid: string;
-  attempt: number;
-  maxAttempts: number;
-  status: 'connecting' | 'failed' | 'success';
-}
-
-/**
- * WiFi 重连失败信息
- */
-export interface WifiReconnectFailure {
-  ssid: string;
-  priority: number;
-  reason: string;
-}
-
-/**
- * 所有 WiFi 重连失败事件
- */
-export interface WifiAllReconnectsFailed {
-  failedList: WifiReconnectFailure[];
 }
 
 /**
@@ -183,7 +164,7 @@ export class WifiEventListener {
   private async checkWifiChange(): Promise<void> {
     try {
       // 使用轻量级方法快速获取当前 SSID
-      const currentSsid = await this.getCurrentSsid();
+      const currentSsid = await probeCurrentSsid(this.platform, this.logger);
 
       // 重置错误标志（成功获取到SSID）
       if (this.lastErrorLogged) {
@@ -233,180 +214,22 @@ export class WifiEventListener {
       return;
     }
 
-    // 检查断开的WiFi是否在配置列表中
-    const wifiConfig = this.wifiManager.getWifiBySsid(disconnectedSsid);
-    if (!wifiConfig || !wifiConfig.autoConnect) {
-      this.logger.debug(`WiFi ${disconnectedSsid} 未配置自动重连，跳过`);
-      return;
-    }
-
     this.isReconnecting = true;
-    this.logger.info(`===== 开始WiFi自动重连流程 =====`);
-    this.logger.info(`断开的WiFi: ${disconnectedSsid} (优先级: ${wifiConfig.priority})`);
-
-    // 获取最大重试次数（默认3次）
-    const maxRetries = this.configManager?.getConfig()?.settings.maxRetries || 3;
-    this.logger.info(`最大重试次数: ${maxRetries}`);
-
-    // 等待硬件重置（WiFi刚断开时立即尝试连接可能会失败）
-    this.logger.info('等待WiFi硬件重置...');
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // 获取所有启用自动重连的WiFi，按优先级排序
-    const allWifiConfigs = this.wifiManager
-      .getWifiConfigs()
-      .filter((w: { autoConnect: boolean }) => w.autoConnect)
-      .sort((a: { priority: number }, b: { priority: number }) => a.priority - b.priority);
-
-    // 跟踪所有失败的WiFi
-    const failedList: WifiReconnectFailure[] = [];
-
     try {
-      // 阶段1：尝试重连到断开的WiFi
-      this.logger.info(`----- 阶段1：尝试重连到断开的WiFi -----`);
-      const reconnectSuccess = await this.retryConnectToWifi(
-        disconnectedSsid,
-        wifiConfig.priority,
-        maxRetries,
-        failedList
-      );
-
-      if (reconnectSuccess) {
-        this.logger.success(`WiFi自动重连成功: ${disconnectedSsid}`);
-        await this.finalizeSuccessfulReconnect();
-        return;
-      }
-
-      // 阶段2：按优先级切换到其他WiFi
-      this.logger.info(`----- 阶段2：按优先级尝试其他WiFi -----`);
-      for (const wifi of allWifiConfigs) {
-        // 跳过已经尝试过的WiFi
-        if (wifi.ssid === disconnectedSsid) {
-          continue;
-        }
-
-        this.logger.info(`切换到下一个WiFi: ${wifi.ssid} (优先级: ${wifi.priority})`);
-
-        // 等待1秒后尝试连接下一个WiFi
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const success = await this.retryConnectToWifi(
-          wifi.ssid,
-          wifi.priority,
-          maxRetries,
-          failedList
-        );
-
-        if (success) {
-          this.logger.success(`成功切换到WiFi: ${wifi.ssid}`);
-          await this.finalizeSuccessfulReconnect();
-          return;
-        }
-      }
-
-      // 阶段3：所有WiFi都失败
-      this.logger.error(`----- 阶段3：所有WiFi连接失败 -----`);
-      this.logger.error(`失败的WiFi数量: ${failedList.length}`);
-      for (const failed of failedList) {
-        this.logger.error(`  - ${failed.ssid} (优先级 ${failed.priority}): ${failed.reason}`);
-      }
-
-      // 广播所有WiFi失败事件到UI
-      this.broadcastAllWifiFailed(failedList);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.error(`WiFi自动重连流程异常: ${errorMessage}`);
+      await executeAutoReconnect(disconnectedSsid, {
+        logger: this.logger,
+        wifiManager: this.wifiManager,
+        wifiSwitcherService: this.wifiSwitcherService,
+        configManager: this.configManager,
+        onProgress: (progress) => this.broadcastReconnectProgress(progress),
+        onAllFailed: (failedList) => this.broadcastAllWifiFailed(failedList),
+        onReconnected: () => this.finalizeSuccessfulReconnect(),
+      });
     } finally {
       this.isReconnecting = false;
       this.logger.info(`===== WiFi自动重连流程结束 =====`);
     }
-  }
-
-  /**
-   * 重试连接到指定WiFi（带重试次数）
-   * @param ssid WiFi名称
-   * @param priority WiFi优先级
-   * @param maxRetries 最大重试次数
-   * @param failedList 失败列表（用于记录失败信息）
-   * @returns 是否连接成功
-   */
-  private async retryConnectToWifi(
-    ssid: string,
-    priority: number,
-    maxRetries: number,
-    failedList: WifiReconnectFailure[]
-  ): Promise<boolean> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      this.logger.info(`尝试连接 ${ssid} (第 ${attempt}/${maxRetries} 次)`);
-
-      // 广播连接进度到UI
-      this.broadcastReconnectProgress({
-        ssid,
-        attempt,
-        maxAttempts: maxRetries,
-        status: 'connecting',
-      });
-
-      try {
-        // 等待2秒后尝试连接
-        if (attempt > 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-
-        const success = await this.wifiSwitcherService!.connectToConfiguredNetwork(ssid);
-
-        if (success) {
-          this.logger.success(`连接成功: ${ssid} (第 ${attempt}/${maxRetries} 次)`);
-
-          // 广播成功状态
-          this.broadcastReconnectProgress({
-            ssid,
-            attempt,
-            maxAttempts: maxRetries,
-            status: 'success',
-          });
-
-          return true;
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`连接失败: ${ssid} (第 ${attempt}/${maxRetries} 次) - ${errorMessage}`);
-
-        // 如果是最后一次尝试，广播失败状态并记录到失败列表
-        if (attempt === maxRetries) {
-          this.broadcastReconnectProgress({
-            ssid,
-            attempt,
-            maxAttempts: maxRetries,
-            status: 'failed',
-          });
-
-          failedList.push({
-            ssid,
-            priority,
-            reason: errorMessage || '连接超时',
-          });
-        }
-      }
-    }
-
-    // 确保即使 connectToConfiguredNetwork 返回 false（非异常）也记录失败
-    if (!failedList.some((f) => f.ssid === ssid)) {
-      this.broadcastReconnectProgress({
-        ssid,
-        attempt: maxRetries,
-        maxAttempts: maxRetries,
-        status: 'failed',
-      });
-
-      failedList.push({
-        ssid,
-        priority,
-        reason: '连接超时',
-      });
-    }
-
-    return false;
+    return;
   }
 
   /**
@@ -441,94 +264,6 @@ export class WifiEventListener {
 
     const event: WifiAllReconnectsFailed = { failedList };
     this.window.webContents.send(IPC_EVENTS.WIFI_ALL_RECONNECTS_FAILED, event);
-  }
-
-  /**
-   * 快速获取当前 WiFi SSID（轻量级方法，不获取详细信息）
-   */
-  private async getCurrentSsid(): Promise<string | null> {
-    try {
-      switch (this.platform) {
-        case 'darwin':
-          return await this.getMacOSSsid();
-        case 'win32':
-          return await this.getWindowsSsid();
-        default:
-          this.logger.warn(`[WiFi检测] 不支持的平台: ${this.platform}`);
-          return null;
-      }
-    } catch (error) {
-      this.logger.error('[WiFi检测] 获取SSID失败', error);
-      return null;
-    }
-  }
-
-  /**
-   * macOS: 快速获取 SSID
-   * 优先使用 airport 命令（更可靠），备用 networksetup
-   */
-  private async getMacOSSsid(): Promise<string | null> {
-    try {
-      // 方法1: 使用 airport 命令（更可靠）
-      const airportPath =
-        '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport';
-      try {
-        const { stdout } = await execAsync(`${airportPath} -I`, {
-          timeout: 2000,
-        });
-
-        // 解析 airport 输出，查找 SSID
-        const ssidMatch = stdout.match(/^\s*SSID:\s*(.+)$/m);
-        if (ssidMatch && ssidMatch[1] && ssidMatch[1].trim() !== '') {
-          const ssid = ssidMatch[1].trim();
-          this.logger.debug(`[WiFi检测] airport获取到SSID: ${ssid}`);
-          return ssid;
-        }
-      } catch (airportError) {
-        // airport 失败，继续尝试其他方法
-        const errorMsg =
-          airportError instanceof Error ? airportError.message : String(airportError);
-        this.logger.debug(`[WiFi检测] airport命令失败: ${errorMsg}`);
-      }
-
-      // 方法2: 使用 networksetup 作为备用
-      try {
-        const { stdout } = await execAsync('networksetup -getairportnetwork en0', {
-          timeout: 2000,
-        });
-
-        const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
-        if (match && match[1]) {
-          const ssid = match[1].trim();
-          this.logger.debug(`[WiFi检测] networksetup获取到SSID: ${ssid}`);
-          return ssid;
-        }
-
-        // 如果没有匹配到，说明未连接WiFi
-        this.logger.debug(`[WiFi检测] 未连接WiFi，networksetup输出: ${stdout.trim()}`);
-        return null;
-      } catch (nsError) {
-        const errorMsg = nsError instanceof Error ? nsError.message : String(nsError);
-        this.logger.debug(`[WiFi检测] networksetup命令也失败: ${errorMsg}`);
-        return null;
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      this.logger.debug(`[WiFi检测] 获取SSID异常: ${errorMsg}`);
-      return null;
-    }
-  }
-
-  /**
-   * Windows: 快速获取 SSID（GBK 解码 + 已连接块优先解析，与 wifi-detector 共用逻辑）
-   */
-  private async getWindowsSsid(): Promise<string | null> {
-    try {
-      const stdout = await execWindowsText('netsh wlan show interfaces', 2000);
-      return parseNetshSsid(stdout);
-    } catch {
-      return null;
-    }
   }
 
   /**

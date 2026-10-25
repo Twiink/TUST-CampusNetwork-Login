@@ -2,18 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import {
-  createAuthService,
-  createConfigManager,
-  createAccountManager,
-  createWifiManager,
-  createNetworkDetector,
-  createLogger,
-} from '@repo/shared';
-
-import { createElectronStorage } from './services/store';
 import { resolveNetworkInfo } from './services/network';
-import { createDesktopWifiAdapter } from './services/wifi-adapter';
 import { createTrayService, TrayService } from './services/tray';
 import { createAutoReconnectService, AutoReconnectService } from './services/auto-reconnect';
 import { createAutoLaunchService, AutoLaunchService } from './services/auto-launch';
@@ -21,9 +10,10 @@ import { createNotificationService, NotificationService } from './services/notif
 import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
-import { createFileLogger, FileLogger } from './services/file-logger';
+import type { FileLogger } from './services/file-logger';
 import { devLog } from './utils/dev-log';
-import { getResolvedAppVersion } from './utils/app-version';
+import { createMainWindow } from './main-window';
+import { initAppServices } from './main-services';
 import {
   registerAllIPC,
   registerTrayIPC,
@@ -75,178 +65,6 @@ let wifiEventListener: WifiEventListener | null = null;
 let fileLogger: FileLogger | null = null;
 let forceQuit = false;
 
-/**
- * 初始化服务
- */
-async function initServices(): Promise<AppServices> {
-  // 创建日志服务（保留7天，最多500条内存缓冲）
-  const logger = createLogger(500, 7);
-
-  // 文件日志：全级别、详细，落盘到 userData/logs，按大小滚动。
-  // 打包后应用无终端，文件日志是排查问题的主要依据；开发态亦写盘，便于随时导出。
-  fileLogger = createFileLogger().attach(logger);
-
-  // 控制台日志监听器：仅开发态输出，且跳过 debug 噪声，保持终端清爽。
-  // 打包态无终端，不再走 console（日志已由 fileLogger 落盘 + UI 内存缓冲承接）。
-  const isDev = !app.isPackaged;
-  if (isDev) {
-    logger.addListener((entry) => {
-      // 开发态终端只关心 info 及以上，debug 归档到文件即可，不刷屏
-      if (entry.level === 'debug') {
-        return;
-      }
-      const timestamp = entry.timestamp.toLocaleTimeString('zh-CN', { hour12: false });
-      const level = entry.level.toUpperCase().padEnd(7);
-      const levelColors = {
-        DEBUG: '\x1b[36m', // Cyan
-        INFO: '\x1b[37m', // White
-        SUCCESS: '\x1b[32m', // Green
-        WARN: '\x1b[33m', // Yellow
-        ERROR: '\x1b[31m', // Red
-      };
-      const color =
-        levelColors[entry.level.toUpperCase() as keyof typeof levelColors] || '\x1b[37m';
-      const reset = '\x1b[0m';
-
-      let message = `${color}[${timestamp}] [${level}]${reset} ${entry.message}`;
-      if (entry.data) {
-        message += ` ${reset}\x1b[90m${JSON.stringify(entry.data)}\x1b[0m`;
-      }
-      console.log(message);
-    });
-  }
-
-  logger.log('info', '===== NetMate 应用启动 =====', { category: 'system', source: 'Main' });
-  logger.log('info', `运行平台: ${process.platform}`, { category: 'system', source: 'Main' });
-  logger.log('info', `应用版本: ${getResolvedAppVersion()}`, {
-    category: 'system',
-    source: 'Main',
-  });
-  logger.log('info', `日志文件: ${fileLogger.getLogFile()}`, {
-    category: 'system',
-    source: 'Main',
-  });
-
-  // 创建存储适配器
-  const storage = createElectronStorage();
-  logger.log('info', '存储服务初始化完成', { category: 'system', source: 'Main' });
-
-  // 创建配置管理器
-  const configManager = createConfigManager(storage, logger);
-  await configManager.load();
-  const config = configManager.getConfig();
-  if (config) {
-    logger.log('info', '配置加载完成', {
-      category: 'system',
-      source: 'Main',
-      data: {
-        账户数量: config.accounts.length,
-        WiFi配置数量: config.wifiList.length,
-        心跳检测: config.settings.enableHeartbeat ? '已启用' : '已禁用',
-        自动重连: config.settings.autoReconnect ? '已启用' : '已禁用',
-      },
-    });
-  }
-
-  // 创建其他服务
-  const authService = createAuthService(undefined, logger);
-  const accountManager = createAccountManager(configManager, logger);
-  const wifiManager = createWifiManager(configManager, logger);
-  logger.log('info', '核心服务初始化完成', { category: 'system', source: 'Main' });
-
-  // 创建 WiFi 适配器
-  const wifiAdapter = createDesktopWifiAdapter();
-  const networkDetector = createNetworkDetector(wifiAdapter, logger);
-  logger.log('info', '网络检测服务初始化完成', { category: 'system', source: 'Main' });
-
-  return {
-    authService,
-    configManager,
-    accountManager,
-    wifiManager,
-    networkDetector,
-    logger,
-  };
-}
-
-function createWindow() {
-  // 获取图标路径 - 兼容开发和生产环境
-  const getIconPath = () => {
-    // APP_ROOT 指向 apps/desktop 目录
-    const buildDir = path.join(process.env.APP_ROOT!, 'build');
-
-    if (process.platform === 'win32') {
-      return path.join(buildDir, 'icon.ico');
-    } else if (process.platform === 'darwin') {
-      // macOS 窗口标题栏图标使用小尺寸 PNG（32x32 或 64x64）
-      return path.join(buildDir, 'png', '32x32.png');
-    } else {
-      return path.join(buildDir, 'icon.png');
-    }
-  };
-
-  const iconPath = getIconPath();
-  devLog.info('[Main] Loading icon from:', iconPath); // 调试日志
-
-  win = new BrowserWindow({
-    width: 880,
-    height: 670,
-    resizable: false,
-    icon: iconPath,
-    webPreferences: {
-      preload: path.join(MAIN_DIST, 'preload.mjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      // 窗口隐藏/最小化到托盘时不节流后台任务，保证心跳与重连不中断；
-      // WiFi 检测降频由 wifiEventListener.setCheckInterval 单独处理
-      backgroundThrottling: false,
-    },
-  });
-
-  // 前后台调频：窗口隐藏到托盘时降低 WiFi 轮询频率，显示时恢复
-  win.on('hide', () => {
-    wifiEventListener?.setCheckInterval(WIFI_CHECK_INTERVAL_BACKGROUND);
-  });
-  win.on('show', () => {
-    wifiEventListener?.setCheckInterval(WIFI_CHECK_INTERVAL_FOREGROUND);
-  });
-
-  // 关闭窗口时最小化到托盘而非退出
-  win.on('close', (event) => {
-    if (!forceQuit) {
-      event.preventDefault();
-      win?.hide();
-    }
-  });
-
-  // Test active push message to Renderer-process.
-  win.webContents.on('did-finish-load', async () => {
-    win?.webContents.send('main-process-message', new Date().toLocaleString());
-
-    // 窗口加载完成后，立即获取并发送当前网络状态
-    // 避免用户看到长时间的"未连接"状态
-    if (services) {
-      try {
-        const currentStatus = await services.networkDetector.getNetworkStatus();
-        win?.webContents.send('event:network:statusChanged', currentStatus);
-        services.logger.log('info', '窗口加载完成，已发送初始网络状态', {
-          category: 'system',
-          source: 'Main',
-        });
-      } catch (error) {
-        services.logger.error('获取初始网络状态失败', error);
-      }
-    }
-  });
-
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    // win.loadFile('dist/index.html')
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'));
-  }
-}
-
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
@@ -264,7 +82,31 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    createMainWindow({
+      appRoot: process.env.APP_ROOT!,
+      preloadPath: path.join(MAIN_DIST, 'preload.mjs'),
+      rendererDist: RENDERER_DIST,
+      devServerUrl: VITE_DEV_SERVER_URL,
+      shouldQuit: () => forceQuit,
+      onVisibilityChange: (hidden) => {
+        wifiEventListener?.setCheckInterval(
+          hidden ? WIFI_CHECK_INTERVAL_BACKGROUND : WIFI_CHECK_INTERVAL_FOREGROUND
+        );
+      },
+      onDidFinishLoad: async (window) => {
+        win = window;
+        try {
+          const currentStatus = await services!.networkDetector.getNetworkStatus();
+          window.webContents.send('event:network:statusChanged', currentStatus);
+          services!.logger.log('info', '窗口加载完成，已发送初始网络状态', {
+            category: 'system',
+            source: 'Main',
+          });
+        } catch (error) {
+          services!.logger.error('获取初始网络状态失败', error);
+        }
+      },
+    });
     // 更新 WiFi 事件监听器的窗口引用
     if (wifiEventListener) {
       wifiEventListener.setWindow(win);
@@ -317,7 +159,10 @@ app.whenReady().then(async () => {
     }
 
     // 初始化服务
-    services = await initServices();
+    const initialized = await initAppServices();
+    services = initialized;
+    fileLogger = initialized.fileLogger;
+    void services;
 
     // 创建 WiFi 切换服务
     wifiSwitcherService = createWifiSwitcherService();
@@ -444,7 +289,31 @@ app.whenReady().then(async () => {
     );
 
     // 创建窗口
-    createWindow();
+    createMainWindow({
+      appRoot: process.env.APP_ROOT!,
+      preloadPath: path.join(MAIN_DIST, 'preload.mjs'),
+      rendererDist: RENDERER_DIST,
+      devServerUrl: VITE_DEV_SERVER_URL,
+      shouldQuit: () => forceQuit,
+      onVisibilityChange: (hidden) => {
+        wifiEventListener?.setCheckInterval(
+          hidden ? WIFI_CHECK_INTERVAL_BACKGROUND : WIFI_CHECK_INTERVAL_FOREGROUND
+        );
+      },
+      onDidFinishLoad: async (window) => {
+        win = window;
+        try {
+          const currentStatus = await services!.networkDetector.getNetworkStatus();
+          window.webContents.send('event:network:statusChanged', currentStatus);
+          services!.logger.log('info', '窗口加载完成，已发送初始网络状态', {
+            category: 'system',
+            source: 'Main',
+          });
+        } catch (error) {
+          services!.logger.error('获取初始网络状态失败', error);
+        }
+      },
+    });
 
     if (IS_E2E_TEST) {
       services.logger.info('E2E 测试模式已启用，跳过托盘与 WiFi 事件监听初始化');
