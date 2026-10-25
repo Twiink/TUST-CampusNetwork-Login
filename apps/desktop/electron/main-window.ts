@@ -46,9 +46,8 @@ export function createMainWindow(options: MainWindowOptions): BrowserWindow {
       preload: options.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      // 窗口隐藏/最小化到托盘时不节流后台任务，保证心跳与重连不中断；
-      // WiFi 检测降频由 wifiEventListener.setCheckInterval 单独处理
-      backgroundThrottling: false,
+      // 心跳与重连都在主进程；渲染层允许系统节流，降低隐藏态 CPU/内存。
+      backgroundThrottling: true,
     },
   });
 

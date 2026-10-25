@@ -61,6 +61,8 @@ export interface AppSettings {
   notificationSettings: NotificationSettings;
   /** @deprecated 兼容旧界面，等同于 notificationSettings 四项同时为 true */
   showNotification?: boolean;
+  /** 窗口隐藏到托盘多久后销毁渲染进程；0 表示保留隐藏窗口 */
+  destroyHiddenWindowAfterMs?: number;
   autoUpdate: boolean;
 }
 

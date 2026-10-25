@@ -142,6 +142,9 @@ export function normalizeAppSettings(settings?: unknown): AppSettings {
           },
     showNotification:
       legacyShowNotification ?? Object.values(notificationSettings).some((value) => value),
+    destroyHiddenWindowAfterMs:
+      toFiniteNumber(raw.destroyHiddenWindowAfterMs) ??
+      DEFAULT_APP_SETTINGS.destroyHiddenWindowAfterMs,
     autoUpdate:
       typeof raw.autoUpdate === 'boolean' ? raw.autoUpdate : DEFAULT_APP_SETTINGS.autoUpdate,
   };

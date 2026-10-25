@@ -64,12 +64,15 @@ let wifiSwitcherService: WifiSwitcherService | null = null;
 let wifiEventListener: WifiEventListener | null = null;
 let fileLogger: FileLogger | null = null;
 let forceQuit = false;
+let createWindow: (() => BrowserWindow) | null = null;
+let destroyHiddenWindowTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // 隐藏窗口被定时销毁时不应退出应用；只有用户真正关闭（forceQuit）才结束。
+  if (forceQuit && process.platform !== 'darwin') {
     if (services) {
       stopBackgroundServices(services);
     }
@@ -82,37 +85,45 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createMainWindow({
-      appRoot: process.env.APP_ROOT!,
-      preloadPath: path.join(MAIN_DIST, 'preload.mjs'),
-      rendererDist: RENDERER_DIST,
-      devServerUrl: VITE_DEV_SERVER_URL,
-      shouldQuit: () => forceQuit,
-      onVisibilityChange: (hidden) => {
-        wifiEventListener?.setCheckInterval(
-          hidden ? WIFI_CHECK_INTERVAL_BACKGROUND : WIFI_CHECK_INTERVAL_FOREGROUND
-        );
-      },
-      onDidFinishLoad: async (window) => {
-        win = window;
-        try {
-          const currentStatus = await services!.networkDetector.getNetworkStatus();
-          window.webContents.send('event:network:statusChanged', currentStatus);
-          services!.logger.log('info', '窗口加载完成，已发送初始网络状态', {
-            category: 'system',
-            source: 'Main',
-          });
-        } catch (error) {
-          services!.logger.error('获取初始网络状态失败', error);
-        }
-      },
-    });
-    // 更新 WiFi 事件监听器的窗口引用
-    if (wifiEventListener) {
-      wifiEventListener.setWindow(win);
-    }
+    showWindowFromTray();
   }
 });
+
+function showWindowFromTray(): void {
+  if (destroyHiddenWindowTimer) {
+    clearTimeout(destroyHiddenWindowTimer);
+    destroyHiddenWindowTimer = null;
+  }
+  if (!win || win.isDestroyed()) {
+    win = createWindow?.() ?? null;
+    wifiEventListener?.setWindow(win);
+  }
+  if (win) {
+    win.show();
+    win.focus();
+  }
+}
+
+function scheduleHiddenWindowTeardown(delayMs: number): void {
+  if (delayMs <= 0) {
+    return;
+  }
+  if (destroyHiddenWindowTimer) {
+    clearTimeout(destroyHiddenWindowTimer);
+  }
+  destroyHiddenWindowTimer = setTimeout(() => {
+    destroyHiddenWindowTimer = null;
+    if (!win || win.isDestroyed() || win.isVisible()) {
+      return;
+    }
+    win.destroy();
+    win = null;
+    services?.logger.info('隐藏窗口已销毁，托盘点击时可按需重建', {
+      category: 'system',
+      source: 'Main',
+    });
+  }, delayMs);
+}
 
 app.on('before-quit', () => {
   forceQuit = true;
@@ -142,11 +153,7 @@ if (!gotSingleInstanceLock) {
 } else {
   // 第二个实例启动时，聚焦已有窗口而非新开
   app.on('second-instance', () => {
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      if (!win.isVisible()) win.show();
-      win.focus();
-    }
+    showWindowFromTray();
   });
 }
 
@@ -302,18 +309,24 @@ app.whenReady().then(async () => {
     );
 
     // 创建窗口
-    createMainWindow({
+    const windowOptions = {
       appRoot: process.env.APP_ROOT!,
       preloadPath: path.join(MAIN_DIST, 'preload.mjs'),
       rendererDist: RENDERER_DIST,
       devServerUrl: VITE_DEV_SERVER_URL,
       shouldQuit: () => forceQuit,
-      onVisibilityChange: (hidden) => {
+      onVisibilityChange: (hidden: boolean) => {
         wifiEventListener?.setCheckInterval(
           hidden ? WIFI_CHECK_INTERVAL_BACKGROUND : WIFI_CHECK_INTERVAL_FOREGROUND
         );
+        if (hidden && !IS_E2E_TEST) {
+          scheduleHiddenWindowTeardown(settings.destroyHiddenWindowAfterMs ?? 120_000);
+        } else if (destroyHiddenWindowTimer) {
+          clearTimeout(destroyHiddenWindowTimer);
+          destroyHiddenWindowTimer = null;
+        }
       },
-      onDidFinishLoad: async (window) => {
+      onDidFinishLoad: async (window: BrowserWindow) => {
         win = window;
         try {
           const currentStatus = await services!.networkDetector.getNetworkStatus();
@@ -326,7 +339,9 @@ app.whenReady().then(async () => {
           services!.logger.error('获取初始网络状态失败', error);
         }
       },
-    });
+    };
+    createWindow = () => createMainWindow(windowOptions);
+    win = createWindow();
 
     if (IS_E2E_TEST) {
       services.logger.info('E2E 测试模式已启用，跳过托盘与 WiFi 事件监听初始化');
@@ -388,10 +403,7 @@ app.whenReady().then(async () => {
           }
         },
         onShowWindow: () => {
-          if (win) {
-            win.show();
-            win.focus();
-          }
+          showWindowFromTray();
         },
         onQuit: () => {
           forceQuit = true;
@@ -412,7 +424,7 @@ app.whenReady().then(async () => {
         networkDetector: services.networkDetector,
         logger: services.logger,
         window: win,
-        checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台 3s 检测 SSID 变化（隐藏到托盘后自动降频至 8s）
+        checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台检测 SSID 变化，隐藏到托盘后自动降频
         wifiManager: services.wifiManager,
         wifiSwitcherService: wifiSwitcherService,
         configManager: services.configManager,

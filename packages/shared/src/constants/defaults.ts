@@ -31,5 +31,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   startupAutoConnect: false,
   keepCurrentConnection: true,
   notificationSettings: DEFAULT_NOTIFICATION_SETTINGS,
+  destroyHiddenWindowAfterMs: 120_000,
   autoUpdate: true,
 };
