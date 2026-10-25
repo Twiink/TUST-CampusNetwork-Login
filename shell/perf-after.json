@@ -1,0 +1,50 @@
+{
+  "timestamp": "2026-10-25T05:54:20.325Z",
+  "node": "v24.21.0",
+  "metrics": {
+    "logger.addLog 20k 条总耗时": {
+      "value": 21,
+      "unit": "ms"
+    },
+    "logger.addLog 单条均摊": {
+      "value": "0.001",
+      "unit": "ms"
+    },
+    "logger.addLog(监听器+批量持久化调度) 5k 条总耗时": {
+      "value": 3,
+      "unit": "ms"
+    },
+    "logger 批量持久化累计写入条目(对比旧 O(n) 放大)": {
+      "value": 500,
+      "unit": "条"
+    },
+    "logger.getLogs(keyword) 200 次总耗时": {
+      "value": 3,
+      "unit": "ms"
+    },
+    "detector.getNetworkStatus 在线(首个URL返回204,延迟120ms/请求)": {
+      "value": 255,
+      "unit": "ms"
+    },
+    "detector.getNetworkStatus 离线(所有探测全部失败)": {
+      "value": 121,
+      "unit": "ms"
+    },
+    "wifiManager.getWifiBySsid 100k 次总耗时": {
+      "value": 13,
+      "unit": "ms"
+    },
+    "产物 shared dist/index.mjs": {
+      "value": 82,
+      "unit": "KB"
+    },
+    "产物 desktop dist-electron/main.js": {
+      "value": 470,
+      "unit": "KB"
+    },
+    "产物 desktop renderer bundle": {
+      "value": 4,
+      "unit": "KB"
+    }
+  }
+}

@@ -18,6 +18,11 @@
 
 ### 变更
 
+- **全平台性能优化**：网络探测并行化（最坏 15s→3s）、Logger 环形缓冲 + 500ms 批量持久化（持久化写入放大 2,375,250 条→500 条）、WiFi 快照 1.5s TTL 缓存、主进程移除 1Hz 倒计时 IPC、托盘图标常驻缓存、存储防抖原子写、挂起恢复立即检测。
+- **桌面渲染层优化**：移除重复 useNetwork 订阅、主题动画改纯 CSS、日志页窗口化虚拟列表、心跳倒计时本地推导。
+- **Rust 原生模块（Linux）**：新增 `@repo/native` nl80211 netlink 实现，Linux WiFi 快照零 spawn；加载失败自动回退 TS 路径。
+- **移动端优化**：Kotlin NetworkCallback 事件驱动替代 5s JS 轮询、AppState 后台暂停、静态渐变替代无限 SVG 动画（`THEME_PERF_MODE` 可回退）、BlurView 改半透明、LogsScreen FlatList 虚拟化、后台服务原生事件驱动通知。
+- **Linux WiFi 支持**：nmcli fallback 补齐 SSID/信号/信道/网关/DNS 解析。
 - **登录协议对齐真实抓包**：在线判定（status:1/已经在线）、MAC 全零上报、注销无参请求、User-Agent、校园网判定与认证需求三级解析。
 - **登录链路改用路由探测 IP** 并统一认证判定逻辑；认证重连状态自愈并接入 WiFi 切换事件。
 - **Windows 命令输出统一按 GBK 解码**并优化 SSID 解析。

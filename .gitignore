@@ -75,3 +75,7 @@ AGENTS.md
 
 # ZCode
 .zcode/
+
+# Rust / native
+/target/
+packages/native/*/netmate_native.*.node
