@@ -9,9 +9,17 @@
     buildResources: 'build',
   },
   files: ['dist', 'dist-electron'],
+  // electron-updater 依赖此配置生成 app-update.yml，缺失会导致“publish configuration missing”。
+  // 构建脚本统一带 --publish never，发布仍由 release.yml 主导。
+  publish: {
+    provider: 'github',
+    owner: 'Twiink',
+    repo: 'TUST-Campusnet-Login',
+  },
   mac: {
     icon: 'build/icon.icns',
-    target: ['dmg'],
+    // zip 供 electron-updater 下载增量/全量更新包，dmg 供手动安装。
+    target: ['dmg', 'zip'],
     artifactName: '${productName}-Mac-${version}-Installer.${ext}',
   },
   win: {
@@ -29,10 +37,5 @@
     perMachine: false,
     allowToChangeInstallationDirectory: true,
     deleteAppDataOnUninstall: false,
-  },
-  linux: {
-    icon: 'build/icon.png',
-    target: ['AppImage'],
-    artifactName: '${productName}-Linux-${version}.${ext}',
   },
 }

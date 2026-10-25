@@ -5,6 +5,7 @@
  */
 
 import { Platform, Linking, Alert } from 'react-native';
+import DeviceInfo from 'react-native-device-info';
 
 export interface ReleaseInfo {
   version: string;
@@ -33,15 +34,14 @@ export interface UpdateStatus {
 }
 
 // GitHub 仓库信息
-const GITHUB_OWNER = 'your-username'; // 需要替换为实际的用户名
-const GITHUB_REPO = 'TUST-CampusNetwork-Login';
+const GITHUB_OWNER = 'Twiink';
+const GITHUB_REPO = 'TUST-Campusnet-Login';
 
 /**
  * 获取当前应用版本
  */
 export function getCurrentVersion(): string {
-  // 从 package.json 或原生模块获取版本
-  return '0.0.1'; // 临时值，实际应从原生模块获取
+  return DeviceInfo.getVersion();
 }
 
 /**

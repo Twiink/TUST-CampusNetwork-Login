@@ -167,8 +167,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-windows-exe
+          # latest.yml 与 blockmap 是 electron-updater 发现/下载更新的必需资产
           path: |
             apps/desktop/release/**/*.exe
+            apps/desktop/release/**/latest.yml
+            apps/desktop/release/**/*.blockmap
             apps/desktop/dist/**/*.exe
           if-no-files-found: error
 
@@ -210,8 +213,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: release-macos-dmg
+          # latest-mac.yml 与 zip 供 electron-updater 在 macOS 上检查/下载更新
           path: |
             apps/desktop/release/**/*.dmg
+            apps/desktop/release/**/latest-mac.yml
+            apps/desktop/release/**/*-Mac-*.zip
+            apps/desktop/release/**/*.blockmap
             apps/desktop/dist/**/*.dmg
           if-no-files-found: error
 
@@ -308,6 +315,11 @@ jobs:
       contents: write
 
     steps:
+      - name: 检出 master（用于同步 CHANGELOG）
+        uses: actions/checkout@v6
+        with:
+          ref: master
+
       - name: 下载 Windows 产物
         uses: actions/download-artifact@v8
         with:
@@ -355,4 +367,62 @@ jobs:
               --generate-notes \
               --target "${TARGET_SHA}" \
               --latest
+          fi
+
+      - name: 追加本次发布到 CHANGELOG 并提交
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.resolve-release.outputs.tag }}
+        run: |
+          git config user.name "netmate-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          # 基于最新 master 追加（checkout 是浅克隆，pull --rebase 不可靠）
+          git fetch origin master
+          git reset --hard origin/master
+
+          export RELEASE_BODY="$(gh release view "${TAG_NAME}" --json body -q .body)"
+          export RELEASE_DATE="$(date +%Y-%m-%d)"
+          python3 - <<'PYEOF'
+          import os
+          import re
+
+          tag = os.environ["TAG_NAME"]
+          body = os.environ["RELEASE_BODY"].strip()
+          date = os.environ["RELEASE_DATE"]
+
+          path = "CHANGELOG.md"
+          with open(path, encoding="utf-8") as f:
+              content = f.read()
+
+          entry = f"\n## [{tag}] - {date}\n\n{body}\n"
+
+          if f"## [{tag}]" in content:
+              print(f"CHANGELOG 已包含 {tag}，跳过追加")
+              raise SystemExit(0)
+
+          if "## [未发布]" in content:
+              # 插入到「未发布」段结束（下一个 ## 标题）之后
+              match = re.search(r"## \[未发布\]", content)
+              next_section = re.search(r"\n## ", content[match.end():])
+              if next_section:
+                  insert_at = match.end() + next_section.start()
+                  content = content[:insert_at] + entry + content[insert_at:]
+              else:
+                  content = content.rstrip() + "\n" + entry
+          else:
+              # 无未发布段则插入到首个版本标题之前
+              match = re.search(r"^## ", content, re.MULTILINE)
+              content = (content[:match.start()] + entry.lstrip("\n") + "\n" + content[match.start():]) if match else content.rstrip() + "\n" + entry
+
+          with open(path, "w", encoding="utf-8") as f:
+              f.write(content.rstrip() + "\n")
+          print(f"已追加 {tag} 到 CHANGELOG")
+          PYEOF
+
+          if git diff --quiet CHANGELOG.md; then
+            echo "CHANGELOG 无变化，跳过提交"
+          else
+            git add CHANGELOG.md
+            git commit -m "docs: 记录 ${TAG_NAME} 变更日志"
+            git push origin master
           fi

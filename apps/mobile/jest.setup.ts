@@ -2,6 +2,34 @@ jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
 
+jest.mock('react-native-device-info', () =>
+  require('react-native-device-info/jest/react-native-device-info-mock')
+);
+
+// react-native-keychain 内存 mock：按 service 键存取，与真机 Keystore 行为对齐。
+jest.mock('react-native-keychain', () => {
+  const store = new Map<string, { username: string; password: string }>();
+
+  const serviceKey = (options?: { service?: string }) => options?.service ?? 'default';
+
+  return {
+    __esModule: true,
+    setGenericPassword: jest.fn(
+      async (username: string, password: string, options?: { service?: string }) => {
+        store.set(serviceKey(options), { username, password });
+        return true;
+      }
+    ),
+    getGenericPassword: jest.fn(async (options?: { service?: string }) => {
+      return store.get(serviceKey(options)) ?? false;
+    }),
+    resetGenericPassword: jest.fn(async (options?: { service?: string }) => {
+      return store.delete(serviceKey(options));
+    }),
+    __storeForTests: store,
+  };
+});
+
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   const { View } = require('react-native');
