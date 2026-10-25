@@ -10,6 +10,7 @@
     "dist": "pnpm run build && electron-builder --publish never",
     "dist:win": "pnpm run build && electron-builder --win --publish never",
     "dist:mac": "pnpm run build && electron-builder --mac --publish never",
+    "dist:linux": "pnpm run build && electron-builder --linux --publish never",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -18,43 +19,8 @@
     "test": "vitest run --config vitest.config.ts",
     "test:e2e": "corepack pnpm -C ../../packages/shared build && node ./scripts/ensure-electron-binary.mjs && corepack pnpm run build && playwright test -c playwright.config.ts"
   },
-  "build": {
-    "appId": "com.netmate.app",
-    "productName": "NetMate",
-    "electronVersion": "30.0.1",
-    "asar": true,
-    "compression": "maximum",
-    "electronLanguages": [
-      "zh-CN",
-      "en-US"
-    ],
-    "files": [
-      "dist/**",
-      "dist-electron/**",
-      "package.json",
-      "!**/*.map",
-      "!**/*.md",
-      "!**/*.d.ts"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "build/icon.ico"
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ],
-      "icon": "build/icon.icns"
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "icon": "build/icon.png"
-    }
-  },
+  "description": "NetMate - 校园网自动登录助手",
+  "homepage": "https://github.com/Twiink/TUST-Campusnet-Login#readme",
   "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^9.17.0",

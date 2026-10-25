@@ -13,6 +13,7 @@
     "dist": "pnpm -C apps/desktop dist",
     "dist:win": "pnpm -C apps/desktop dist:win",
     "dist:mac": "pnpm -C apps/desktop dist:mac",
+    "dist:linux": "pnpm -C apps/desktop dist:linux",
     "dist:android": "pnpm -C apps/mobile build:android",
     "lint": "eslint -c eslint.root.config.mjs shell/ && pnpm -r lint",
     "lint:fix": "eslint -c eslint.root.config.mjs shell/ --fix && pnpm -r lint:fix",

@@ -1,6 +1,6 @@
 # NetMate
 
-**NetMate** - 你的 WiFi 连接管家，一个跨平台的智能 WiFi 管理工具，支持 Windows、macOS 和 Android 平台，可选配校园网自动认证功能。
+**NetMate** - 你的 WiFi 连接管家，一个跨平台的智能 WiFi 管理工具，支持 Windows、macOS、Linux 和 Android 平台，可选配校园网自动认证功能。
 
 ## 项目简介
 
@@ -48,6 +48,7 @@ NetMate 是一款专注于 **WiFi 连接管理**的智能工具，提供 WiFi �
 | ------- | ---------------- | -------------- |
 | Windows | Electron + React | 已完成，待测试 |
 | macOS   | Electron + React | 已完成，待测试 |
+| Linux   | Electron + React | 已完成，待测试 |
 | Android | React Native     | 已完成，待测试 |
 
 ## 需求进度
@@ -116,7 +117,7 @@ NetMate 采用**双重连机制架构**，将 WiFi 层和应用层完全解耦�
 ┌─────────────────────────────────────────────────────────────┐
 │                        应用层 (Apps)                         │
 ├───────────────────────────┬─────────────────────────────────┤
-│   Electron (Win/macOS)    │      React Native (Android)     │
+│   Electron (Win/macOS/Linux)    │      React Native (Android)     │
 │   - 系统托盘               │      - 后台服务                   │
 │   - 开机自启               │      - WiFi 控制                 │
 │   - 通知推送               │      - 通知推送                   │
@@ -176,7 +177,7 @@ NetMate 采用**双重连机制架构**，将 WiFi 层和应用层完全解耦�
 ```
 NetMate/
 ├── apps/
-│   ├── desktop/          # Electron 桌面应用 (Win/macOS)
+│   ├── desktop/          # Electron 桌面应用 (Win/macOS/Linux)
 │   └── mobile/           # React Native 移动应用 (Android)
 ├── packages/
 │   └── shared/           # 共享核心业务包

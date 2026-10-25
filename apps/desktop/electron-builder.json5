@@ -1,14 +1,20 @@
 // @see - https://www.electron.build/configuration/configuration
+// 注意：本文件是唯一的打包配置来源。electron-builder 只有在 package.json 没有
+// "build" 字段时才会读取它，两处并存时以 package.json 为准（已迁移，勿再新增）。
 {
   $schema: 'https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json',
   appId: 'com.netmate.app',
-  asar: true,
   productName: 'NetMate',
+  // 钉住打包用的 Electron 版本，避免随 node_modules 里的 electron 漂移。
+  electronVersion: '30.0.1',
+  asar: true,
+  compression: 'maximum',
+  electronLanguages: ['zh-CN', 'en-US'],
   directories: {
     output: 'release/${version}',
     buildResources: 'build',
   },
-  files: ['dist', 'dist-electron'],
+  files: ['dist/**', 'dist-electron/**', 'package.json', '!**/*.map', '!**/*.md', '!**/*.d.ts'],
   // electron-updater 依赖此配置生成 app-update.yml，缺失会导致“publish configuration missing”。
   // 构建脚本统一带 --publish never，发布仍由 release.yml 主导。
   publish: {
@@ -37,5 +43,22 @@
     perMachine: false,
     allowToChangeInstallationDirectory: true,
     deleteAppDataOnUninstall: false,
+  },
+  linux: {
+    icon: 'build/icon.png',
+    // AppImage 免安装且支持 electron-updater 自动更新，deb 面向 Ubuntu/Debian。
+    target: [
+      {
+        target: 'AppImage',
+        arch: ['x64'],
+      },
+      {
+        target: 'deb',
+        arch: ['x64'],
+      },
+    ],
+    artifactName: '${productName}-Linux-${version}.${ext}',
+    category: 'Network',
+    maintainer: 'Twiink <Twiink@users.noreply.github.com>',
   },
 }
