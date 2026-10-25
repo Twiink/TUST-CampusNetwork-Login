@@ -2,6 +2,8 @@
  * 登录认证服务
  */
 
+import { extractJsonpPayload } from './auth-jsonp';
+import { buildUserAccount, buildLoginUrl, buildLogoutUrl } from './auth-protocol';
 import type {
   LoginConfig,
   LoginResult,
@@ -12,7 +14,6 @@ import type {
 import type { ISP, AccountConfig } from '../types/config';
 import type { Logger } from '../models/Logger';
 import { httpGet, HttpError } from '../utils/httpClient';
-import { buildQueryString } from '../utils/urlEncode';
 import { DEFAULT_SERVER_URL, DEFAULT_CONNECTIVITY_CHECK_URLS } from '../constants/defaults';
 import { ErrorCode, AppError } from '../constants/errors';
 
@@ -20,12 +21,6 @@ import { ErrorCode, AppError } from '../constants/errors';
  * ISP 到账号后缀的映射
  * 注意：根据抓包结果，运营商后缀为 unicom/cmcc/telecom
  */
-const ISP_SUFFIX_MAP: Record<string, string> = {
-  campus: '', // 校园网无后缀
-  cmcc: '@cmcc', // 中国移动
-  cucc: '@unicom', // 中国联通 (抓包显示后缀为 unicom)
-  ctcc: '@telecom', // 中国电信 (抓包显示后缀为 telecom)
-};
 
 /**
  * 认证服务类
@@ -55,50 +50,6 @@ export class AuthService {
    */
   getServerUrl(): string {
     return this.serverUrl;
-  }
-
-  /**
-   * 构建用户账号
-   * 格式: ",0{学号}@{运营商后缀}"
-   * 根据抓包结果，账号格式为: ,023103421 (校园网) 或 ,023103421@unicom (联通)
-   */
-  private buildUserAccount(username: string, isp: ISP): string {
-    const suffix = ISP_SUFFIX_MAP[isp] || '';
-    // 添加 ",0," 前缀（抓包格式: %2C0%2C23103421 = ,0,23103421）
-    return `,0,${username}${suffix}`;
-  }
-
-  /**
-   * 构建登录 URL
-   * 完全对齐生产验证的参考实现（真实抓包）：callback=dr1005、v=9303（固定值）、
-   * 不携带 wlan_ac_ip/wlan_ac_name（参考实现均无这两个参数）。
-   */
-  buildLoginUrl(config: LoginConfig): string {
-    const userAccount = this.buildUserAccount(config.userAccount, config.isp);
-
-    const params: Record<string, string | number> = {
-      callback: 'dr1005',
-      login_method: 1,
-      user_account: userAccount,
-      user_password: config.userPassword,
-      wlan_user_ip: config.wlanUserIp,
-      // 对齐参考实现：固定传全零。官方门户 JS 拿不到真实 MAC，门户实际忽略该字段。
-      wlan_user_mac: '000000000000',
-      jsVersion: '4.1.3',
-      terminal_type: 3, // 对齐生产验证的参考实现（此前为 1）
-      lang: 'zh-cn',
-      v: 9303,
-    };
-
-    // 添加 IPv6（buildQueryString 会自动 URL 编码，无需手动处理）
-    if (config.wlanUserIpv6) {
-      params.wlan_user_ipv6 = config.wlanUserIpv6;
-    }
-
-    const serverUrl = config.serverUrl || this.serverUrl;
-    const queryString = buildQueryString(params);
-
-    return `${serverUrl}/eportal/portal/login?${queryString}`;
   }
 
   /**
@@ -138,10 +89,31 @@ export class AuthService {
   }
 
   /**
+   * 构建登录 URL(委托 auth-protocol,保留实例方法签名以兼容既有调用方)
+   */
+  buildLoginUrl(config: LoginConfig): string {
+    return buildLoginUrl(config.serverUrl || this.serverUrl, config);
+  }
+
+  /**
+   * 构建登出 URL(委托 auth-protocol)
+   */
+  buildLogoutUrl(_wlanUserIp?: string): string {
+    return buildLogoutUrl(this.serverUrl);
+  }
+
+  /**
+   * 构建用户账号(委托 auth-protocol)
+   */
+  protected buildUserAccount(username: string, isp: ISP): string {
+    return buildUserAccount(username, isp);
+  }
+
+  /**
    * 执行登录
    */
   async login(config: LoginConfig): Promise<LoginResult> {
-    const userAccount = this.buildUserAccount(config.userAccount, config.isp);
+    const userAccount = buildUserAccount(config.userAccount, config.isp);
     const ispName =
       config.isp === 'campus'
         ? '校园网'
@@ -163,7 +135,7 @@ export class AuthService {
     });
 
     try {
-      const url = this.buildLoginUrl(config);
+      const url = buildLoginUrl(config.serverUrl || this.serverUrl, config);
       this.logger?.log('debug', `请求登录 URL: ${url.substring(0, 100)}...`, {
         category: 'request',
         source: 'AuthService',
@@ -335,15 +307,6 @@ export class AuthService {
   }
 
   /**
-   * 构建登出 URL
-   * 对齐生产验证的参考实现：直接 GET 注销端点，不携带查询参数。
-   * @param _wlanUserIp 仅用于日志（参考实现的注销请求不依赖本机 IP）
-   */
-  buildLogoutUrl(_wlanUserIp?: string): string {
-    return `${this.serverUrl}/eportal/portal/logout`;
-  }
-
-  /**
    * 执行登出
    * 判定对齐生产验证的参考实现与真实抓包：
    * 响应为 JSONP（如 `jsonpReturn({"result":1,"msg":"Radius注销成功！"})`），
@@ -358,7 +321,7 @@ export class AuthService {
     });
 
     try {
-      const url = this.buildLogoutUrl(wlanUserIp);
+      const url = buildLogoutUrl(this.serverUrl);
       this.logger?.log('debug', `请求登出 URL: ${url}`, {
         category: 'request',
         source: 'AuthService',
@@ -424,19 +387,6 @@ export class AuthService {
       throw new AppError(ErrorCode.AUTH_ERROR, error instanceof Error ? error.message : '未知错误');
     }
   }
-}
-
-/**
- * 提取 JSONP 响应的括号内 JSON 载荷（不依赖 callback 名）。
- * 与参考实现一致：取第一个 '(' 到最后一个 ')' 之间的内容。
- */
-function extractJsonpPayload(body: string): string | null {
-  const start = body.indexOf('(');
-  const end = body.lastIndexOf(')');
-  if (start < 0 || end <= start) {
-    return null;
-  }
-  return body.slice(start + 1, end).trim() || null;
 }
 
 /**

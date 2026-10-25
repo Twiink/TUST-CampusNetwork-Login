@@ -10,11 +10,7 @@ import {
   ISP,
   NotificationSettings,
 } from '../types/config';
-import {
-  DEFAULT_APP_SETTINGS,
-  DEFAULT_NOTIFICATION_SETTINGS,
-  DEFAULT_SERVER_URL,
-} from '../constants/defaults';
+import { DEFAULT_APP_SETTINGS, DEFAULT_NOTIFICATION_SETTINGS } from '../constants/defaults';
 
 type LegacyWifiConfig = Partial<WifiConfig> & {
   linkedAccountId?: string;
@@ -423,61 +419,13 @@ export function validateAppConfig(config: Partial<AppConfig>): ValidationResult 
 }
 
 /**
- * 创建默认账户配置
- */
-export function createDefaultAccountConfig(partial: Partial<AccountConfig> = {}): AccountConfig {
-  return {
-    id: partial.id || generateId(),
-    name: partial.name || '默认账户',
-    username: partial.username || '',
-    password: partial.password || '',
-    serverUrl: partial.serverUrl || DEFAULT_SERVER_URL,
-    isp: partial.isp || 'campus',
-  };
-}
-
-/**
- * 创建默认 WiFi 配置
- */
-export function createDefaultWifiConfig(partial: Partial<LegacyWifiConfig> = {}): WifiConfig {
-  return normalizeWifiConfig(partial);
-}
-
-/**
- * 创建默认应用配置
- */
-export function createDefaultAppConfig(partial: Partial<AppConfig> = {}): AppConfig {
-  return {
-    accounts: partial.accounts || [],
-    currentAccountId: partial.currentAccountId ?? null,
-    wifiList: (partial.wifiList || []).map((wifi) => normalizeWifiConfig(wifi)),
-    settings: normalizeAppSettings(partial.settings),
-  };
-}
-
-/**
  * ID 生成计数器（用于同一毫秒内的唯一性）
  */
-let idCounter = 0;
-let lastTimestamp = 0;
+import {
+  createDefaultAccountConfig,
+  createDefaultWifiConfig,
+  createDefaultAppConfig,
+  generateId,
+} from './defaults-factory';
 
-/**
- * 生成唯一 ID
- * 使用高精度时间戳 + 递增计数器 + 随机数确保唯一性
- */
-export function generateId(): string {
-  const now = Date.now();
-
-  if (now === lastTimestamp) {
-    idCounter++;
-  } else {
-    idCounter = 0;
-    lastTimestamp = now;
-  }
-
-  const globalPerformance = (globalThis as { performance?: { now?: () => number } }).performance;
-  const perfNow = typeof globalPerformance?.now === 'function' ? globalPerformance.now() : 0;
-  const microPart = Math.floor((perfNow % 1) * 1000000).toString(36);
-
-  return `${now.toString(36)}-${idCounter.toString(36)}-${microPart}-${Math.random().toString(36).substring(2, 7)}`;
-}
+export { createDefaultAccountConfig, createDefaultWifiConfig, createDefaultAppConfig, generateId };

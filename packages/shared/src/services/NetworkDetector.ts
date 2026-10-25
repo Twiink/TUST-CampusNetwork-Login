@@ -7,56 +7,21 @@ import type {
   NetworkCallback,
   PollingOptions,
   LatencyResult,
-  LatencyStatus,
   WifiDetails,
 } from '../types/network';
 import { httpGet, isUrlReachable } from '../utils/httpClient';
 import { DEFAULT_CONNECTIVITY_CHECK_URLS } from '../constants/defaults';
 import type { WifiAdapter } from './WifiAdapter';
 import type { Logger } from '../models/Logger';
+import {
+  DEFAULT_PING_TARGETS,
+  type LatencyTarget,
+  type NetworkDetectorOptions,
+  type ResolvedNetworkDetectorOptions,
+} from './detector-options';
+import { measureLatency } from './latency';
 
-/**
- * 延迟测试目标
- */
-interface LatencyTarget {
-  url: string;
-  source: string;
-}
-
-/**
- * 默认延迟测试目标
- */
-const DEFAULT_PING_TARGETS: LatencyTarget[] = [
-  {
-    url: 'https://www.baidu.com',
-    source: '百度',
-  },
-  {
-    url: 'https://www.speedtest.cn',
-    source: '测速网',
-  },
-];
-
-/**
- * 网络探测服务可选配置
- */
-export interface NetworkDetectorOptions {
-  /** 连通性检测 URL 列表 */
-  connectivityCheckUrls?: string[];
-  /** 连通性检测超时时间（毫秒） */
-  connectivityTimeoutMs?: number;
-  /** 延迟测试目标列表，按顺序回退 */
-  pingTargets?: LatencyTarget[];
-  /** 延迟测试超时时间（毫秒） */
-  latencyTimeoutMs?: number;
-}
-
-interface ResolvedNetworkDetectorOptions {
-  connectivityCheckUrls: string[];
-  connectivityTimeoutMs: number;
-  pingTargets: LatencyTarget[];
-  latencyTimeoutMs: number;
-}
+export type { NetworkDetectorOptions, LatencyTarget };
 
 /**
  * 联网探测服务类
@@ -151,101 +116,11 @@ export class NetworkDetector {
   }
 
   /**
-   * 测量网络延迟（Ping）
-   * 使用国内服务：百度 → 测速网
-   * @returns 延迟测试结果
+   * 测量网络延迟(委托 latency.ts,多目标按序回退)
    */
   async measureLatency(): Promise<LatencyResult> {
     this.logger?.debug('开始测量网络延迟');
-
-    let lastTimeoutResult: LatencyResult | null = null;
-
-    for (const [index, target] of this.options.pingTargets.entries()) {
-      const result = await this.testSingleTarget(target);
-
-      if (result.status !== 'timeout') {
-        this.logger?.success(index === 0 ? '延迟测试成功' : '延迟测试成功（备用）', {
-          目标: result.source,
-          延迟: `${result.value}ms`,
-          状态: result.status,
-        });
-        return result;
-      }
-
-      lastTimeoutResult = result;
-
-      if (index < this.options.pingTargets.length - 1) {
-        this.logger?.warn(`${target.source} 延迟测试超时，尝试备用服务`);
-      }
-    }
-
-    this.logger?.error('延迟测试失败：所有目标均超时');
-
-    return (
-      lastTimeoutResult || {
-        value: 9999,
-        status: 'timeout',
-        target: this.options.pingTargets[0]?.url || 'unknown',
-        source: this.options.pingTargets[0]?.source || '未配置目标',
-        timestamp: Date.now(),
-      }
-    );
-  }
-
-  /**
-   * 测试单个目标的延迟
-   */
-  private async testSingleTarget(target: LatencyTarget): Promise<LatencyResult> {
-    const startTime = Date.now();
-    this.logger?.debug(`测试延迟目标: ${target.source} (${target.url})`);
-
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), this.options.latencyTimeoutMs);
-
-      await fetch(target.url, {
-        method: 'HEAD',
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
-      const latency = Date.now() - startTime;
-
-      this.logger?.debug(`${target.source} 延迟测试完成: ${latency}ms`);
-
-      return {
-        value: latency,
-        status: this.getLatencyStatus(latency),
-        target: target.url,
-        source: target.source,
-        timestamp: Date.now(),
-      };
-    } catch (error) {
-      this.logger?.debug(`${target.source} 延迟测试超时`, {
-        错误: error instanceof Error ? error.message : String(error),
-      });
-
-      return {
-        value: 9999,
-        status: 'timeout',
-        target: target.url,
-        source: target.source,
-        timestamp: Date.now(),
-      };
-    }
-  }
-
-  /**
-   * 根据延迟值判断延迟等级
-   * @param latency 延迟值（毫秒）
-   * @returns 延迟等级
-   */
-  private getLatencyStatus(latency: number): LatencyStatus {
-    if (latency < 50) return 'excellent';
-    if (latency < 100) return 'good';
-    if (latency < 200) return 'fair';
-    if (latency < 500) return 'poor';
-    return 'very-poor';
+    return measureLatency(this.logger, this.options);
   }
 
   /**
