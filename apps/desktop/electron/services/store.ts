@@ -4,6 +4,7 @@
 
 import { app, safeStorage } from 'electron';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { StorageAdapter } from '@repo/shared';
 import { devLog } from '../utils/dev-log';
@@ -28,9 +29,14 @@ const SENSITIVE_FIELDS = ['password', 'userPassword'];
 /**
  * Electron 存储适配器
  */
+const SAVE_DEBOUNCE_MS = 500;
+
 export class ElectronStorageAdapter implements StorageAdapter {
   private data: Record<string, unknown> = {};
   private loaded = false;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private savePromise: Promise<void> | null = null;
+  private saveAgain = false;
 
   /**
    * 加载存储文件
@@ -58,14 +64,60 @@ export class ElectronStorageAdapter implements StorageAdapter {
    * 保存存储文件
    */
   private async saveToFile(): Promise<void> {
+    const filePath = getStoragePath();
+    const tempPath = `${filePath}.tmp`;
+    // 加密时只复制命中的对象路径；非敏感子树保持原引用，不深拷贝整个配置。
+    const dataToSave = this.encryptSensitiveData({ ...this.data });
+    const content = JSON.stringify(dataToSave, null, 2);
     try {
-      const filePath = getStoragePath();
-      // 加密敏感数据后保存
-      const dataToSave = this.encryptSensitiveData({ ...this.data });
-      fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2), 'utf-8');
+      await fsp.writeFile(tempPath, content, 'utf-8');
+      await fsp.rename(tempPath, filePath);
     } catch (error) {
       devLog.error('Failed to save storage:', error);
       throw error;
+    }
+  }
+
+  private scheduleSave(): Promise<void> {
+    this.saveAgain = true;
+    if (this.saveTimer || this.savePromise) {
+      return this.savePromise ?? Promise.resolve();
+    }
+
+    const run = async () => {
+      // 窗口内后续写入共用一次落盘；窗口内再次写入会在循环中补写。
+      await new Promise<void>((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS));
+      do {
+        this.saveAgain = false;
+        await this.saveToFile();
+      } while (this.saveAgain);
+    };
+
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      this.savePromise = run()
+        .catch((error) => {
+          devLog.error('Debounced storage save failed:', error);
+        })
+        .finally(() => {
+          this.savePromise = null;
+          this.saveAgain = false;
+        });
+    }, 0);
+    return this.savePromise ?? Promise.resolve();
+  }
+
+  /** 退出路径使用：立即写出尚未落盘的数据 */
+  async flush(): Promise<void> {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    if (this.savePromise) {
+      await this.savePromise.catch(() => undefined);
+    } else if (this.saveAgain) {
+      this.saveAgain = false;
+      await this.saveToFile();
     }
   }
 
@@ -137,18 +189,18 @@ export class ElectronStorageAdapter implements StorageAdapter {
   async set<T>(key: string, value: T): Promise<void> {
     await this.ensureLoaded();
     this.data[key] = value;
-    await this.saveToFile();
+    return this.scheduleSave();
   }
 
   async remove(key: string): Promise<void> {
     await this.ensureLoaded();
     delete this.data[key];
-    await this.saveToFile();
+    return this.scheduleSave();
   }
 
   async clear(): Promise<void> {
     this.data = {};
-    await this.saveToFile();
+    return this.scheduleSave();
   }
 
   async keys(): Promise<string[]> {

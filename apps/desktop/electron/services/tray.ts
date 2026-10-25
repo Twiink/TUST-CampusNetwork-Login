@@ -43,6 +43,7 @@ cDnOMSbuAQi3iFWZxhB+dwC+t1A6c4xj72sYprHKCHFWzjEm5jEU8xi9N44l18wQ/cxB
 export class TrayService {
   private tray: Tray | null = null;
   private status: TrayStatus = 'disconnected';
+  private iconCache = new Map<'connected' | 'disconnected', Electron.NativeImage>();
   private callbacks: TrayCallbacks;
   private iconDir: string;
 
@@ -82,6 +83,11 @@ export class TrayService {
    * 获取图标
    */
   private getIcon(status: 'connected' | 'disconnected'): Electron.NativeImage {
+    const cached = this.iconCache.get(status);
+    if (cached) {
+      return cached;
+    }
+
     // 根据平台选择图标文件
     let iconFiles: string[] = [];
 
@@ -106,6 +112,7 @@ export class TrayService {
           if (process.platform === 'darwin') {
             icon.setTemplateImage(true);
           }
+          this.iconCache.set(status, icon);
           return icon;
         }
       }
@@ -117,6 +124,7 @@ export class TrayService {
     if (process.platform === 'darwin') {
       icon.setTemplateImage(true);
     }
+    this.iconCache.set(status, icon);
     return icon;
   }
 
@@ -124,6 +132,9 @@ export class TrayService {
    * 更新托盘状态
    */
   setStatus(status: TrayStatus): void {
+    if (this.status === status) {
+      return;
+    }
     this.status = status;
 
     if (!this.tray) return;

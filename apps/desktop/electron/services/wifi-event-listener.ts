@@ -22,6 +22,7 @@ import type {
   WifiAllReconnectsFailed,
 } from './wifi-event-listener/reconnect-flow';
 import { probeCurrentSsid } from './wifi-event-listener/ssid-probe';
+import * as nativeModule from '@repo/native';
 
 export type {
   WifiReconnectProgress,
@@ -61,6 +62,8 @@ export class WifiEventListener {
   private wifiSwitcherService?: WifiSwitcherService;
   private configManager?: ConfigManager;
   private timer: ReturnType<typeof setInterval> | null = null;
+  private nativeEventTimer: ReturnType<typeof setTimeout> | null = null;
+  private nativeWatchStarted = false;
   private lastSsid: string | null = null;
   private isRunning = false;
   private isReconnecting = false; // 防止重复重连
@@ -99,16 +102,50 @@ export class WifiEventListener {
       this.logger.error('初始 WiFi 状态检测失败', error);
     });
 
-    // 启动定时检测
+    // 原生事件驱动优先（nl80211 组播 / WlanRegisterNotification / CoreWLAN diff）
+    const nativeWatchSupported = this.startNativeWatch();
+
+    // 兜底轮询：原生事件可用时降频到 5s，不可用时保持原 3s 间隔
+    const fallbackInterval = nativeWatchSupported ? 5000 : this.checkInterval;
     this.timer = setInterval(async () => {
       try {
         await this.checkWifiChange();
       } catch (error) {
         this.logger.error('WiFi 状态检测失败', error);
       }
-    }, this.checkInterval);
+    }, fallbackInterval);
 
-    this.logger.info(`WiFi 事件监听器已启动，检测间隔: ${this.checkInterval}ms`);
+    this.logger.info(
+      `WiFi 事件监听器已启动，原生事件: ${nativeWatchSupported ? '已启用' : '不可用'}，兜底间隔: ${fallbackInterval}ms`
+    );
+  }
+
+  /**
+   * 注册原生网络变化事件。事件到达时立即检测并做 1s 去抖，
+   * 避免 mlme/scan 组播风暴下重复拉全量状态。
+   */
+  private startNativeWatch(): boolean {
+    if (this.nativeWatchStarted || typeof nativeModule.watchNetwork !== 'function') {
+      return this.nativeWatchStarted;
+    }
+    try {
+      const supported = nativeModule.watchNetwork(() => {
+        if (this.nativeEventTimer) {
+          return;
+        }
+        this.nativeEventTimer = setTimeout(() => {
+          this.nativeEventTimer = null;
+          this.checkWifiChange().catch((error) => {
+            this.logger.error('原生 WiFi 事件检测失败', error);
+          });
+        }, 1000);
+      });
+      this.nativeWatchStarted = supported === true;
+    } catch (error) {
+      this.nativeWatchStarted = false;
+      this.logger.debug('原生 WiFi 事件注册失败，使用兜底轮询', { error });
+    }
+    return this.nativeWatchStarted;
   }
 
   /**
@@ -122,6 +159,10 @@ export class WifiEventListener {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = null;
+    }
+    if (this.nativeEventTimer) {
+      clearTimeout(this.nativeEventTimer);
+      this.nativeEventTimer = null;
     }
 
     this.isRunning = false;

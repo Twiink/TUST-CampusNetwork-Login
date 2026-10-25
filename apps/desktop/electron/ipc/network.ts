@@ -13,8 +13,6 @@ import {
 import { AutoReconnectService } from '../services/auto-reconnect';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 
-// 心跳检测倒计时定时器
-let heartbeatCountdownTimer: ReturnType<typeof setInterval> | null = null;
 let heartbeatIntervalMs = 30000;
 let nextHeartbeatTime = 0;
 let lastNetworkStatus: NetworkStatus | null = null;
@@ -102,6 +100,22 @@ export function registerNetworkIPC(
   logger.info('网络IPC处理器已注册');
 }
 
+function broadcastHeartbeatSchedule() {
+  const windows = BrowserWindow.getAllWindows();
+  windows.forEach((win) => {
+    if (!win.isDestroyed()) {
+      win.webContents.send(IPC_EVENTS.HEARTBEAT_COUNTDOWN, {
+        nextHeartbeatAt: nextHeartbeatTime,
+        totalSeconds: Math.floor(heartbeatIntervalMs / 1000),
+        connected: lastNetworkStatus?.connected ?? false,
+        authenticated: lastNetworkStatus?.authenticated ?? false,
+        latency: lastNetworkStatus?.latency ?? null,
+        lastCheckTime: lastNetworkStatus ? Date.now() : null,
+      });
+    }
+  });
+}
+
 /**
  * 启动网络状态轮询
  */
@@ -147,6 +161,7 @@ export function startNetworkPolling(
     // 更新下次心跳时间（如果启用了心跳检测）
     if (enableHeartbeat) {
       nextHeartbeatTime = Date.now() + intervalMs;
+      broadcastHeartbeatSchedule();
     }
   };
 
@@ -160,8 +175,7 @@ export function startNetworkPolling(
     networkDetector.startPolling(statusCallback, { interval: intervalMs, immediate: true });
     logger.success('心跳检测轮询已启动');
 
-    // 启动倒计时广播（每秒发送一次）
-    startHeartbeatCountdown(logger);
+    // 渲染层使用 nextHeartbeatAt 本地推导倒计时，主进程不再 1Hz 唤醒。
   } else {
     // 心跳检测已禁用，但若启用了自动重连，需独立启动轮询（仅供重连使用，不广播倒计时）
     logger.info('心跳检测已禁用，仅执行初始网络状态检测');
@@ -195,46 +209,6 @@ export function startNetworkPolling(
 }
 
 /**
- * 启动心跳检测倒计时广播
- */
-function startHeartbeatCountdown(logger: ReturnType<typeof createLogger>) {
-  // 清除旧的定时器
-  if (heartbeatCountdownTimer) {
-    clearInterval(heartbeatCountdownTimer);
-  }
-
-  // 每秒广播一次剩余时间和当前状态
-  heartbeatCountdownTimer = setInterval(() => {
-    const now = Date.now();
-    const remainingMs = Math.max(0, nextHeartbeatTime - now);
-    const remainingSeconds = Math.ceil(remainingMs / 1000);
-
-    // 广播倒计时和详细信息到所有窗口
-    const windows = BrowserWindow.getAllWindows();
-    windows.forEach((win) => {
-      if (!win.isDestroyed()) {
-        win.webContents.send(IPC_EVENTS.HEARTBEAT_COUNTDOWN, {
-          remainingSeconds,
-          totalSeconds: Math.floor(heartbeatIntervalMs / 1000),
-          // 添加详细的心跳检测信息
-          connected: lastNetworkStatus?.connected ?? false,
-          authenticated: lastNetworkStatus?.authenticated ?? false,
-          latency: lastNetworkStatus?.latency ?? null,
-          lastCheckTime: lastNetworkStatus ? Date.now() : null,
-        });
-      }
-    });
-
-    // 如果倒计时结束，更新下次心跳时间
-    if (remainingMs <= 0) {
-      nextHeartbeatTime = now + heartbeatIntervalMs;
-    }
-  }, 1000);
-
-  logger.info('心跳检测倒计时已启动');
-}
-
-/**
  * 停止网络状态轮询
  */
 export function stopNetworkPolling(
@@ -243,13 +217,6 @@ export function stopNetworkPolling(
 ) {
   logger.info('停止网络监控服务');
   networkDetector.stopPolling();
-
-  // 停止心跳检测倒计时
-  if (heartbeatCountdownTimer) {
-    clearInterval(heartbeatCountdownTimer);
-    heartbeatCountdownTimer = null;
-    logger.info('心跳检测倒计时已停止');
-  }
 
   logger.success('网络状态轮询已停止');
 }

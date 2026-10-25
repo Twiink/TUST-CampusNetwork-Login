@@ -24,6 +24,7 @@ import { registerNotificationIPC } from './notification';
 import { registerUpdaterIPC } from './updater';
 import { AutoReconnectService } from '../services/auto-reconnect';
 import { WifiSwitcherService } from '../services/wifi-switcher';
+import type { ElectronStorageAdapter } from '../services/store';
 
 export { registerTrayIPC, registerAutoLaunchIPC, registerNotificationIPC, registerUpdaterIPC };
 
@@ -39,6 +40,7 @@ export interface AppServices {
   wifiManager: WifiManager;
   networkDetector: NetworkDetector;
   logger: Logger;
+  storage: ElectronStorageAdapter;
 }
 
 /**

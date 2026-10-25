@@ -103,6 +103,7 @@ export async function initAppServices(): Promise<AppServices & { fileLogger: Fil
 
   return {
     fileLogger,
+    storage,
     authService,
     configManager,
     accountManager,

@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, powerMonitor } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -128,6 +128,7 @@ app.on('before-quit', () => {
     stopBackgroundServices(services);
     services.logger.log('info', '应用退出', { category: 'system', source: 'Main' });
   }
+  void services?.storage.flush().catch(() => undefined);
   if (fileLogger) {
     fileLogger.close();
     fileLogger = null;
@@ -277,6 +278,18 @@ app.whenReady().then(async () => {
       },
       services.wifiManager
     );
+
+    // 挂起恢复后路由/DHCP 可能刚变化，立即做一次轻量检测，不等完整心跳周期。
+    powerMonitor.on('resume', () => {
+      services?.networkDetector
+        .getNetworkStatus()
+        .then((status) => {
+          win?.webContents.send('event:network:statusChanged', status);
+        })
+        .catch((error) => {
+          services?.logger.error('系统恢复后的网络检测失败', error);
+        });
+    });
 
     // 启动后台服务（带自动重连和心跳检测设置）
     const pollingInterval =

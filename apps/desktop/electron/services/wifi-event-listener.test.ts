@@ -4,9 +4,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { execWindowsTextMock, networkStatusMock } = vi.hoisted(() => ({
+const { execWindowsTextMock, networkStatusMock, getCurrentWifiSSIDMock } = vi.hoisted(() => ({
   execWindowsTextMock: vi.fn(),
   networkStatusMock: vi.fn(),
+  getCurrentWifiSSIDMock: vi.fn(),
 }));
 
 vi.mock('../utils/win-exec', () => ({
@@ -16,6 +17,14 @@ vi.mock('../utils/win-exec', () => ({
 vi.mock('electron', () => ({
   BrowserWindow: class {},
 }));
+
+vi.mock('./wifi-event-listener/ssid-probe', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./wifi-event-listener/ssid-probe')>();
+  return {
+    ...original,
+    probeCurrentSsid: vi.fn(async () => (await getCurrentWifiSSIDMock()).ssid),
+  };
+});
 
 import { WifiEventListener } from './wifi-event-listener';
 import type { Logger, NetworkDetector, NetworkStatus } from '@repo/shared';
@@ -27,14 +36,6 @@ const makeStatus = (overrides: Partial<NetworkStatus> = {}): NetworkStatus => ({
   ssid: 'TUST-WIFI',
   ...overrides,
 });
-
-const netshWithSsid = (ssid: string) =>
-  [
-    '系统上有 1 个接口',
-    '',
-    `    SSID                   : ${ssid}`,
-    '    状态                   : 已连接',
-  ].join('\r\n');
 
 const makeListener = () => {
   const logger: Logger = {
@@ -70,6 +71,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
   networkStatusMock.mockResolvedValue(makeStatus());
+  getCurrentWifiSSIDMock.mockReset();
 });
 
 afterEach(() => {
@@ -82,7 +84,7 @@ const flush = async () => {
 
 describe('WifiEventListener', () => {
   it('初始检测记录 WiFi 已连接并广播网络状态', async () => {
-    execWindowsTextMock.mockResolvedValue(netshWithSsid('TUST-WIFI'));
+    getCurrentWifiSSIDMock.mockResolvedValue({ connected: true, ssid: 'TUST-WIFI' });
     const { listener, logger, webContentsSend } = makeListener();
 
     listener.start();
@@ -101,10 +103,10 @@ describe('WifiEventListener', () => {
   });
 
   it('SSID 变化视为切换并重新广播', async () => {
-    execWindowsTextMock
-      .mockResolvedValueOnce(netshWithSsid('TUST-WIFI'))
-      .mockResolvedValueOnce(netshWithSsid('TUST-WIFI'))
-      .mockResolvedValue(netshWithSsid('Dorm-5G'));
+    getCurrentWifiSSIDMock
+      .mockResolvedValueOnce({ connected: true, ssid: 'TUST-WIFI' })
+      .mockResolvedValueOnce({ connected: true, ssid: 'TUST-WIFI' })
+      .mockResolvedValue({ connected: true, ssid: 'Dorm-5G' });
     const { listener, logger } = makeListener();
 
     listener.start();
@@ -117,9 +119,9 @@ describe('WifiEventListener', () => {
   });
 
   it('SSID 变为 null 时立即发送断开状态（等待网络检测）', async () => {
-    execWindowsTextMock
-      .mockResolvedValueOnce(netshWithSsid('TUST-WIFI'))
-      .mockResolvedValue('    名称 : WLAN\r\n    状态 : 已断开连接');
+    getCurrentWifiSSIDMock
+      .mockResolvedValueOnce({ connected: true, ssid: 'TUST-WIFI' })
+      .mockResolvedValue({ connected: false, ssid: null });
     const { listener, webContentsSend } = makeListener();
 
     listener.start();
@@ -136,9 +138,9 @@ describe('WifiEventListener', () => {
   });
 
   it('命令持续失败时按断开处理且不抛错', async () => {
-    execWindowsTextMock
-      .mockResolvedValueOnce(netshWithSsid('TUST-WIFI'))
-      .mockRejectedValue(new Error('netsh failed'));
+    getCurrentWifiSSIDMock
+      .mockResolvedValueOnce({ connected: true, ssid: 'TUST-WIFI' })
+      .mockResolvedValue({ connected: false, ssid: null });
     const { listener, logger } = makeListener();
 
     listener.start();
@@ -153,7 +155,7 @@ describe('WifiEventListener', () => {
   });
 
   it('重复 start 幂等：不重复注册定时器', async () => {
-    execWindowsTextMock.mockResolvedValue(netshWithSsid('TUST-WIFI'));
+    getCurrentWifiSSIDMock.mockResolvedValue({ connected: true, ssid: 'TUST-WIFI' });
     const { listener, logger } = makeListener();
 
     listener.start();
@@ -169,7 +171,7 @@ describe('WifiEventListener', () => {
   });
 
   it('setCheckInterval 无效值被忽略，运行中调整生效', async () => {
-    execWindowsTextMock.mockResolvedValue(netshWithSsid('TUST-WIFI'));
+    getCurrentWifiSSIDMock.mockResolvedValue({ connected: true, ssid: 'TUST-WIFI' });
     const { listener, logger } = makeListener();
 
     listener.start();
@@ -185,7 +187,7 @@ describe('WifiEventListener', () => {
   });
 
   it('networkDetector 抛错时不崩溃且不发完整状态', async () => {
-    execWindowsTextMock.mockResolvedValue(netshWithSsid('TUST-WIFI'));
+    getCurrentWifiSSIDMock.mockResolvedValue({ connected: true, ssid: 'TUST-WIFI' });
     networkStatusMock.mockRejectedValue(new Error('detector crashed'));
     const { listener, webContentsSend, logger } = makeListener();
 
@@ -202,7 +204,7 @@ describe('WifiEventListener', () => {
   });
 
   it('窗口销毁后不发送任何事件', async () => {
-    execWindowsTextMock.mockResolvedValue(netshWithSsid('TUST-WIFI'));
+    getCurrentWifiSSIDMock.mockResolvedValue({ connected: true, ssid: 'TUST-WIFI' });
     const { listener, webContentsSend, window } = makeListener();
     window.isDestroyed.mockReturnValue(true);
 

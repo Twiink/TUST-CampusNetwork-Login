@@ -2,12 +2,13 @@
  * WiFi SSID 检测服务 - 跨平台实现
  */
 
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { devLog } from '../utils/dev-log';
 import { execWindowsText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface WifiStatus {
   connected: boolean;
@@ -17,7 +18,29 @@ export interface WifiStatus {
 /**
  * 获取当前连接的 WiFi SSID
  */
+const SSID_PROBE_TTL_MS = 1500;
+let cachedSsidStatus: WifiStatus | null = null;
+let cachedSsidAt = 0;
+let ssidProbePromise: Promise<WifiStatus> | null = null;
+
 export async function getCurrentWifiSSID(): Promise<WifiStatus> {
+  if (Date.now() - cachedSsidAt < SSID_PROBE_TTL_MS && cachedSsidStatus) {
+    return cachedSsidStatus;
+  }
+  if (ssidProbePromise) {
+    return ssidProbePromise;
+  }
+
+  ssidProbePromise = getCurrentWifiSSIDUncached().finally(() => {
+    ssidProbePromise = null;
+  });
+  const status = await ssidProbePromise;
+  cachedSsidStatus = status;
+  cachedSsidAt = Date.now();
+  return status;
+}
+
+async function getCurrentWifiSSIDUncached(): Promise<WifiStatus> {
   const platform = process.platform;
 
   try {
@@ -134,7 +157,9 @@ async function getWindowsWifiSSID(): Promise<WifiStatus> {
 async function getLinuxWifiSSID(): Promise<WifiStatus> {
   try {
     // 使用 nmcli 获取当前连接的 WiFi
-    const { stdout } = await execAsync('nmcli -t -f active,ssid dev wifi');
+    const { stdout } = await execFileAsync('nmcli', ['-t', '-f', 'active,ssid', 'dev', 'wifi'], {
+      timeout: 3000,
+    });
 
     // 查找活跃的连接
     const lines = stdout.split('\n');
@@ -151,7 +176,7 @@ async function getLinuxWifiSSID(): Promise<WifiStatus> {
   } catch {
     // 备选方法: iwgetid
     try {
-      const { stdout } = await execAsync('iwgetid -r');
+      const { stdout } = await execFileAsync('iwgetid', ['-r'], { timeout: 3000 });
       const ssid = stdout.trim();
       if (ssid) {
         return { connected: true, ssid };

@@ -5,13 +5,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecException } from 'node:child_process';
 
-const { execMock } = vi.hoisted(() => ({
+const { execMock, nativeCurrentWifiMock } = vi.hoisted(() => ({
   execMock: vi.fn(),
+  nativeCurrentWifiMock: vi.fn(() => null),
 }));
 
 vi.mock('node:child_process', () => ({
-  default: { exec: execMock },
+  default: { exec: execMock, execFile: execMock },
   exec: execMock,
+  execFile: execMock,
 }));
 
 vi.mock('../utils/win-exec', () => ({
@@ -23,7 +25,11 @@ vi.mock('../utils/dev-log', () => ({
   devLog: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-import { DesktopWifiAdapter } from './wifi-adapter';
+vi.mock('@repo/native', () => ({
+  currentWifi: nativeCurrentWifiMock,
+}));
+
+import { DesktopWifiAdapter, resetNativeWifiModuleForTests } from './wifi-adapter';
 
 type ExecCallback = (
   error: ExecException | null,
@@ -70,7 +76,9 @@ const makeAdapter = (platform: NodeJS.Platform): DesktopWifiAdapter => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  nativeCurrentWifiMock.mockReturnValue(null);
   mockExecOutput('');
+  resetNativeWifiModuleForTests();
 });
 
 describe('DesktopWifiAdapter.getCurrentWifi', () => {
@@ -178,12 +186,13 @@ describe('DesktopWifiAdapter.getCurrentWifi', () => {
     expect(await adapter.getCurrentWifi()).toBeNull();
   });
 
-  it('macOS: system_profiler 失败后回退 networksetup 解析 SSID', async () => {
+  it('macOS: airport 失败后回退 networksetup 解析 SSID', async () => {
     const adapter = makeAdapter('darwin');
     execMock.mockImplementation((...args: unknown[]) => {
-      const command = args[0] as string;
+      const command = typeof args[0] === 'string' ? args[0] : (args[0] as string[]).join(' ');
+      void command;
       const callback = extractCallback(args);
-      if (command.includes('system_profiler')) {
+      if (command.startsWith('/System/Library')) {
         const error = new Error('timeout') as ExecException;
         callback(error, { stdout: '', stderr: 'timeout' });
         return;
@@ -201,24 +210,17 @@ describe('DesktopWifiAdapter.getCurrentWifi', () => {
     });
   });
 
-  it('macOS: system_profiler 主路径解析 SSID/信号/速率/信道', async () => {
+  it('macOS: airport 主路径解析 SSID/信号/速率/信道', async () => {
     const adapter = makeAdapter('darwin');
-    const profiler = [
-      '          Current Network Information:',
-      '            TUST-Mac :',
-      '              PHY Mode: 802.11ax',
-      '              Channel: 36 (5GHz, 80MHz)',
-      '              Signal / Noise: -45 dBm / -90 dBm',
-      '              Transmit Rate: 1200',
-      '              Security: WPA3 Personal',
-      '          Other Local Wi-Fi Networks:',
-      '            Neighbor :',
-      '              Signal / Noise: -80 dBm / -90 dBm',
-      '          Interfaces:',
-      '        en0:',
-      '          Current Network: TUST-Mac',
-    ].join('\n');
-    mockExecOutput(profiler);
+    mockExecOutput(
+      [
+        '     agrCtlRSSI: -45',
+        '     lastTxRate: 1200',
+        '          channel: 36,80',
+        '            security: WPA3',
+        '                SSID: TUST-Mac',
+      ].join('\n')
+    );
 
     const wifi = await adapter.getCurrentWifi();
 
@@ -226,25 +228,54 @@ describe('DesktopWifiAdapter.getCurrentWifi', () => {
       ssid: 'TUST-Mac',
       connected: true,
     });
-    // 信号按 RSSI(-45) 折算为百分比，速率与频段来自键值
-    expect(wifi?.signalStrength).toBeGreaterThan(0);
+    expect(wifi?.signalStrength).toBe(55);
     expect(wifi?.linkSpeed).toBe(1200);
     expect(wifi?.frequency).toBe(5000);
   });
 
-  it('macOS: system_profiler 成功但未连接（无 SSID 块）时回退 networksetup，且其也失败则返回 null', async () => {
+  it('macOS: airport 成功但未连接时回退 networksetup，且其也失败则返回 null', async () => {
     const adapter = makeAdapter('darwin');
     execMock.mockImplementation((...args: unknown[]) => {
-      const command = args[0] as string;
+      const command = typeof args[0] === 'string' ? args[0] : (args[0] as string[]).join(' ');
+      void command;
       const callback = extractCallback(args);
-      if (command.includes('system_profiler')) {
-        callback(null, { stdout: '        en0:\n          Current Network: null', stderr: '' });
+      if (command.includes('airport')) {
+        callback(null, { stdout: '     agrCtlRSSI: 0\n', stderr: '' });
         return;
       }
       callback(null, { stdout: 'Current Wi-Fi Network: （未连接）', stderr: '' });
     });
 
     expect(await adapter.getCurrentWifi()).toBeNull();
+  });
+
+  it('Linux: 解析 nmcli active 行并返回 WiFi 详情', async () => {
+    const adapter = makeAdapter('linux');
+    execMock.mockImplementation((...args: unknown[]) => {
+      const argv = Array.isArray(args[0]) ? args[0] : (args[1] as string[] | undefined);
+      const callback = extractCallback(args);
+      if (argv?.join(' ').includes('wifi')) {
+        callback(null, {
+          stdout:
+            'yes:TUST-5G:86:866:36:5180:WPA2:00\\:11\\:22\\:33\\:44\\:55\nno:Other:40:100:6:2437:WPA1:00\\:11\\:22\\:33\\:44\\:66\n',
+          stderr: '',
+        });
+        return;
+      }
+      callback(null, { stdout: '', stderr: '' });
+    });
+
+    const wifi = await adapter.getCurrentWifi();
+
+    expect(wifi).toMatchObject({
+      ssid: 'TUST-5G',
+      signalStrength: 86,
+      linkSpeed: 866,
+      frequency: 5180,
+      channel: 36,
+      security: 'WPA2',
+      connected: true,
+    });
   });
 
   it('不支持的平台返回 null', async () => {

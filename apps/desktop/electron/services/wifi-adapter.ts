@@ -1,19 +1,86 @@
 /**
  * 桌面端 WiFi 适配器实现
- * 支持 Windows 和 macOS
+ * 支持 Windows、macOS 和 Linux
  */
 
 import type { WifiAdapter, WifiInfo, WifiDetails, NetworkInfo } from '@repo/shared';
 import { resolveMacOSWifiInfo } from './wifi-adapter/macos';
 import { resolveWindowsWifiInfo } from './wifi-adapter/windows';
+import { resolveLinuxWifiInfo, resolveLinuxNetworkInfo } from './wifi-adapter/linux';
 import { resolveMacOSNetworkInfo, resolveWindowsNetworkInfo } from './wifi-adapter/netinfo';
 import { devLog } from '../utils/dev-log';
+
+// vitest 里 vi.mock 无法拦截 CommonJS require，这里用静态 import + 惰性包装。
+import * as nativeEntry from '@repo/native';
+
+interface NativeWifiSnapshot {
+  ssid?: string | null;
+  bssid?: string | null;
+  rssi?: number | null;
+  linkSpeed?: number | null;
+  channel?: number | null;
+  frequency?: number | null;
+  security?: string | null;
+}
+
+let nativeModule:
+  | {
+      currentWifi?: () => NativeWifiSnapshot | null;
+      networkInfo?: () => unknown | null;
+    }
+  | null
+  | undefined;
+
+/**
+ * 优先加载 Rust nl80211/CoreWLAN 原生模块；失败自动回退 TS spawn 路径。
+ */
+export function resetNativeWifiModuleForTests(): void {
+  nativeModule = undefined;
+}
+
+function loadNativeModule() {
+  if (nativeModule !== undefined) return nativeModule;
+  try {
+    nativeModule = nativeEntry as unknown as typeof nativeModule;
+  } catch {
+    nativeModule = null;
+  }
+  return nativeModule;
+}
+
+async function resolveNativeWifiInfo(): Promise<WifiInfo | null> {
+  const native = loadNativeModule();
+  if (!native?.currentWifi) return null;
+  const snapshot = native.currentWifi();
+  if (!snapshot?.ssid) return null;
+  return {
+    ssid: snapshot.ssid,
+    bssid: snapshot.bssid || undefined,
+    signalStrength:
+      snapshot.rssi !== null && snapshot.rssi !== undefined
+        ? Math.max(0, Math.min(100, Math.round(((snapshot.rssi + 100) / 60) * 100)))
+        : 0,
+    linkSpeed: snapshot.linkSpeed || 0,
+    frequency: snapshot.frequency || 0,
+    channel: snapshot.channel || undefined,
+    security: snapshot.security || undefined,
+    connected: true,
+  };
+}
+
+/**
+ * 桌面端 WiFi 适配器
+ */
+const WIFI_SNAPSHOT_TTL_MS = 1500;
 
 /**
  * 桌面端 WiFi 适配器
  */
 export class DesktopWifiAdapter implements WifiAdapter {
   private platform: NodeJS.Platform;
+  private snapshot: WifiInfo | null = null;
+  private snapshotAt = 0;
+  private snapshotPromise: Promise<WifiInfo | null> | null = null;
 
   constructor() {
     this.platform = process.platform;
@@ -23,18 +90,39 @@ export class DesktopWifiAdapter implements WifiAdapter {
    * 获取当前连接的 WiFi 信息
    */
   async getCurrentWifi(): Promise<WifiInfo | null> {
-    try {
-      switch (this.platform) {
-        case 'darwin':
-          return await resolveMacOSWifiInfo();
-        case 'win32':
-          return await resolveWindowsWifiInfo();
-        default:
-          return null;
+    const now = Date.now();
+    if (now - this.snapshotAt < WIFI_SNAPSHOT_TTL_MS) {
+      return this.snapshot;
+    }
+    if (this.snapshotPromise) {
+      return this.snapshotPromise;
+    }
+
+    this.snapshotPromise = (async () => {
+      try {
+        switch (this.platform) {
+          case 'darwin':
+            return await resolveMacOSWifiInfo();
+          case 'win32':
+            return await resolveWindowsWifiInfo();
+          case 'linux':
+            return (await resolveNativeWifiInfo()) ?? (await resolveLinuxWifiInfo());
+          default:
+            return null;
+        }
+      } catch (error) {
+        devLog.error('Failed to get WiFi info:', error);
+        return null;
       }
-    } catch (error) {
-      devLog.error('Failed to get WiFi info:', error);
-      return null;
+    })();
+
+    try {
+      const result = await this.snapshotPromise;
+      this.snapshot = result;
+      this.snapshotAt = Date.now();
+      return result;
+    } finally {
+      this.snapshotPromise = null;
     }
   }
 
@@ -118,6 +206,8 @@ export class DesktopWifiAdapter implements WifiAdapter {
           return await resolveMacOSNetworkInfo();
         case 'win32':
           return await resolveWindowsNetworkInfo();
+        case 'linux':
+          return await resolveLinuxNetworkInfo();
         default:
           return {};
       }
