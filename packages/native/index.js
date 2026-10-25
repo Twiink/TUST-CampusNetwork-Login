@@ -1,20 +1,25 @@
 'use strict';
 
-const platform = process.platform;
-const arch = process.arch;
+const { resolveNativeRequest } = require('./resolve-native.cjs');
 
-function binaryName() {
-  if (platform === 'linux' && arch === 'x64') return 'netmate_native.linux-x64-gnu.node';
-  if (platform === 'linux' && arch === 'arm64') return 'netmate_native.linux-arm64-gnu.node';
-  if (platform === 'darwin' && arch === 'arm64') return 'netmate_native.darwin-arm64.node';
-  if (platform === 'darwin' && arch === 'x64') return 'netmate_native.darwin-x64.node';
-  if (platform === 'win32' && arch === 'x64') return 'netmate_native.win32-x64-msvc.node';
-  return null;
+function loadNativeModule() {
+  const request = resolveNativeRequest(process.platform, process.arch);
+  if (request.error) {
+    throw new Error(request.error);
+  }
+  return require(request.request);
 }
 
-const name = binaryName();
-if (!name) {
-  throw new Error(`Unsupported platform: ${platform}-${arch}`);
+let nativeModule;
+try {
+  nativeModule = loadNativeModule();
+} catch (error) {
+  nativeModule = {
+    __loadError:
+      error instanceof Error
+        ? error.message
+        : `Unable to load native module on ${process.platform}-${process.arch}`,
+  };
 }
 
-module.exports = require(`./linux-x64-gnu/${name}`);
+module.exports = nativeModule;

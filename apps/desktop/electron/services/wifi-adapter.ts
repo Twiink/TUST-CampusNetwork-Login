@@ -23,6 +23,12 @@ interface NativeWifiSnapshot {
   security?: string | null;
 }
 
+type NativeModule = {
+  currentWifi?: () => NativeWifiSnapshot | null;
+  networkInfo?: () => unknown | null;
+  __loadError?: string;
+};
+
 let nativeModule:
   | {
       currentWifi?: () => NativeWifiSnapshot | null;
@@ -41,7 +47,7 @@ export function resetNativeWifiModuleForTests(): void {
 function loadNativeModule() {
   if (nativeModule !== undefined) return nativeModule;
   try {
-    nativeModule = nativeEntry as unknown as typeof nativeModule;
+    nativeModule = nativeEntry as unknown as NativeModule;
   } catch {
     nativeModule = null;
   }
@@ -102,9 +108,9 @@ export class DesktopWifiAdapter implements WifiAdapter {
       try {
         switch (this.platform) {
           case 'darwin':
-            return await resolveMacOSWifiInfo();
+            return (await resolveNativeWifiInfo()) ?? (await resolveMacOSWifiInfo());
           case 'win32':
-            return await resolveWindowsWifiInfo();
+            return (await resolveNativeWifiInfo()) ?? (await resolveWindowsWifiInfo());
           case 'linux':
             return (await resolveNativeWifiInfo()) ?? (await resolveLinuxWifiInfo());
           default:
