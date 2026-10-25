@@ -15,6 +15,8 @@
     buildResources: 'build',
   },
   files: ['dist/**', 'dist-electron/**', 'package.json', '!**/*.map', '!**/*.md', '!**/*.d.ts'],
+  // Rust nl80211/CoreWLAN 原生模块必须解包到文件系统，Node 才能通过 require 加载 .node。
+  asarUnpack: ['**/*.node'],
   // electron-updater 依赖此配置生成 app-update.yml，缺失会导致“publish configuration missing”。
   // 构建脚本统一带 --publish never，发布仍由 release.yml 主导。
   publish: {

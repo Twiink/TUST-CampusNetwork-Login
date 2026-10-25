@@ -160,6 +160,24 @@ jobs:
       - name: 准备发布版本号
         run: pnpm release:prepare-version -- ${{ needs.resolve-release.outputs.tag }}
 
+      - name: 设置 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Cargo 构建产物
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('packages/native/Cargo.lock', 'Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: 构建原生模块
+        run: |
+          cargo build -p netmate-native --release
+          mkdir -p packages/native/win32-x64
+          cp target/release/netmate_native.dll packages/native/win32-x64/netmate_native.win32-x64-msvc.node
       - name: 构建 Windows 安装包
         run: pnpm dist:win
 
@@ -206,6 +224,27 @@ jobs:
       - name: 准备发布版本号
         run: pnpm release:prepare-version -- ${{ needs.resolve-release.outputs.tag }}
 
+      - name: 设置 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Cargo 构建产物
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('packages/native/Cargo.lock', 'Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: 构建原生模块
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          mkdir -p packages/native/darwin-arm64 packages/native/darwin-x64
+          cargo build -p netmate-native --release --target aarch64-apple-darwin
+          cargo build -p netmate-native --release --target x86_64-apple-darwin
+          cp target/aarch64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-arm64/netmate_native.darwin-arm64.node
+          cp target/x86_64-apple-darwin/release/libnetmate_native.dylib packages/native/darwin-x64/netmate_native.darwin-x64.node
       - name: 构建 macOS 安装包
         run: pnpm dist:mac
 
@@ -253,6 +292,24 @@ jobs:
       - name: 准备发布版本号
         run: pnpm release:prepare-version -- ${{ needs.resolve-release.outputs.tag }}
 
+      - name: 设置 Rust 工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 缓存 Cargo 构建产物
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: rust-${{ runner.os }}-${{ hashFiles('packages/native/Cargo.lock', 'Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: 构建原生模块
+        run: |
+          cargo build -p netmate-native --release
+          mkdir -p packages/native/linux-x64-gnu
+          cp target/release/libnetmate_native.so packages/native/linux-x64-gnu/netmate_native.linux-x64-gnu.node
       - name: 构建 Linux 安装包
         run: pnpm dist:linux
 

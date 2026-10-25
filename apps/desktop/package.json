@@ -21,7 +21,9 @@
   },
   "description": "NetMate - 校园网自动登录助手",
   "homepage": "https://github.com/Twiink/TUST-Campusnet-Login#readme",
-  "dependencies": {},
+  "dependencies": {
+    "@repo/native": "workspace:*"
+  },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@repo/shared": "workspace:*",
