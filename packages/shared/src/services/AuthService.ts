@@ -84,7 +84,7 @@ export class AuthService {
       success: isSuccess,
       message: msg || (isSuccess ? (indicatesOnline ? '账号已在线' : '登录成功') : '登录失败'),
       code,
-      rawResponse: response,
+      rawResponse: response.length > 2048 ? response.slice(0, 2048) : response,
     };
   }
 
@@ -112,7 +112,10 @@ export class AuthService {
   /**
    * 执行登录
    */
-  async login(config: LoginConfig): Promise<LoginResult> {
+  async login(
+    config: LoginConfig,
+    options: { verifyConnectivity?: boolean } = {}
+  ): Promise<LoginResult> {
     const userAccount = buildUserAccount(config.userAccount, config.isp);
     const ispName =
       config.isp === 'campus'
@@ -147,12 +150,12 @@ export class AuthService {
       if (result.success) {
         // 二次连通性校验：响应层成功后再确认是否真正联网。
         // 对齐参考实现的保守策略——连通性失败不推翻登录结果，仅在消息/日志标注。
-        const reachable = await this.verifyConnectivity();
-        if (reachable) {
+        const reachable = options.verifyConnectivity !== false && (await this.verifyConnectivity());
+        if (reachable || options.verifyConnectivity === false) {
           this.logger?.log('success', `登录成功: ${result.message}`, {
             category: 'auth',
             source: 'AuthService',
-            data: { 用户: userAccount, 连通性: '已确认' },
+            data: { 用户: userAccount, 连通性: reachable ? '已确认' : '未校验' },
           });
         } else {
           this.logger?.log('warn', `登录响应成功，但连通性未确认`, {
@@ -194,17 +197,14 @@ export class AuthService {
    * 任一探测点返回 204 即视为已联网。全部失败返回 false（不抛异常）。
    */
   private async verifyConnectivity(): Promise<boolean> {
-    for (const url of DEFAULT_CONNECTIVITY_CHECK_URLS) {
-      try {
-        const response = await httpGet(url, { timeout: 5000 });
-        if (response.status === 204) {
-          return true;
-        }
-      } catch {
-        // 尝试下一个探测点
-      }
-    }
-    return false;
+    const results = await Promise.all(
+      DEFAULT_CONNECTIVITY_CHECK_URLS.map((url) =>
+        httpGet(url, { timeout: 3000 })
+          .then((response) => response.status === 204)
+          .catch(() => false)
+      )
+    );
+    return results.some(Boolean);
   }
 
   /**
@@ -259,9 +259,11 @@ export class AuthService {
    */
   async loginWithAccounts(
     accounts: AccountConfig[],
-    networkConfig: Omit<LoginConfig, 'serverUrl' | 'userAccount' | 'userPassword' | 'isp'>
+    networkConfig: Omit<LoginConfig, 'serverUrl' | 'userAccount' | 'userPassword' | 'isp'>,
+    options: { verifyConnectivity?: boolean } = {}
   ): Promise<MultiAccountLoginResult> {
     const attempts: MultiAccountLoginAttempt[] = [];
+    const verifyConnectivity = options.verifyConnectivity ?? true;
 
     if (accounts.length === 0) {
       return {
@@ -272,13 +274,16 @@ export class AuthService {
     }
 
     for (const account of accounts) {
-      const result = await this.login({
-        ...networkConfig,
-        serverUrl: account.serverUrl,
-        userAccount: account.username,
-        userPassword: account.password,
-        isp: account.isp,
-      });
+      const result = await this.login(
+        {
+          ...networkConfig,
+          serverUrl: account.serverUrl,
+          userAccount: account.username,
+          userPassword: account.password,
+          isp: account.isp,
+        },
+        { verifyConnectivity }
+      );
 
       attempts.push({
         accountId: account.id,

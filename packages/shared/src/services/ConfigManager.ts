@@ -65,7 +65,7 @@ export class ConfigManager {
             心跳间隔: `${this.config.settings.heartbeatIntervalSeconds}秒`,
           });
 
-          if (JSON.stringify(stored) !== JSON.stringify(normalized)) {
+          if (this.needsMigration(stored, normalized)) {
             this.logger?.info('检测到旧配置结构，已自动迁移并保存');
             await this.save(normalized);
           }
@@ -97,6 +97,14 @@ export class ConfigManager {
         error instanceof Error ? error.message : '加载配置失败'
       );
     }
+  }
+
+  private needsMigration(stored: unknown, normalized: AppConfig): boolean {
+    const storedVersion = (stored as { version?: number }).version;
+    if (storedVersion === (normalized.version ?? 1)) {
+      return false;
+    }
+    return JSON.stringify(stored) !== JSON.stringify(normalized);
   }
 
   /**
@@ -176,7 +184,8 @@ export class ConfigManager {
         : this.config!.settings,
     };
 
-    await this.save(normalizeAppConfig(this.config));
+    // normalize 只在显式传入 config 的 save() 中执行，避免每次 update 深拷贝整份配置。
+    await this.save();
 
     this.logger?.success('应用配置更新成功');
 

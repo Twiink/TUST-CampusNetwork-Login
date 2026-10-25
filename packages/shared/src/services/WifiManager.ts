@@ -49,6 +49,8 @@ function compareWifiPriority(left: WifiConfig, right: WifiConfig): number {
  */
 export class WifiManager {
   private logger: Logger | null;
+  private sortedCache: WifiConfig[] | null = null;
+  private cacheSource: WifiConfig[] | null = null;
 
   constructor(
     private configManager: ConfigManager,
@@ -62,7 +64,15 @@ export class WifiManager {
    */
   getWifiConfigs(): WifiConfig[] {
     const config = this.configManager.getConfig();
-    return [...(config?.wifiList || [])].sort(compareWifiPriority);
+    if (!config) {
+      return [];
+    }
+    if (this.sortedCache && this.cacheSource === config.wifiList) {
+      return this.sortedCache;
+    }
+    this.sortedCache = [...config.wifiList].sort(compareWifiPriority);
+    this.cacheSource = config.wifiList;
+    return this.sortedCache;
   }
 
   /**

@@ -29,6 +29,7 @@ export type { NetworkDetectorOptions, LatencyTarget };
 export class NetworkDetector {
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private isPolling = false;
+  private tickInFlight = false;
   private wifiAdapter?: WifiAdapter;
   private logger: Logger | null;
   private options: ResolvedNetworkDetectorOptions;
@@ -47,7 +48,7 @@ export class NetworkDetector {
           ? options.connectivityCheckUrls
           : DEFAULT_CONNECTIVITY_CHECK_URLS),
       ],
-      connectivityTimeoutMs: options.connectivityTimeoutMs ?? 5000,
+      connectivityTimeoutMs: options.connectivityTimeoutMs ?? 3000,
       pingTargets: pingTargets.map((target) => ({ ...target })),
       latencyTimeoutMs: options.latencyTimeoutMs ?? 5000,
     };
@@ -64,59 +65,35 @@ export class NetworkDetector {
    * 检查网络连通性 (是否有互联网连接)
    */
   async checkConnectivity(): Promise<boolean> {
-    this.logger?.debug('开始检查网络连通性');
-
-    for (const url of this.options.connectivityCheckUrls) {
-      try {
-        this.logger?.debug(`尝试连接: ${url}`);
-        const response = await httpGet(url, { timeout: this.options.connectivityTimeoutMs });
-        // 仅信任严格的 204 响应：captive portal 拦截会返回 200 门户页，
-        // 用 response.ok 判定会将"未认证"误判为"已认证"。
-        if (response.status === 204) {
-          this.logger?.success(`网络连通性检查成功`, { URL: url, 状态码: response.status });
-          return true;
-        }
-        this.logger?.debug(`探测点未返回 204（可能被门户拦截）`, {
-          URL: url,
-          状态码: response.status,
-        });
-      } catch (error) {
-        this.logger?.debug(`连接失败: ${url}`, {
-          错误: error instanceof Error ? error.message : String(error),
-        });
-        // 继续尝试下一个 URL
-      }
-    }
-
-    this.logger?.warn('网络连通性检查失败：所有检测URL均不可达');
-    return false;
+    // 严格 204 语义不变；所有探测点并行，最坏耗时等于单点超时而不是串行累加。
+    const urls = this.options.connectivityCheckUrls;
+    const results = await Promise.all(
+      urls.map((url) =>
+        httpGet(url, { timeout: this.options.connectivityTimeoutMs })
+          .then((response) => response.status === 204)
+          .catch(() => false)
+      )
+    );
+    const connected = results.some(Boolean);
+    this.logger?.debug('网络探测完成', {
+      探测点数: urls.length,
+      结果: connected ? '在线' : '离线',
+    });
+    return connected;
   }
 
   /**
    * 检查是否已通过校园网认证
    */
-  async isAuthenticated(): Promise<boolean> {
-    this.logger?.debug('检查校园网认证状态');
-
-    try {
-      // 检查是否能访问互联网
-      const hasInternet = await this.checkConnectivity();
-      if (hasInternet) {
-        this.logger?.success('校园网认证检查：已认证');
-      } else {
-        this.logger?.info('校园网认证检查：未认证或网络不可达');
-      }
-      return hasInternet;
-    } catch (error) {
-      this.logger?.error('校园网认证检查异常', {
-        错误: error instanceof Error ? error.message : String(error),
-      });
-      return false;
+  async isAuthenticated(recentStatus?: NetworkStatus): Promise<boolean> {
+    if (recentStatus) {
+      return recentStatus.connected;
     }
+    return this.checkConnectivity();
   }
 
   /**
-   * 测量网络延迟(委托 latency.ts,多目标按序回退)
+   * 测量网络延迟(委托 latency.ts,多目标并行)
    */
   async measureLatency(): Promise<LatencyResult> {
     this.logger?.debug('开始测量网络延迟');
@@ -151,64 +128,55 @@ export class NetworkDetector {
    * @returns 当前 WiFi 状态
    */
   async getCurrentWifiStatus(): Promise<NetworkStatus> {
-    this.logger?.debug('开始获取当前WiFi状态');
+    const [connectedResult, wifiResult] = await Promise.allSettled([
+      this.checkConnectivity(),
+      this.wifiAdapter ? this.wifiAdapter.getWifiDetails() : Promise.resolve(null),
+    ]);
+    const connected = connectedResult.status === 'fulfilled' ? connectedResult.value : false;
+    const wifiDetails = wifiResult.status === 'fulfilled' ? wifiResult.value : null;
 
-    const connected = await this.checkConnectivity();
-    const authenticated = connected;
-
-    // 如果有 WiFi 适配器，获取 WiFi 详细信息
-    if (this.wifiAdapter) {
-      try {
-        // 使用 getWifiDetails() 而不是直接调用适配器，这样会包含延迟测试
-        const wifiDetails = await this.getWifiDetails();
-        if (wifiDetails) {
-          this.logger?.success('WiFi状态获取成功', {
-            WiFi已连接: wifiDetails.connected,
-            SSID: wifiDetails.ssid,
-            信号强度: `${wifiDetails.signalStrength}%`,
-            连接速度: `${wifiDetails.linkSpeed}Mbps`,
-            延迟: wifiDetails.latency ? `${wifiDetails.latency.value}ms` : '未测试',
-            认证状态: authenticated ? '已认证' : '未认证',
-          });
-
-          return {
-            connected,
-            authenticated,
-            wifiConnected: wifiDetails.connected,
-            ssid: wifiDetails.ssid,
-            signalStrength: wifiDetails.signalStrength,
-            linkSpeed: wifiDetails.linkSpeed,
-            frequency: wifiDetails.frequency,
-            latency: wifiDetails.latency,
-            ip: wifiDetails.ipv4,
-            ipv6: wifiDetails.ipv6,
-            mac: wifiDetails.mac,
-            gateway: wifiDetails.gateway,
-            dns: wifiDetails.dns?.[0],
-            subnetMask: wifiDetails.subnetMask,
-            bssid: wifiDetails.bssid,
-            channel: wifiDetails.channel,
-            security: wifiDetails.security,
-          };
-        }
-      } catch (error) {
-        this.logger?.error('获取WiFi详细信息失败', {
-          错误: error instanceof Error ? error.message : String(error),
-        });
-      }
+    if (!connected || !wifiDetails) {
+      const status: NetworkStatus = {
+        connected,
+        authenticated: connected,
+        wifiConnected: wifiDetails?.connected ?? false,
+        ssid: wifiDetails?.ssid,
+      };
+      this.logger?.debug('网络状态检测完成', {
+        网络连接: connected ? '在线' : '离线',
+        WiFi状态: wifiDetails ? '已获取' : '不可用',
+      });
+      return status;
     }
 
-    // 如果没有 WiFi 适配器或获取失败，返回基本状态
-    this.logger?.info('WiFi状态（基本）', {
-      网络连接: connected ? '已连接' : '未连接',
-      认证状态: authenticated ? '已认证' : '未认证',
-    });
-
-    return {
+    // WiFi 详情和连通性已并行完成；只有在线时才需要额外测延迟。
+    const latency = await this.measureLatency();
+    const status: NetworkStatus = {
       connected,
-      authenticated,
-      wifiConnected: false,
+      authenticated: connected,
+      wifiConnected: wifiDetails.connected,
+      ssid: wifiDetails.ssid,
+      signalStrength: wifiDetails.signalStrength,
+      linkSpeed: wifiDetails.linkSpeed,
+      frequency: wifiDetails.frequency,
+      latency,
+      ip: wifiDetails.ipv4,
+      ipv6: wifiDetails.ipv6,
+      mac: wifiDetails.mac,
+      gateway: wifiDetails.gateway,
+      dns: wifiDetails.dns?.[0],
+      subnetMask: wifiDetails.subnetMask,
+      bssid: wifiDetails.bssid,
+      channel: wifiDetails.channel,
+      security: wifiDetails.security,
     };
+    this.logger?.debug('网络状态检测完成', {
+      网络连接: '在线',
+      SSID: status.ssid || '未知',
+      信号强度: status.signalStrength,
+      延迟: `${latency.value}ms`,
+    });
+    return status;
   }
 
   /**
@@ -288,7 +256,7 @@ export class NetworkDetector {
       this.getNetworkStatus()
         .then((status) => {
           this.logger?.debug('首次网络状态检测完成');
-          callback(status);
+          void this.dispatchPollingResult(callback, status);
         })
         .catch((error) => {
           this.logger?.error('首次网络状态检测失败', {
@@ -299,20 +267,42 @@ export class NetworkDetector {
     }
 
     // 定时轮询
-    this.pollingTimer = setInterval(async () => {
-      try {
-        this.logger?.debug('定时轮询：开始检测网络状态');
-        const status = await this.getNetworkStatus();
-        callback(status);
-      } catch (error) {
-        this.logger?.error('定时轮询：网络状态检测失败', {
-          错误: error instanceof Error ? error.message : String(error),
-        });
-        callback({ connected: false, authenticated: false, wifiConnected: false });
-      }
+    this.pollingTimer = setInterval(() => {
+      void this.runPollingTick(callback);
     }, options.interval);
 
     this.logger?.success('网络状态轮询已启动');
+  }
+
+  private async runPollingTick(callback: NetworkCallback): Promise<void> {
+    if (this.tickInFlight) {
+      this.logger?.warn('上一轮网络检测未完成，跳过本轮检测');
+      return;
+    }
+    this.tickInFlight = true;
+    try {
+      callback(await this.getNetworkStatus());
+    } catch (error) {
+      this.logger?.error('定时轮询：网络状态检测失败', {
+        错误: error instanceof Error ? error.message : String(error),
+      });
+      callback({ connected: false, authenticated: false, wifiConnected: false });
+    } finally {
+      this.tickInFlight = false;
+    }
+  }
+
+  private async dispatchPollingResult(
+    callback: NetworkCallback,
+    status: NetworkStatus
+  ): Promise<void> {
+    try {
+      await callback(status);
+    } catch (error) {
+      this.logger?.error('网络状态回调执行失败', {
+        错误: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**

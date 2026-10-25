@@ -7,7 +7,7 @@
  */
 export interface HttpRequestOptions {
   /** 请求方法 */
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD';
   /** 请求头 */
   headers?: Record<string, string>;
   /** 请求体 */
@@ -86,7 +86,7 @@ export async function httpRequest<T = unknown>(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const requestInit: RequestInit = {
+    const requestInit: RequestInit & { redirect?: 'manual' | 'follow' | 'error' } = {
       method,
       headers: {
         'User-Agent': DEFAULT_USER_AGENT,
@@ -96,8 +96,9 @@ export async function httpRequest<T = unknown>(
       signal: controller.signal,
     };
 
+    // fetch 不支持通过自定义 header 禁止重定向，必须使用 Request.redirect。
     if (!followRedirects) {
-      (requestInit.headers as Record<string, string>)['X-NetMate-No-Redirect'] = 'true';
+      requestInit.redirect = 'manual';
     }
 
     if (body) {
@@ -110,7 +111,8 @@ export async function httpRequest<T = unknown>(
     }
 
     const response = await fetch(url, requestInit);
-    const rawText = await response.text();
+    // 204/HEAD 没有响应体；避免为探测请求分配并读取 body 字符串。
+    const rawText = response.status === 204 || method === 'HEAD' ? '' : await response.text();
 
     // 尝试解析 JSON
     let data: T;

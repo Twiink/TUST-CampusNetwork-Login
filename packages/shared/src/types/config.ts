@@ -65,6 +65,8 @@ export interface AppSettings {
 }
 
 export interface AppConfig {
+  /** 配置结构版本；预留给迁移判断，不参与业务逻辑 */
+  version?: number;
   accounts: AccountConfig[];
   currentAccountId: string | null;
   wifiList: WifiConfig[];
