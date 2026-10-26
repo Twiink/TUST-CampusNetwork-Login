@@ -38,6 +38,8 @@ function createService(
   overrides: {
     loginResult?: MultiAccountLoginResult | LoginResult;
     currentAccount?: AccountConfig | null;
+    failureThreshold?: number;
+    onReconnectSuccess?: (info: { recovered: boolean }) => void;
   } = {}
 ) {
   const loginWithAccounts = vi.fn().mockResolvedValue(
@@ -65,10 +67,17 @@ function createService(
     getAccountById: vi.fn(() => null),
   } as never;
 
-  const service = new AutoReconnectService(authService, accountManager, logger, {
-    maxRetries: 0, // 成功路径首轮即中，避免真实退避等待
-    initialDelay: 1,
-  });
+  const service = new AutoReconnectService(
+    authService,
+    accountManager,
+    logger,
+    {
+      maxRetries: 0, // 成功路径首轮即中，避免真实退避等待
+      initialDelay: 1,
+      failureThreshold: overrides.failureThreshold ?? 1,
+    },
+    { onReconnectSuccess: overrides.onReconnectSuccess }
+  );
 
   return { service, loginWithAccounts };
 }
@@ -158,5 +167,60 @@ describe('AutoReconnectService 触发逻辑', () => {
     await service.handleStatusChange(offlineAuthRequired);
 
     expect(loginWithAccounts).not.toHaveBeenCalled();
+  });
+
+  it('连续失败阈值：已在线后心跳连续离线达到阈值才重新认证', async () => {
+    const { service, loginWithAccounts } = createService({ failureThreshold: 3 });
+
+    await service.handleStatusChange(onlineStatus());
+    await service.handleStatusChange(offlineAuthRequired);
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(loginWithAccounts).not.toHaveBeenCalled();
+
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(loginWithAccounts).toHaveBeenCalledTimes(1);
+  });
+
+  it('连续失败阈值：中间恢复在线会清零计数', async () => {
+    const { service, loginWithAccounts } = createService({ failureThreshold: 2 });
+
+    await service.handleStatusChange(onlineStatus());
+    await service.handleStatusChange(offlineAuthRequired);
+    await service.handleStatusChange(onlineStatus());
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(loginWithAccounts).not.toHaveBeenCalled();
+  });
+
+  it('WiFi 事件触发与冷启动不受阈值限制', async () => {
+    const { service, loginWithAccounts } = createService({ failureThreshold: 5 });
+
+    // 冷启动未曾在线：立即认证
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(loginWithAccounts).toHaveBeenCalledTimes(1);
+
+    // 已在线后由 WiFi 事件确认离线：立即认证
+    await service.handleStatusChange(onlineStatus());
+    await service.handleStatusChange(offlineAuthRequired, 'network');
+    expect(loginWithAccounts).toHaveBeenCalledTimes(2);
+  });
+
+  it('只有已在线后掉线再认证成功才报告「认证恢复」', async () => {
+    const onReconnectSuccess = vi.fn();
+    const { service } = createService({ onReconnectSuccess });
+
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(onReconnectSuccess).toHaveBeenLastCalledWith({ recovered: false });
+
+    await service.handleStatusChange(onlineStatus());
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(onReconnectSuccess).toHaveBeenLastCalledWith({ recovered: true });
+  });
+
+  it('切换到另一个 WiFi 后在线记录清零，不沿用旧连接的阈值', async () => {
+    const { service, loginWithAccounts } = createService({ failureThreshold: 3 });
+
+    await service.handleStatusChange(onlineStatus({ ssid: 'TUST-Lab' }));
+    await service.handleStatusChange(offlineAuthRequired);
+    expect(loginWithAccounts).toHaveBeenCalledTimes(1);
   });
 });

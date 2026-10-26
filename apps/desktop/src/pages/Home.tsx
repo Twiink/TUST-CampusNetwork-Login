@@ -159,7 +159,7 @@ export const Home: React.FC = () => {
         <HeartbeatStatusCard
           enabled={!!config?.settings.enableHeartbeat}
           wifiConnected={wifiConnected}
-          pollingInterval={config?.settings.pollingInterval ?? 30}
+          pollingInterval={config?.settings.heartbeatIntervalSeconds ?? 30}
           heartbeat={heartbeat}
         />
 
@@ -201,7 +201,7 @@ export const Home: React.FC = () => {
         <HeartbeatStatusCard
           enabled={!!config?.settings.enableHeartbeat}
           wifiConnected={wifiConnected}
-          pollingInterval={config?.settings.pollingInterval ?? 30}
+          pollingInterval={config?.settings.heartbeatIntervalSeconds ?? 30}
           heartbeat={heartbeat}
         />
 
@@ -271,7 +271,7 @@ export const Home: React.FC = () => {
         <HeartbeatStatusCard
           enabled={!!config?.settings.enableHeartbeat}
           wifiConnected={wifiConnected}
-          pollingInterval={config?.settings.pollingInterval ?? 30}
+          pollingInterval={config?.settings.heartbeatIntervalSeconds ?? 30}
           heartbeat={heartbeat}
         />
 
@@ -359,7 +359,7 @@ export const Home: React.FC = () => {
         <HeartbeatStatusCard
           enabled={!!config?.settings.enableHeartbeat}
           wifiConnected={wifiConnected}
-          pollingInterval={config?.settings.pollingInterval ?? 30}
+          pollingInterval={config?.settings.heartbeatIntervalSeconds ?? 30}
           heartbeat={heartbeat}
         />
 
@@ -484,7 +484,7 @@ export const Home: React.FC = () => {
       <HeartbeatStatusCard
         enabled={!!config?.settings.enableHeartbeat}
         wifiConnected={wifiConnected}
-        pollingInterval={config?.settings.pollingInterval ?? 30}
+        pollingInterval={config?.settings.heartbeatIntervalSeconds ?? 30}
         heartbeat={heartbeat}
       />
 

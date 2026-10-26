@@ -4,6 +4,10 @@
 
 import { Notification, nativeImage } from 'electron';
 import path from 'node:path';
+import { DEFAULT_NOTIFICATION_SETTINGS, type NotificationSettings } from '@repo/shared';
+
+/** 与设置页「通知设置」四个开关一一对应的事件类型 */
+export type NotificationEventKind = keyof NotificationSettings;
 
 export type NotificationType = 'success' | 'error' | 'warning' | 'info';
 
@@ -25,6 +29,7 @@ export interface NotificationOptions {
  */
 export class NotificationService {
   private enabled: boolean = true;
+  private eventSettings: NotificationSettings = { ...DEFAULT_NOTIFICATION_SETTINGS };
   private iconPath: string;
 
   constructor(iconDir: string) {
@@ -43,6 +48,36 @@ export class NotificationService {
    */
   isEnabled(): boolean {
     return this.enabled;
+  }
+
+  /**
+   * 设置各通知场景的独立开关（settings.notificationSettings）
+   */
+  setEventSettings(settings: NotificationSettings): void {
+    this.eventSettings = { ...settings };
+  }
+
+  /**
+   * 某一场景的通知是否开启
+   */
+  isEventEnabled(kind: NotificationEventKind): boolean {
+    return this.enabled && this.eventSettings[kind] === true;
+  }
+
+  /**
+   * 按场景开关发送通知
+   */
+  notifyEvent(kind: NotificationEventKind, body: string): boolean {
+    if (!this.isEventEnabled(kind)) {
+      return false;
+    }
+    const titles: Record<NotificationEventKind, string> = {
+      wifiDisconnected: 'NetMate - WiFi 已断开',
+      reconnectSuccess: 'NetMate - WiFi 已重新连接',
+      reconnectFailed: 'NetMate - 自动重连失败',
+      authRecovered: 'NetMate - 校园网认证已恢复',
+    };
+    return this.show({ title: titles[kind], body });
   }
 
   /**

@@ -15,7 +15,11 @@ import { enrichStatusAuthFields } from './network';
 import type { AutoReconnectService } from './auto-reconnect';
 import type { WifiSwitcherService } from './wifi-switcher';
 import { IPC_EVENTS } from '../ipc/channels';
-import { executeAutoReconnect } from './wifi-event-listener/reconnect-flow';
+import {
+  executeAutoReconnect,
+  executeStartupAutoConnect,
+  inCooldown,
+} from './wifi-event-listener/reconnect-flow';
 import type {
   WifiReconnectProgress,
   WifiReconnectFailure,
@@ -23,6 +27,8 @@ import type {
 } from './wifi-event-listener/reconnect-flow';
 import { probeCurrentSsid } from './wifi-event-listener/ssid-probe';
 import * as nativeModule from '@repo/native';
+import { scanAvailableNetworks } from './wifi-switcher';
+import type { NotificationEventKind } from './notification';
 
 export type {
   WifiReconnectProgress,
@@ -47,6 +53,8 @@ export interface WifiEventListenerOptions {
   configManager?: ConfigManager;
   /** 认证自动重连服务（可选）：WiFi 连接/切换后立即触发认证检测，不再等待心跳周期 */
   autoReconnectService?: AutoReconnectService;
+  /** 发送分场景系统通知（由 NotificationService 按设置开关过滤） */
+  notify?: (kind: NotificationEventKind, body: string) => void;
 }
 
 /**
@@ -69,6 +77,10 @@ export class WifiEventListener {
   private isReconnecting = false; // 防止重复重连
   private lastErrorLogged = false; // 防止错误日志过多
   private autoReconnectService?: AutoReconnectService;
+  private notify?: (kind: NotificationEventKind, body: string) => void;
+  /** 最近一次「全部 WiFi 失败」的时间（冷却期起点） */
+  private lastAllFailedAt = 0;
+  private startupHandled = false;
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
@@ -80,6 +92,7 @@ export class WifiEventListener {
     this.wifiSwitcherService = options.wifiSwitcherService;
     this.configManager = options.configManager;
     this.autoReconnectService = options.autoReconnectService;
+    this.notify = options.notify;
   }
 
   /**
@@ -98,9 +111,14 @@ export class WifiEventListener {
 
     // 立即执行一次检测，获取初始状态
     this.logger.info('执行初始 WiFi 状态检测...');
-    this.checkWifiChange().catch((error) => {
-      this.logger.error('初始 WiFi 状态检测失败', error);
-    });
+    this.checkWifiChange()
+      .catch((error) => {
+        this.logger.error('初始 WiFi 状态检测失败', error);
+      })
+      .then(() => this.handleStartupAutoConnect())
+      .catch((error) => {
+        this.logger.error('启动自动连接失败', error);
+      });
 
     // 原生事件驱动优先（nl80211 组播 / WlanRegisterNotification / CoreWLAN diff）
     const nativeWatchSupported = this.startNativeWatch();
@@ -230,6 +248,7 @@ export class WifiEventListener {
           this.logger.info(`WiFi 已连接: ${currentSsid}`);
         } else if (prevSsid && currentSsid === null) {
           this.logger.info(`WiFi 已断开: ${prevSsid}`);
+          this.notify?.('wifiDisconnected', `已断开 ${prevSsid}`);
 
           // WiFi断开时尝试自动重连
           await this.handleWifiDisconnect(prevSsid);
@@ -261,23 +280,91 @@ export class WifiEventListener {
     if (this.isReconnecting || !this.wifiManager || !this.wifiSwitcherService) {
       return;
     }
+    const settings = this.configManager?.getConfig()?.settings;
+    // 「断线自动重连」关闭时不重连 WiFi（与 Android 端一致）
+    if (settings && !settings.autoReconnect) {
+      this.logger.debug('断线自动重连已关闭，跳过 WiFi 重连');
+      return;
+    }
+    const cooldownMinutes = settings?.wifiReconnectCooldownMinutes ?? 0;
+    if (inCooldown(this.lastAllFailedAt, cooldownMinutes * 60_000, Date.now())) {
+      this.logger.info(`WiFi 重连处于冷却期（${cooldownMinutes} 分钟），跳过`);
+      return;
+    }
 
     this.isReconnecting = true;
     try {
-      await executeAutoReconnect(disconnectedSsid, {
-        logger: this.logger,
-        wifiManager: this.wifiManager,
-        wifiSwitcherService: this.wifiSwitcherService,
-        configManager: this.configManager,
-        onProgress: (progress) => this.broadcastReconnectProgress(progress),
-        onAllFailed: (failedList) => this.broadcastAllWifiFailed(failedList),
-        onReconnected: () => this.finalizeSuccessfulReconnect(),
-      });
+      const result = await executeAutoReconnect(disconnectedSsid, this.reconnectDeps());
+      this.recordReconnectResult(result, cooldownMinutes);
     } finally {
       this.isReconnecting = false;
       this.logger.info(`===== WiFi自动重连流程结束 =====`);
     }
     return;
+  }
+
+  /**
+   * 启动时自动连接（只执行一次）
+   */
+  private async handleStartupAutoConnect(): Promise<void> {
+    if (this.startupHandled || !this.wifiManager || !this.wifiSwitcherService) {
+      return;
+    }
+    this.startupHandled = true;
+    if (this.isReconnecting) {
+      return;
+    }
+
+    this.isReconnecting = true;
+    try {
+      const result = await executeStartupAutoConnect(this.lastSsid, {
+        ...this.reconnectDeps(),
+        scanAvailableSsids: async () => (await scanAvailableNetworks()).map((n) => n.ssid),
+      });
+      this.recordReconnectResult(
+        result,
+        this.configManager?.getConfig()?.settings.wifiReconnectCooldownMinutes ?? 0
+      );
+    } finally {
+      this.isReconnecting = false;
+    }
+  }
+
+  private reconnectDeps() {
+    return {
+      logger: this.logger,
+      wifiManager: this.wifiManager!,
+      wifiSwitcherService: this.wifiSwitcherService!,
+      configManager: this.configManager,
+      onProgress: (progress: WifiReconnectProgress) => this.broadcastReconnectProgress(progress),
+      onAllFailed: (failedList: WifiReconnectFailure[]) => {
+        this.broadcastAllWifiFailed(failedList);
+        const names = failedList.map((f) => f.ssid).join('、');
+        this.notify?.('reconnectFailed', `已尝试 ${names}，均未连上`);
+      },
+      onReconnected: async (ssid: string) => {
+        this.notify?.('reconnectSuccess', `已连接到 ${ssid}`);
+        await this.finalizeSuccessfulReconnect();
+      },
+    };
+  }
+
+  private recordReconnectResult(result: boolean | null, cooldownMinutes: number): void {
+    if (result === true) {
+      this.lastAllFailedAt = 0;
+    } else if (result === false) {
+      this.lastAllFailedAt = Date.now();
+      if (cooldownMinutes > 0) {
+        this.logger.info(`WiFi 自动重连全部失败，${cooldownMinutes} 分钟内不再尝试`);
+      }
+    }
+  }
+
+  /**
+   * 配置变化后清除冷却期，新 WiFi/新密码可以立即尝试
+   */
+  resetCooldown(): void {
+    this.lastAllFailedAt = 0;
   }
 
   /**
@@ -370,11 +457,13 @@ export class WifiEventListener {
       // WiFi 连接/切换后立即触发认证检测与自动登录（快速路径，不等心跳周期）。
       // 异步执行，避免登录重试阻塞状态推送；重入由 AutoReconnectService.isReconnecting 防护。
       if (this.autoReconnectService) {
-        void this.autoReconnectService.handleStatusChange(networkStatus).catch((error) => {
-          this.logger.error('认证自动重连处理失败', {
-            错误: error instanceof Error ? error.message : String(error),
+        void this.autoReconnectService
+          .handleStatusChange(networkStatus, 'network')
+          .catch((error) => {
+            this.logger.error('认证自动重连处理失败', {
+              错误: error instanceof Error ? error.message : String(error),
+            });
           });
-        });
       }
     } catch (error) {
       this.logger.error('获取或发送网络状态失败', error);

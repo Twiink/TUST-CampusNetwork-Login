@@ -22,7 +22,7 @@
   publish: {
     provider: 'github',
     owner: 'Twiink',
-    repo: 'TUST-Campusnet-Login',
+    repo: 'TUST-CampusNetwork-Login',
   },
   mac: {
     icon: 'build/icon.icns',

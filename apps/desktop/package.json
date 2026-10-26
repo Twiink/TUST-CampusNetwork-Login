@@ -20,7 +20,7 @@
     "test:e2e": "node ./scripts/ensure-electron-binary.mjs && pnpm run build && playwright test -c playwright.config.ts"
   },
   "description": "NetMate - 校园网自动登录助手",
-  "homepage": "https://github.com/Twiink/TUST-Campusnet-Login#readme",
+  "homepage": "https://github.com/Twiink/TUST-CampusNetwork-Login#readme",
   "dependencies": {
     "@repo/native": "workspace:*"
   },

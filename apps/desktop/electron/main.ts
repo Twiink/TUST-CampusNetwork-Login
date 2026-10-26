@@ -11,6 +11,7 @@ import { createUpdaterService, UpdaterService } from './services/updater';
 import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
 import type { FileLogger } from './services/file-logger';
+import type { AppConfig, AppSettings } from '@repo/shared';
 import { devLog } from './utils/dev-log';
 import { createMainWindow } from './main-window';
 import { initAppServices } from './main-services';
@@ -66,6 +67,55 @@ let fileLogger: FileLogger | null = null;
 let forceQuit = false;
 let createWindow: (() => BrowserWindow) | null = null;
 let destroyHiddenWindowTimer: ReturnType<typeof setTimeout> | null = null;
+let appliedSettings: AppSettings | null = null;
+
+function heartbeatIntervalMs(settings: AppSettings): number {
+  return (settings.heartbeatIntervalSeconds ?? settings.pollingInterval ?? 30) * 1000;
+}
+
+/**
+ * 设置页保存后把新设置应用到运行中的服务（此前需重启应用才生效）
+ */
+function applyConfigChange(config: AppConfig): void {
+  if (!services) return;
+  const settings = config.settings;
+  const previous = appliedSettings;
+  appliedSettings = settings;
+
+  notificationService?.setEnabled(Object.values(settings.notificationSettings).some(Boolean));
+  notificationService?.setEventSettings(settings.notificationSettings);
+
+  autoReconnectService?.setOptions({
+    enabled: settings.autoReconnect,
+    failureThreshold: settings.heartbeatFailureThreshold,
+  });
+
+  wifiSwitcherService?.setConfiguredNetworks(
+    config.wifiList.map((w) => ({ ssid: w.ssid, password: w.password, priority: w.priority || 10 }))
+  );
+  // 新 WiFi/新密码/新冷却设置可以立即尝试
+  wifiEventListener?.resetCooldown();
+
+  if (previous && previous.autoLaunch !== settings.autoLaunch && autoLaunchService) {
+    const toggle = settings.autoLaunch ? autoLaunchService.enable() : autoLaunchService.disable();
+    toggle.catch((error) => services?.logger.error('同步开机自启失败', error));
+  }
+
+  const heartbeatChanged =
+    !previous ||
+    previous.enableHeartbeat !== settings.enableHeartbeat ||
+    heartbeatIntervalMs(previous) !== heartbeatIntervalMs(settings) ||
+    previous.autoReconnect !== settings.autoReconnect;
+  if (heartbeatChanged) {
+    stopBackgroundServices(services);
+    startBackgroundServices(
+      services,
+      heartbeatIntervalMs(settings),
+      autoReconnectService ?? undefined,
+      settings.enableHeartbeat
+    );
+  }
+}
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
@@ -185,7 +235,7 @@ app.whenReady().then(async () => {
     );
 
     // 注册 IPC 处理器（传递 wifiSwitcherService）
-    registerAllIPC(services, wifiSwitcherService);
+    registerAllIPC(services, wifiSwitcherService, applyConfigChange);
 
     // 注册托盘 IPC（在托盘创建前注册，使用 getter 函数）
     registerTrayIPC(() => trayService, services.logger);
@@ -201,7 +251,8 @@ app.whenReady().then(async () => {
     // 使用 build 目录作为图标目录
     const iconDir = path.join(process.env.APP_ROOT!, 'build');
     notificationService = createNotificationService(iconDir);
-    notificationService.setEnabled(settings.showNotification ?? true);
+    notificationService.setEnabled(Object.values(settings.notificationSettings).some(Boolean));
+    notificationService.setEventSettings(settings.notificationSettings);
     registerNotificationIPC(notificationService, services.logger);
 
     // 创建并注册更新服务
@@ -231,6 +282,7 @@ app.whenReady().then(async () => {
         maxRetries: 3,
         initialDelay: 2000,
         maxDelay: 30000,
+        failureThreshold: settings.heartbeatFailureThreshold,
       },
       {
         onReconnectStart: () => {
@@ -243,9 +295,12 @@ app.whenReady().then(async () => {
             message: '开始自动重连',
           });
         },
-        onReconnectSuccess: () => {
+        onReconnectSuccess: ({ recovered }) => {
           trayService?.setStatus('connected');
-          notificationService?.showConnected();
+          // 仅「已在线 → 掉线 → 自动重新认证成功」才算认证恢复；首次自动登录不打扰
+          if (recovered) {
+            notificationService?.notifyEvent('authRecovered', '认证失效后已自动重新登录');
+          }
           // 广播重连成功事件
           win?.webContents.send('event:reconnect:progress', {
             status: 'success',
@@ -265,8 +320,11 @@ app.whenReady().then(async () => {
             message: '自动重连失败',
           });
 
-          // 显示通知
-          notificationService?.showReconnectFailed();
+          // 认证重连失败属于「自动重连全部失败」场景
+          notificationService?.notifyEvent(
+            'reconnectFailed',
+            '校园网自动认证失败，请检查账号或手动重试'
+          );
 
           // 注意：不在此处切换 WiFi
           // WiFi 切换由 wifi-event-listener 服务独立处理
@@ -318,8 +376,8 @@ app.whenReady().then(async () => {
     });
 
     // 启动后台服务（带自动重连和心跳检测设置）
-    const pollingInterval =
-      (settings.heartbeatIntervalSeconds ?? settings.pollingInterval ?? 30) * 1000;
+    const pollingInterval = heartbeatIntervalMs(settings);
+    appliedSettings = settings;
     startBackgroundServices(
       services,
       pollingInterval,
@@ -448,6 +506,7 @@ app.whenReady().then(async () => {
         wifiSwitcherService: wifiSwitcherService,
         configManager: services.configManager,
         autoReconnectService: autoReconnectService ?? undefined,
+        notify: (kind, body) => notificationService?.notifyEvent(kind, body),
       });
       wifiEventListener.start();
       services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');

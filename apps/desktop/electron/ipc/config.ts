@@ -4,6 +4,9 @@
 
 import { ipcMain } from 'electron';
 import { ConfigManager, AppConfig, AppSettings, createLogger } from '@repo/shared';
+
+/** 配置保存后回调：主进程据此把设置应用到运行中的服务 */
+export type ConfigChangedHandler = (config: AppConfig) => void;
 import { IPC_CHANNELS } from './channels';
 import { assertAppConfigInput } from './validate';
 
@@ -12,8 +15,19 @@ import { assertAppConfigInput } from './validate';
  */
 export function registerConfigIPC(
   configManager: ConfigManager,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
+  onConfigChanged?: ConfigChangedHandler
 ) {
+  const emitChanged = () => {
+    const current = configManager.getConfig();
+    if (!current || !onConfigChanged) return;
+    try {
+      onConfigChanged(current);
+    } catch (error) {
+      logger.error('应用配置变更失败', error);
+    }
+  };
+
   /**
    * 获取配置
    */
@@ -34,6 +48,7 @@ export function registerConfigIPC(
       assertAppConfigInput(config, '保存配置');
       await configManager.save(config);
       logger.info('配置已保存');
+      emitChanged();
       return true;
     } catch (error) {
       logger.error('保存配置失败', error);
@@ -48,6 +63,7 @@ export function registerConfigIPC(
     try {
       const config = await configManager.reset();
       logger.info('配置已重置');
+      emitChanged();
       return config;
     } catch (error) {
       logger.error('重置配置失败', error);
@@ -71,6 +87,7 @@ export function registerConfigIPC(
       try {
         const updated = await configManager.updateSettings(settings);
         logger.info('设置已更新');
+        emitChanged();
         return updated;
       } catch (error) {
         logger.error('更新设置失败', error);

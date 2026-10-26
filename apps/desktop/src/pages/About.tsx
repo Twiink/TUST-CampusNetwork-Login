@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Info, Github, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react';
 import type { UpdateStatus } from '../types/electron';
 
-const REPOSITORY_URL = 'https://github.com/Twiink/TUST-Campusnet-Login';
+const REPOSITORY_URL = 'https://github.com/Twiink/TUST-CampusNetwork-Login';
 const ISSUES_URL = `${REPOSITORY_URL}/issues`;
 
 const initialUpdateStatus: UpdateStatus = {

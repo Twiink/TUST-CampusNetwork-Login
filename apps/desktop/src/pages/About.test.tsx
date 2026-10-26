@@ -24,7 +24,7 @@ describe('About', () => {
     });
 
     expect(screen.getByRole('link', { name: 'GitHub 仓库' }).getAttribute('href')).toBe(
-      'https://github.com/Twiink/TUST-Campusnet-Login'
+      'https://github.com/Twiink/TUST-CampusNetwork-Login'
     );
   });
 });

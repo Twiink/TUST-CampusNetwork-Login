@@ -12,7 +12,7 @@ import {
 } from '@repo/shared';
 
 import { registerAuthIPC } from './auth';
-import { registerConfigIPC } from './config';
+import { registerConfigIPC, type ConfigChangedHandler } from './config';
 import { registerAppIPC } from './app';
 import { registerAccountIPC } from './account';
 import { registerWifiIPC } from './wifi';
@@ -29,6 +29,7 @@ import type { ElectronStorageAdapter } from '../services/store';
 export { registerTrayIPC, registerAutoLaunchIPC, registerNotificationIPC, registerUpdaterIPC };
 
 export { IPC_CHANNELS, IPC_EVENTS } from './channels';
+export type { ConfigChangedHandler } from './config';
 
 /**
  * 服务集合
@@ -48,14 +49,15 @@ export interface AppServices {
  */
 export function registerAllIPC(
   services: AppServices,
-  wifiSwitcherService?: WifiSwitcherService
+  wifiSwitcherService?: WifiSwitcherService,
+  onConfigChanged?: ConfigChangedHandler
 ): void {
   const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
     services;
 
   registerAuthIPC(authService, configManager, accountManager, logger);
   registerAppIPC(logger);
-  registerConfigIPC(configManager, logger);
+  registerConfigIPC(configManager, logger, onConfigChanged);
   registerAccountIPC(accountManager, logger);
   registerWifiIPC(wifiManager, logger, wifiSwitcherService);
   registerNetworkIPC(networkDetector, logger);

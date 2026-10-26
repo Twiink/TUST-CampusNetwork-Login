@@ -23,13 +23,25 @@ export interface AutoReconnectOptions {
   initialDelay: number;
   /** 最大延迟 (毫秒) */
   maxDelay: number;
+  /**
+   * 连续失败阈值（settings.heartbeatFailureThreshold）：
+   * 已确认在线后，心跳连续检测到离线达到该次数才重新认证，避免网络抖动触发重登
+   */
+  failureThreshold: number;
 }
+
+/**
+ * 状态检测来源：
+ * - heartbeat：定时心跳，受连续失败阈值约束
+ * - network：WiFi 连接/切换事件，视为确定需要检查，不受阈值限制
+ */
+export type StatusTrigger = 'heartbeat' | 'network';
 
 export interface AutoReconnectCallbacks {
   /** 重连开始 */
   onReconnectStart?: () => void;
-  /** 重连成功 */
-  onReconnectSuccess?: () => void;
+  /** 重连成功；recovered 表示此前已在线、掉线后重新认证成功（「认证恢复」） */
+  onReconnectSuccess?: (info: { recovered: boolean }) => void;
   /** 重连失败 */
   onReconnectFailed?: (error: Error) => void;
   /** 重连尝试 */
@@ -48,6 +60,12 @@ export class AutoReconnectService {
   private callbacks: AutoReconnectCallbacks;
   private lastStatus: NetworkStatus | null = null;
   private isReconnecting = false;
+  /** 当前 WiFi 曾确认在线；用于连续失败阈值与「认证恢复」判定 */
+  private wasOnline = false;
+  /** 已在线后连续检测到离线的次数 */
+  private offlineStreak = 0;
+  /** 本次连接是否因掉线触发过认证 */
+  private lostAuthentication = false;
 
   constructor(
     authService: AuthService,
@@ -66,6 +84,7 @@ export class AutoReconnectService {
       maxRetries: 3,
       initialDelay: 2000,
       maxDelay: 30000,
+      failureThreshold: 3,
       ...options,
     };
     this.callbacks = callbacks;
@@ -75,7 +94,19 @@ export class AutoReconnectService {
    * 处理网络状态变化
    * 在心跳检测回调中调用此方法
    */
-  async handleStatusChange(status: NetworkStatus): Promise<void> {
+  async handleStatusChange(
+    status: NetworkStatus,
+    trigger: StatusTrigger = 'heartbeat'
+  ): Promise<void> {
+    // 换了 WiFi 或断开 WiFi：在线记录只对同一连接有效
+    if (!status.wifiConnected || status.ssid !== this.lastStatus?.ssid) {
+      this.resetConnectionState();
+    }
+    if (status.connected) {
+      this.wasOnline = true;
+      this.offlineStreak = 0;
+    }
+
     // 检测到从连接变为断开
     const wasConnected = this.lastStatus?.connected ?? false;
     const isDisconnected = !status.connected;
@@ -134,6 +165,19 @@ export class AutoReconnectService {
           ssid: status.ssid || '未知',
         });
         return;
+      }
+
+      // 连续失败阈值：已在线后心跳偶发探测失败不立即重新认证；WiFi 事件触发不受限制
+      if (this.wasOnline && trigger === 'heartbeat') {
+        this.offlineStreak += 1;
+        const threshold = Math.max(1, this.options.failureThreshold);
+        if (this.offlineStreak < threshold) {
+          this.logger.debug(`检测失败 ${this.offlineStreak}/${threshold}，暂不重新认证`);
+          return;
+        }
+      }
+      if (this.wasOnline) {
+        this.lostAuthentication = true;
       }
 
       this.logger.log('warn', '检测到网络断开，启动自动重连', {
@@ -251,7 +295,11 @@ export class AutoReconnectService {
         category: 'network',
         source: 'AutoReconnect',
       });
-      this.callbacks.onReconnectSuccess?.();
+      const recovered = this.lostAuthentication;
+      this.lostAuthentication = false;
+      this.wasOnline = true;
+      this.offlineStreak = 0;
+      this.callbacks.onReconnectSuccess?.({ recovered });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '未知错误';
       this.logger.log('error', `===== 自动重连失败 =====`, {
@@ -267,6 +315,12 @@ export class AutoReconnectService {
       this.isReconnecting = false;
       this.logger.debug('自动重连流程结束');
     }
+  }
+
+  private resetConnectionState(): void {
+    this.wasOnline = false;
+    this.offlineStreak = 0;
+    this.lostAuthentication = false;
   }
 
   /**
@@ -296,6 +350,7 @@ export class AutoReconnectService {
       最大重试: this.options.maxRetries,
       初始延迟: `${this.options.initialDelay}ms`,
       最大延迟: `${this.options.maxDelay}ms`,
+      连续失败阈值: this.options.failureThreshold,
     });
 
     // 如果启用状态发生变化，记录特别日志
