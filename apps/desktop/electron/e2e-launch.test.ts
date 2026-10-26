@@ -25,4 +25,14 @@ describe('createElectronLaunchOptions', () => {
     expect(options.env.NETMATE_E2E).toBe('1');
     expect(options.env.ELECTRON_DISABLE_SANDBOX).toBeUndefined();
   });
+
+  it('只向 Electron 传递已定义的字符串环境变量', () => {
+    const options = createElectronLaunchOptions('/tmp/netmate/e2e', 'darwin', {
+      E2E_NETWORK_STATE: 'offline',
+      E2E_UNSET: undefined,
+    });
+
+    expect(options.env.E2E_NETWORK_STATE).toBe('offline');
+    expect(options.env).not.toHaveProperty('E2E_UNSET');
+  });
 });

@@ -2,7 +2,7 @@ import path from 'node:path';
 
 type ElectronLaunchEnvInput = Record<string, string | undefined>;
 
-type ElectronLaunchEnv = NodeJS.ProcessEnv & {
+type ElectronLaunchEnv = Record<string, string> & {
   NETMATE_E2E: string;
   ELECTRON_DISABLE_SANDBOX?: string;
 };
@@ -14,8 +14,11 @@ export function createElectronLaunchOptions(
 ) {
   const args = [path.join(currentDir, 'electron-main.mjs')];
   const env = {
-    ...process.env,
-    ...baseEnv,
+    ...Object.fromEntries(
+      Object.entries({ ...process.env, ...baseEnv }).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
+    ),
     NETMATE_E2E: '1',
   } as ElectronLaunchEnv;
 

@@ -10,6 +10,13 @@ const preloadPath = path.join(appRoot, 'dist-electron', 'preload.mjs');
 const rendererPath = path.join(appRoot, 'dist', 'index.html');
 const { version } = require('../package.json');
 
+const userDataDir = process.env.NETMATE_E2E_USER_DATA_DIR;
+if (!userDataDir) {
+  throw new Error('NETMATE_E2E_USER_DATA_DIR must be set by the test fixture');
+}
+app.setPath('userData', userDataDir);
+app.setPath('sessionData', userDataDir);
+
 const updateStatus = {
   checking: false,
   available: false,

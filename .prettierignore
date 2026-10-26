@@ -7,6 +7,8 @@ pnpm-lock.yaml
 *.min.js
 *.min.css
 .cache/
+.cxx/
 apps/desktop/test-results/
+apps/desktop/playwright-report/
 
 apps/desktop/release/
