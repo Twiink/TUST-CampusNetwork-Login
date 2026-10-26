@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       artifact_run_id:
-        description: '可选，复用指定 Release run 的成功构建产物，仅重新发布'
+        description: '可选，复用 Release run 产物；对应版本标签须已指向原构建提交'
         required: false
         type: string
 
@@ -109,6 +109,17 @@ jobs:
           else
             echo "版本格式无效: ${version_input}，仅支持 vX.Y.Z 或 X.Y.Z"
             exit 1
+          fi
+
+          if [ -n "${ARTIFACT_RUN_ID}" ]; then
+            tagged_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag}" --jq .sha 2>/dev/null)" || {
+              echo "复用产物前，请先创建 ${tag} 标签并指向原构建提交 ${TARGET_SHA}"
+              exit 1
+            }
+            if [ "${tagged_sha}" != "${TARGET_SHA}" ]; then
+              echo "${tag} 标签与原构建提交不一致，停止发布"
+              exit 1
+            fi
           fi
 
           release_exists=false
