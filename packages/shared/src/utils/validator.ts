@@ -86,8 +86,12 @@ export function normalizeNotificationSettings(input?: unknown): NotificationSett
  */
 export function normalizeAppSettings(settings?: unknown): AppSettings {
   const raw = (isRecord(settings) ? settings : {}) as LegacyAppSettings;
+  // 旧版只有 showNotification 总开关；存在分项设置时以分项为准，
+  // 否则归一化输出里回写的 showNotification 会在下次加载时覆盖分项开关。
   const legacyShowNotification =
-    typeof raw.showNotification === 'boolean' ? raw.showNotification : undefined;
+    typeof raw.showNotification === 'boolean' && !isRecord(raw.notificationSettings)
+      ? raw.showNotification
+      : undefined;
   const notificationSettings = normalizeNotificationSettings(raw.notificationSettings);
 
   return {

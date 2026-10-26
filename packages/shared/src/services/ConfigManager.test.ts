@@ -82,4 +82,26 @@ describe('ConfigManager', () => {
     expect(settings.maxRetries).toBe(5);
     expect(settings.showNotification).toBe(true);
   });
+
+  it('保存后重新加载时分项通知开关不被兼容字段 showNotification 覆盖', async () => {
+    const storage = new MemoryStorageAdapter();
+    const manager = new ConfigManager(storage);
+    await manager.load();
+    await manager.updateSettings({
+      notificationSettings: {
+        wifiDisconnected: true,
+        reconnectSuccess: false,
+        reconnectFailed: true,
+        authRecovered: false,
+      },
+    });
+
+    const reloaded = await new ConfigManager(storage).load();
+    expect(reloaded.settings.notificationSettings).toEqual({
+      wifiDisconnected: true,
+      reconnectSuccess: false,
+      reconnectFailed: true,
+      authRecovered: false,
+    });
+  });
 });
