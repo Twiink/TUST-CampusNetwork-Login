@@ -35,6 +35,7 @@ vi.mock('./wifi-detector', () => ({
 
 import {
   enrichStatusAuthFields,
+  getIPv6ForIPv4,
   getLocalIPv4,
   getLocalIPv6,
   getLocalMAC,
@@ -149,6 +150,64 @@ describe('getLocalIPv6 / getLocalMAC', () => {
   it('返回非内部接口的 IPv6 与 MAC', () => {
     expect(getLocalIPv6()).toBe('2001:db8::1234:5678');
     expect(getLocalMAC()).toBe('a483e7aabbcc');
+  });
+});
+
+describe('IPv6 选取', () => {
+  const v6 = (name: string, address: string, internal = false) => ({
+    name,
+    address,
+    family: 'IPv6',
+    mac: '02:00:00:00:00:01',
+    internal,
+    scopeid: 0,
+    cidr: `${address}/64`,
+    netmask: 'ffff:ffff:ffff:ffff::',
+  });
+  const v4 = (name: string, address: string) => ({
+    name,
+    address,
+    family: 'IPv4',
+    mac: '02:00:00:00:00:01',
+    internal: false,
+    cidr: `${address}/16`,
+    netmask: '255.255.0.0',
+  });
+
+  it('同一网卡多个 IPv6 时保留全局单播地址，排除链路本地与站点本地', () => {
+    osMock.networkInterfaces.mockReturnValue({
+      wlan0: [
+        v4('wlan0', '10.59.16.97'),
+        v6('wlan0', 'fe80::1'),
+        v6('wlan0', 'fec0::2'),
+        v6('wlan0', 'fd00::3'),
+        v6('wlan0', '2001:da8:a005:31a::4:3b82'),
+        v6('wlan0', '2001:da8:a005:31a::5:1'),
+      ],
+    });
+    expect(getLocalIPv6()).toBe('2001:da8:a005:31a::4:3b82');
+  });
+
+  it('只有 ULA 时作为兜底', () => {
+    osMock.networkInterfaces.mockReturnValue({ wlan0: [v6('wlan0', 'fd00::3')] });
+    expect(getLocalIPv6()).toBe('fd00::3');
+  });
+
+  it('getIPv6ForIPv4 返回与认证 IPv4 同网卡的 IPv6，而非其他网卡', () => {
+    osMock.networkInterfaces.mockReturnValue({
+      en0: [v4('en0', '192.168.1.2'), v6('en0', '2409:8a00::1')],
+      wlan1: [v4('wlan1', '10.59.16.97'), v6('wlan1', 'fe80::9'), v6('wlan1', '2001:da8::7')],
+    });
+    expect(getIPv6ForIPv4('10.59.16.97')).toBe('2001:da8::7');
+    // 未匹配 IPv4 时返回 null，由调用方回退
+    expect(getIPv6ForIPv4('10.0.0.1')).toBeNull();
+  });
+
+  it('同网卡没有可用 IPv6 时返回 null', () => {
+    osMock.networkInterfaces.mockReturnValue({
+      wlan1: [v4('wlan1', '10.59.16.97'), v6('wlan1', 'fe80::9')],
+    });
+    expect(getIPv6ForIPv4('10.59.16.97')).toBeNull();
   });
 });
 

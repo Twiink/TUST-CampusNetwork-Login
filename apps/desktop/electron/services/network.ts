@@ -166,8 +166,10 @@ export async function resolveNetworkInfo(): Promise<{
   ipv6: string | null;
   mac: string | null;
 }> {
-  const [ipv4, ipv6, mac] = await Promise.all([resolveLocalIPv4(), getLocalIPv6(), getLocalMAC()]);
-  return { ipv4, ipv6, mac };
+  const ipv4 = await resolveLocalIPv4();
+  // IPv6 优先取与认证 IPv4 同一网卡的地址，避免 VPN/虚拟网卡的 IPv6 与 IPv4 错配
+  const ipv6 = (ipv4 ? getIPv6ForIPv4(ipv4) : null) ?? getLocalIPv6();
+  return { ipv4, ipv6, mac: getLocalMAC() };
 }
 
 /**
@@ -194,9 +196,14 @@ export function getNetworkInterfaces(): NetworkInterface[] {
       if (addr.family === 'IPv4') {
         iface.ipv4 = addr.address;
         iface.mac = addr.mac;
-      } else if (addr.family === 'IPv6' && !addr.address.startsWith('fe80')) {
-        // 排除链路本地地址
-        iface.ipv6 = addr.address;
+      } else if (addr.family === 'IPv6' && isUsableIPv6(addr.address)) {
+        // 同一网卡多个 IPv6 时保留第一个全局单播地址，ULA 仅在没有全局地址时兜底
+        if (
+          !iface.ipv6 ||
+          (!isGlobalUnicastIPv6(iface.ipv6) && isGlobalUnicastIPv6(addr.address))
+        ) {
+          iface.ipv6 = addr.address;
+        }
       }
     }
 
@@ -207,6 +214,33 @@ export function getNetworkInterfaces(): NetworkInterface[] {
   }
 
   return result;
+}
+
+/** 排除回环、未指定、链路本地（fe80::/10）与已弃用的站点本地（fec0::/10）地址 */
+function isUsableIPv6(ip: string): boolean {
+  const lower = ip.toLowerCase();
+  if (lower === '::1' || lower === '::') {
+    return false;
+  }
+  return !/^fe[89a-f]/.test(lower);
+}
+
+/** 全局单播地址 2000::/3（对齐参考实现 selectIPv6 的 IsGlobalUnicast 优先级） */
+function isGlobalUnicastIPv6(ip: string): boolean {
+  return /^[23]/.test(ip);
+}
+
+/**
+ * 获取与指定 IPv4 位于同一网卡的 IPv6（全局单播优先）
+ */
+export function getIPv6ForIPv4(ipv4: string): string | null {
+  const iface = Object.values(os.networkInterfaces()).find((addrs) =>
+    addrs?.some((addr) => addr.family === 'IPv4' && addr.address === ipv4)
+  );
+  const candidates = (iface ?? [])
+    .filter((addr) => addr.family === 'IPv6' && !addr.internal && isUsableIPv6(addr.address))
+    .map((addr) => addr.address);
+  return candidates.find(isGlobalUnicastIPv6) ?? candidates[0] ?? null;
 }
 
 /**
@@ -225,8 +259,9 @@ export function getLocalIPv6(): string | null {
     }
   }
 
-  // 返回第一个有 IPv6 的接口
-  const firstWithIpv6 = interfaces.find((i) => i.ipv6);
+  // 返回第一个有全局 IPv6 的接口，其次任意可用 IPv6
+  const firstWithIpv6 =
+    interfaces.find((i) => i.ipv6 && isGlobalUnicastIPv6(i.ipv6)) ?? interfaces.find((i) => i.ipv6);
   return firstWithIpv6?.ipv6 || null;
 }
 
