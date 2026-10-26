@@ -23,7 +23,7 @@
 # 应用自身原生模块（通过 ReactPackage 反射/注册加载，须完整保留）
 # 对应 WifiModule / AutoStartModule / BootReceiver / BackgroundService 等
 # ============================================================
--keep class com.mobile.** { *; }
+-keep class com.netmate.app.** { *; }
 
 # BootReceiver 等 Android 组件由系统按类名反射实例化，必须保留
 -keep class * extends android.content.BroadcastReceiver { *; }

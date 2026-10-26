@@ -1,4 +1,4 @@
-package com.mobile
+package com.netmate.app
 
 import android.app.Application
 import com.facebook.react.PackageList
@@ -6,9 +6,11 @@ import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
-import com.mobile.wifi.WifiPackage
-import com.mobile.service.BackgroundServicePackage
-import com.mobile.receiver.AutoStartPackage
+import com.netmate.app.wifi.WifiPackage
+import com.netmate.app.service.BackgroundServicePackage
+import com.netmate.app.receiver.AutoStartPackage
+import com.netmate.app.auth.AutoAuthPackage
+import com.netmate.app.permission.PermissionPackage
 
 class MainApplication : Application(), ReactApplication {
 
@@ -21,6 +23,8 @@ class MainApplication : Application(), ReactApplication {
           add(WifiPackage())
           add(BackgroundServicePackage())
           add(AutoStartPackage())
+          add(AutoAuthPackage())
+          add(PermissionPackage())
         },
     )
   }

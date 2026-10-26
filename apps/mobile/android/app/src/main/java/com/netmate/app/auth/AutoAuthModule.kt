@@ -1,0 +1,92 @@
+package com.netmate.app.auth
+
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.ReactContextBaseJavaModule
+import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableMap
+import com.facebook.react.modules.core.DeviceEventManagerModule
+
+/**
+ * 自动认证 React Native 模块。
+ * - syncProfile：JS 在配置变化时同步账号与 WiFi 规则（加密落盘），并按开关调度 WorkManager 兜底
+ * - checkNow：前台触发一次检查，与后台服务共用同一串行引擎，避免重复登录
+ * - 结果通过 netmate:autoAuthResult 事件推送给 JS
+ */
+class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
+
+    companion object {
+        const val EVENT_RESULT = "netmate:autoAuthResult"
+    }
+
+    override fun getName(): String = "AutoAuthModule"
+
+    private val resultListener: (AutoAuthResult) -> Unit = { result ->
+        if (reactApplicationContext.hasActiveReactInstance()) {
+            reactApplicationContext
+                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                .emit(EVENT_RESULT, result.toWritableMap())
+        }
+    }
+
+    override fun initialize() {
+        super.initialize()
+        AutoAuthEngine.addListener(resultListener)
+    }
+
+    override fun invalidate() {
+        AutoAuthEngine.removeListener(resultListener)
+        super.invalidate()
+    }
+
+    @ReactMethod
+    fun syncProfile(json: String, promise: Promise) {
+        try {
+            val profile = AutoAuthStore.saveProfile(reactApplicationContext, json)
+            AutoAuthEngine.resetBackoff()
+            if (profile.enabled) {
+                AutoAuthWorker.schedule(reactApplicationContext)
+            } else {
+                AutoAuthWorker.cancel(reactApplicationContext)
+            }
+            promise.resolve(true)
+        } catch (e: Exception) {
+            promise.reject("AUTO_AUTH_ERROR", "Failed to sync auto-auth profile: ${e.message}", e)
+        }
+    }
+
+    /** resolve 本次结果；无需登录时 resolve null */
+    @ReactMethod
+    fun checkNow(trigger: String, promise: Promise) {
+        val future = AutoAuthEngine.checkAsync(reactApplicationContext, trigger)
+        Thread {
+            try {
+                promise.resolve(future.get()?.toWritableMap())
+            } catch (e: Exception) {
+                promise.reject("AUTO_AUTH_ERROR", "Auto-auth check failed: ${e.message}", e)
+            }
+        }.start()
+    }
+
+    @ReactMethod
+    fun getLastResult(promise: Promise) {
+        promise.resolve(AutoAuthStore.loadLastResult(reactApplicationContext)?.toWritableMap())
+    }
+
+    // NativeEventEmitter 要求的空实现
+    @ReactMethod
+    fun addListener(@Suppress("UNUSED_PARAMETER") eventName: String) = Unit
+
+    @ReactMethod
+    fun removeListeners(@Suppress("UNUSED_PARAMETER") count: Double) = Unit
+
+    private fun AutoAuthResult.toWritableMap(): WritableMap = Arguments.createMap().apply {
+        putBoolean("success", success)
+        putString("message", message)
+        putString("trigger", trigger)
+        if (username != null) putString("username", username) else putNull("username")
+        putInt("attempts", attempts)
+        putDouble("timestamp", timestamp.toDouble())
+    }
+}

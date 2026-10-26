@@ -1,4 +1,4 @@
-package com.mobile.receiver
+package com.netmate.app.receiver
 
 import android.content.Context
 import com.facebook.react.bridge.*

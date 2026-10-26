@@ -1,4 +1,4 @@
-package com.mobile.receiver
+package com.netmate.app.receiver
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

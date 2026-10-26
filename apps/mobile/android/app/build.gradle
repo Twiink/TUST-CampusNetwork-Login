@@ -111,9 +111,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.mobile"
+    namespace "com.netmate.app"
     defaultConfig {
-        applicationId "com.mobile"
+        applicationId "com.netmate.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode resolvedVersionCode
@@ -178,6 +178,12 @@ android.applicationVariants.all { variant ->
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    // 后台自动认证的周期兜底任务（前台服务被系统回收后仍可补登）
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    testImplementation("junit:junit:4.13.2")
+    // 本地 JVM 单测中 android.jar 的 org.json 只是空桩，用真实实现替代
+    testImplementation("org.json:json:20180813")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

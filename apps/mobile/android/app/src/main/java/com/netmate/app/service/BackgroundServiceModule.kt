@@ -1,4 +1,4 @@
-package com.mobile.service
+package com.netmate.app.service
 
 import android.content.Intent
 import android.os.Build
@@ -19,7 +19,7 @@ class BackgroundServiceModule(reactContext: ReactApplicationContext) : ReactCont
         try {
             val intent = Intent(reactApplicationContext, BackgroundService::class.java).apply {
                 action = BackgroundService.ACTION_START
-                putExtra("interval", interval.toLong())
+                putExtra(BackgroundService.EXTRA_INTERVAL, interval.toLong())
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

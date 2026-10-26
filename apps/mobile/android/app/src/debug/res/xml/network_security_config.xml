@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  开发构建需要明文访问 Metro（localhost / 10.0.2.2 / 局域网 IP），整体放行；
+  声明 networkSecurityConfig 后 usesCleartextTraffic 属性会被忽略，所以必须在这里覆盖。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

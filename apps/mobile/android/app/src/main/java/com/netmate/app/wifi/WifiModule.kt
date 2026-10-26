@@ -1,4 +1,4 @@
-package com.mobile.wifi
+package com.netmate.app.wifi
 
 import android.Manifest
 import android.content.Context
@@ -17,7 +17,8 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import java.net.Inet4Address
+import com.netmate.app.auth.AutoAuthEngine
+import com.netmate.app.auth.LocalAddresses
 import java.net.NetworkInterface
 
 class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -35,6 +36,8 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var wifiStateReceiver: BroadcastReceiver? = null
     private var listenersInstalled = false
+    /** 监听引用计数：首页与前台自动认证各自 start/stop，最后一个 stop 才真正移除监听 */
+    private var watchers = 0
 
     /**
      * 网络变化事件监听：变化时向 JS 发送 netmate:wifiChanged 事件。
@@ -43,7 +46,10 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     @ReactMethod
     fun startWatching(promise: Promise) {
         try {
-            installListeners()
+            synchronized(this) {
+                watchers += 1
+                installListeners()
+            }
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("WIFI_WATCH_ERROR", "Failed to start watching: ${e.message}", e)
@@ -53,7 +59,10 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     @ReactMethod
     fun stopWatching(promise: Promise) {
         try {
-            removeListeners()
+            synchronized(this) {
+                watchers = (watchers - 1).coerceAtLeast(0)
+                if (watchers == 0) removeListeners()
+            }
             promise.resolve(true)
         } catch (e: Exception) {
             promise.reject("WIFI_WATCH_ERROR", "Failed to stop watching: ${e.message}", e)
@@ -122,6 +131,7 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     }
 
     override fun onCatalystInstanceDestroy() {
+        synchronized(this) { watchers = 0 }
         removeListeners()
     }
 
@@ -167,19 +177,7 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     @ReactMethod
     fun getIPAddress(promise: Promise) {
         try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address is Inet4Address) {
-                        promise.resolve(address.hostAddress)
-                        return
-                    }
-                }
-            }
-            promise.resolve(null)
+            promise.resolve(resolveLocalAddresses().first)
         } catch (e: Exception) {
             promise.reject("NETWORK_ERROR", "Failed to get IP address: ${e.message}", e)
         }
@@ -191,27 +189,14 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
     @ReactMethod
     fun getIPv6Address(promise: Promise) {
         try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address.hostAddress?.contains(":") == true) {
-                        // 去掉 scope id (如 %wlan0)
-                        val ipv6 = address.hostAddress?.split("%")?.get(0)
-                        if (ipv6 != null && !ipv6.startsWith("fe80")) { // 排除链路本地地址
-                            promise.resolve(ipv6)
-                            return
-                        }
-                    }
-                }
-            }
-            promise.resolve(null)
+            promise.resolve(resolveLocalAddresses().second)
         } catch (e: Exception) {
             promise.reject("NETWORK_ERROR", "Failed to get IPv6 address: ${e.message}", e)
         }
     }
+
+    private fun resolveLocalAddresses(): Pair<String?, String?> =
+        LocalAddresses.resolve(connectivityManager)
 
     /**
      * 获取 WiFi MAC 地址
@@ -290,7 +275,10 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
             if (hasLocationPermission() && isWifiConnected && wifiInfo != null) {
                 val ssid = wifiInfo.ssid
                 if (ssid != null && ssid != "<unknown ssid>" && ssid != "0x") {
-                    result.putString("ssid", ssid.replace("\"", ""))
+                    val cleanSsid = ssid.replace("\"", "")
+                    result.putString("ssid", cleanSsid)
+                    // 前台读到的 SSID 交给后台自动认证复用（Android 10+ 后台读不到 SSID）
+                    network?.let { AutoAuthEngine.rememberSsid(it, cleanSsid) }
                 } else {
                     result.putNull("ssid")
                 }
@@ -377,34 +365,16 @@ class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaMo
             }
 
             // IPv4/IPv6/MAC 地址
-            var ipv4: String? = null
-            var ipv6: String? = null
+            val (ipv4, ipv6) = resolveLocalAddresses()
             var mac: String? = null
 
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
-
-                // MAC 地址
                 if (networkInterface.name.equals("wlan0", ignoreCase = true)) {
                     val macBytes = networkInterface.hardwareAddress
                     if (macBytes != null) {
                         mac = macBytes.joinToString(":") { String.format("%02x", it) }
-                    }
-                }
-
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress) {
-                        if (address is Inet4Address && ipv4 == null) {
-                            ipv4 = address.hostAddress
-                        } else if (address.hostAddress?.contains(":") == true && ipv6 == null) {
-                            val ip = address.hostAddress?.split("%")?.get(0)
-                            if (ip != null && !ip.startsWith("fe80")) {
-                                ipv6 = ip
-                            }
-                        }
                     }
                 }
             }
