@@ -36,3 +36,7 @@
 - 网络延迟测定改为优先百度、其次测速网。
 - 移动端 jest 转换与 pnpm 依赖解析配置。
 - 桌面端与 Android 发布构建、release 工作流初始化顺序等 CI 问题。
+
+## [v1.0.0] - 2026-10-26
+
+**Full Changelog**: https://github.com/Twiink/TUST-CampusNetwork-Login/compare/v0.0.2...v1.0.0
