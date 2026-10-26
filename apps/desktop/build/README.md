@@ -102,20 +102,6 @@ build/
 ├── icon.png                    # Linux应用图标（主文件）
 ├── tray-icon.png               # 系统托盘图标（连接状态）
 ├── tray-icon-disconnected.png  # 系统托盘图标（断开状态）
-├── win/                        # Windows原始文件（备份）
-│   └── icon.ico
-├── mac/                        # macOS原始文件（备份）
-│   └── icon.icns
-├── png/                        # 多尺寸PNG文件（备份）
-│   ├── 16x16.png
-│   ├── 24x24.png
-│   ├── 32x32.png
-│   ├── 48x48.png
-│   ├── 64x64.png
-│   ├── 128x128.png
-│   ├── 256x256.png
-│   ├── 512x512.png
-│   └── 1024x1024.png
 └── README.md                   # 本文件
 ```
 

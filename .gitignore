@@ -3,22 +3,35 @@ node_modules/
 .pnp
 .pnp.js
 .pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/install-state.gz
 
-# 本地包管理器锁文件（monorepo 统一使用 pnpm-lock.yaml）
-apps/mobile/package-lock.json
+# 包管理器锁文件（monorepo 统一使用 pnpm-lock.yaml）
+package-lock.json
+npm-shrinkwrap.json
+yarn.lock
+bun.lock
+bun.lockb
 
 # Build outputs
 dist/
 dist-ssr/
 dist-electron/
 build/
-# 但保留图标资源目录
+# 但保留桌面端打包所需的图标资源目录
 !apps/desktop/build/
+apps/desktop/build/mac/
+apps/desktop/build/win/
+apps/desktop/build/png/
+apps/desktop/build/*.bak
+apps/desktop/build/.metadata_never_index
 out/
+release/
 *.tsbuildinfo
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -28,29 +41,34 @@ lerna-debug.log*
 
 # Testing
 coverage/
-.nyc_output
+.nyc_output/
 test-results/
 playwright-report/
+.vitest-cache/
 
-# Environment files
+# Environment and local configuration
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
 *.local
+**/.xcode.env.local
+local.properties
+apps/mobile/.bundle/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
-.idea
+.idea/
+*.iml
 *.sublime-project
 *.sublime-workspace
+.vscode-test/
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Windows
 *.suo
@@ -59,16 +77,46 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Debug
-.vscode-test
-
-# Temporary files
+# Temporary and backup files
 *.tmp
 *.temp
+*.bak
+*.orig
+*.rej
+*~
 .cache/
 
+# Android / Gradle / Kotlin
+.gradle/
+.kotlin/
+.cxx/
+**/.cxx/
+*.apk
+*.aab
+*.ap_
+*.hprof
+
+# Apple / Xcode
+DerivedData/
+*.ipa
+*.xcarchive
+*.xcuserstate
+xcuserdata/
+**/Pods/
+
+# Signing material (keep the standard React Native debug keystore)
+*.jks
+*.keystore
+!apps/mobile/android/app/debug.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*.mobileprovision
+release.keystore
+
 # Claude Code
-.claude
+.claude/
 CLAUDE.md
 GEMINI.md
 AGENTS.md
@@ -79,3 +127,4 @@ AGENTS.md
 # Rust / native
 /target/
 packages/native/*/netmate_native.*.node
+packages/native/*/*.node
