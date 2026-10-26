@@ -1,6 +1,9 @@
-pluginManagement { includeBuild("../../../node_modules/@react-native/gradle-plugin") }
+pluginManagement {
+    // Android Studio's Gradle importer needs a canonical path in this pnpm monorepo.
+    includeBuild(new File(settingsDir, "../../../node_modules/@react-native/gradle-plugin").toPath().toRealPath().toString())
+}
 plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'mobile'
 include ':app'
-includeBuild('../../../node_modules/@react-native/gradle-plugin')
+includeBuild(new File(settingsDir, "../../../node_modules/@react-native/gradle-plugin").toPath().toRealPath().toString())

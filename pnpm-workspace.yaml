@@ -11,3 +11,6 @@ allowBuilds:
   electron: false
   esbuild: false
   electron-winstaller: false
+
+patchedDependencies:
+  '@react-native/gradle-plugin@0.83.1': patches/@react-native__gradle-plugin@0.83.1.patch
