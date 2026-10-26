@@ -1,415 +1,307 @@
 # NetMate
 
-**NetMate** - 你的 WiFi 连接管家，一个跨平台的智能 WiFi 管理工具，支持 Windows、macOS、Linux 和 Android 平台，可选配校园网自动认证功能。
+**NetMate** 是一个跨平台 WiFi 连接管理器，支持 Windows、macOS、Linux 和 Android。它负责 WiFi 自动重连、优先级切换、网络状态监控和日志记录，并可选用校园网自动认证。
 
-## 项目简介
+当前版本：**v1.0.0**
 
-NetMate 是一款专注于 **WiFi 连接管理**的智能工具，提供 WiFi 自动重连、优先级切换等核心功能。对于需要校园网认证的场景，还支持自动登录和掉线重连。
+## 核心特性
 
-### 核心特性
+### 智能 WiFi 管理
 
-#### 🔄 智能 WiFi 管理（核心功能）
+- **三阶段自动重连**：单个 WiFi 重试 → 按优先级切换备用 WiFi → 显示完整失败原因与处理建议
+- **实时重连进度**：显示当前 WiFi、尝试次数和切换阶段
+- **WiFi 优先级**：为每个网络设置 `1-99` 的优先级
+- **多网络配置**：保存多个 WiFi 配置并按优先级管理
+- **手动切换**：主动连接指定的已配置网络
+- **连接状态监测**：桌面端基于系统 WiFi 事件监听；移动端基于 Android `NetworkCallback` 事件驱动，并在原生事件不可用时回退轮询
 
-- **三阶段自动重连**：WiFi 断开时自动重连
-  1. **单WiFi重试**：对断开的WiFi进行N次重连尝试（可配置）
-  2. **优先级切换**：失败后按优先级自动切换到备用WiFi
-  3. **全面失败提示**：所有WiFi失败后显示详细的故障列表和建议
-- **实时重连进度**：显示当前连接的WiFi、尝试次数（第N/M次）
-- **WiFi优先级管理**：为每个WiFi设置优先级（1-99），自动选择最优网络
-- **多WiFi配置**：支持配置多个WiFi网络，自动管理连接
-- **连接状态监测**：1秒检测间隔，快速响应WiFi断开事件
+### 校园网认证（可选）
 
-#### 🎓 校园网认证（可选功能）
+- 多账户添加、删除与切换
+- 校园网 / 移动 / 联通 / 电信服务商选择
+- WiFi 与账户关联，按认证需求自动登录
+- 认证失效后自动重连
+- 手动登录与登出
 
-- **自动登录**：连接到配置的校园WiFi后自动完成认证
-- **账户配置**：配置校园网账号、密码、登录网址以及服务商
-- **掉线重连**：校园网认证失效后自动重新登录
-- **多账户管理**：支持添加、切换多个校园网账户
-- **服务商选择**：支持校园网/移动/联通/电信
+### 网络监控与日志
 
-#### 📊 网络监控与日志
+- 可配置心跳检测与网络延迟测量
+- WiFi 断开时暂停心跳并显示提示
+- 启动时自动检测当前网络状态
+- `debug` / `info` / `success` / `warn` / `error` 多级别日志
+- 日志筛选、文件导出、打开日志目录
+- 自动清理：保留 7 天、最多 500 条
 
-- **心跳检测**：可配置间隔的网络连通性检测
-  - WiFi连接时：显示详细的网络状态（延迟、信号强度等）
-  - WiFi断开时：显示友好的暂停提示
-- **启动检测**：打开软件时自动检测当前WiFi连接状态并显示
-- **详细日志**：记录所有操作和状态变化，支持多级别日志（debug/info/success/warn/error）
-- **自动管理**：7天保留期，最多500条，便于问题排查
+### 系统集成
 
-#### ⚙️ 系统集成
+- 开机自启
+- 系统通知
+- 桌面端系统托盘与 `electron-updater` 自动更新
+- Android 后台服务与 APK 更新引导
+- macOS / Windows / Linux 原生网络信息，失败时回退 TypeScript 实现
 
-- **开机自启**：支持系统开机自动启动
-- **系统托盘**（桌面端）：最小化到系统托盘，快捷操作
-- **系统通知**：重要事件推送通知
+## 支持平台
 
-### 支持平台
+| 平台    | 技术栈                  | 主要能力                                      |
+| ------- | ----------------------- | --------------------------------------------- |
+| Windows | Electron + React + Rust | WiFi 管理、托盘、开机自启、通知、自动更新     |
+| macOS   | Electron + React + Rust | WiFi 管理、托盘、开机自启、通知、自动更新     |
+| Linux   | Electron + React + Rust | WiFi 管理、托盘、开机自启、通知、自动更新     |
+| Android | React Native + Kotlin   | WiFi 管理、后台服务、开机自启、通知、APK 更新 |
 
-| 平台    | 技术栈           | 状态           |
-| ------- | ---------------- | -------------- |
-| Windows | Electron + React | 已完成，待测试 |
-| macOS   | Electron + React | 已完成，待测试 |
-| Linux   | Electron + React | 已完成，待测试 |
-| Android | React Native     | 已完成，待测试 |
-
-## 需求进度
-
-### WiFi 管理功能
-
-| 功能                | 描述                                   | 完成 | 报错 |
-| ------------------- | -------------------------------------- | :--: | :--: |
-| 多 WiFi 配置        | 配置多个 WiFi 网络                     | [x]  | [ ]  |
-| WiFi 优先级         | 设置 WiFi 连接优先级（1-99）           | [x]  | [ ]  |
-| 启动时 WiFi 检测    | 打开软件时自动检测 WiFi 连接状态并显示 | [x]  | [ ]  |
-| WiFi 三阶段自动重连 | 单WiFi重试 → 优先级切换 → 全面失败提示 | [x]  | [ ]  |
-| WiFi 重连进度显示   | 实时显示当前WiFi、尝试次数（第N/M次）  | [x]  | [ ]  |
-| 所有WiFi失败提示    | 显示详细故障列表和修复建议             | [x]  | [ ]  |
-| 手动 WiFi 切换      | 用户可手动切换到其他配置的WiFi         | [x]  | [ ]  |
-| WiFi 连接状态监测   | 1秒检测间隔，快速响应断开事件          | [x]  | [ ]  |
-
-### 校园网认证功能
-
-| 功能           | 描述                             | 完成 | 报错 |
-| -------------- | -------------------------------- | :--: | :--: |
-| 多账户管理     | 添加、删除、切换账户             | [x]  | [ ]  |
-| 服务商选择     | 校园网/移动/联通/电信            | [x]  | [ ]  |
-| WiFi 认证类型  | 区分需要/无需校园网认证的 WiFi   | [x]  | [ ]  |
-| WiFi 关联账号  | 需要认证的 WiFi 关联已配置的账号 | [x]  | [ ]  |
-| 手动登录/登出  | 用户手动触发认证                 | [x]  | [ ]  |
-| 校园网自动重连 | 认证失效后自动重新登录           | [x]  | [ ]  |
-
-### 网络监控功能
-
-| 功能           | 描述                                            | 完成 | 报错 |
-| -------------- | ----------------------------------------------- | :--: | :--: |
-| 心跳检测开关   | 手动开启/关闭心跳检测                           | [x]  | [ ]  |
-| WiFi状态绑定   | 心跳检测与WiFi连接状态绑定                      | [x]  | [ ]  |
-| 心跳暂停提示   | WiFi断开时显示友好的暂停提示                    | [x]  | [ ]  |
-| 无账户状态提示 | 未配置账户时显示引导                            | [x]  | [ ]  |
-| 运行日志       | 详细记录所有操作和状态变化，支持自动清理        | [x]  | [ ]  |
-| 日志级别筛选   | 按级别筛选日志（debug/info/success/warn/error） | [x]  | [ ]  |
-| 系统通知       | 重要事件推送通知                                | [x]  | [ ]  |
-
-### 平台特性
-
-| 功能     |      桌面端      |  移动端  | 完成 | 报错 |
-| -------- | :--------------: | :------: | :--: | :--: |
-| 开机自启 |     Electron     | Android  | [x]  | [ ]  |
-| 系统托盘 |     Electron     |    -     | [x]  | [ ]  |
-| 后台服务 |        -         | Android  | [x]  | [ ]  |
-| 自动更新 | electron-updater | APK 下载 | [x]  | [ ]  |
-
-### UI 组件
-
-| 组件       | 描述                | 完成 | 报错 |
-| ---------- | ------------------- | :--: | :--: |
-| 图标集成   | lucide-react 图标库 | [x]  | [ ]  |
-| 侧边栏图标 | 导航栏添加图标      | [x]  | [ ]  |
-| 运行状态页 | 连接状态、网络信息  | [x]  | [ ]  |
-| 配置设置页 | 账号管理、WiFi 配置 | [x]  | [ ]  |
-| 运行日志页 | 日志查看和筛选      | [x]  | [ ]  |
-| 关于页面   | 版本信息、更新检查  | [x]  | [ ]  |
+> 桌面端发布产物为 Windows EXE、macOS DMG/ZIP、Linux AppImage/DEB；Android 发布产物为按 ABI 拆分的 APK 及通用 APK。
 
 ## 技术架构
 
-NetMate 采用**双重连机制架构**，将 WiFi 层和应用层完全解耦：
+NetMate 使用 pnpm workspace 组织四个包：
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        应用层 (Apps)                         │
-├───────────────────────────┬─────────────────────────────────┤
-│   Electron (Win/macOS/Linux)    │      React Native (Android)     │
-│   - 系统托盘               │      - 后台服务                   │
-│   - 开机自启               │      - WiFi 控制                 │
-│   - 通知推送               │      - 通知推送                   │
-│   ┌─────────────────────┐ │                                 │
-│   │ WiFi 事件监听器      │ │      两个独立的自动重连机制：     │
-│   │ (WiFi Layer)        │ │      1. WiFi自动重连（系统层）   │
-│   │ - SSID变化检测(1s)  │ │      2. 校园网重连（应用层）     │
-│   │ - 三阶段重连流程     │ │                                 │
-│   │ - 优先级自动切换     │ │      通过状态变化事件协作        │
-│   └─────────────────────┘ │      无直接依赖                  │
-│   ┌─────────────────────┐ │                                 │
-│   │ 校园网自动重连       │ │                                 │
-│   │ (Auth Layer)        │ │                                 │
-│   │ - 认证状态检测       │ │                                 │
-│   │ - 指数退避重试       │ │                                 │
-│   └─────────────────────┘ │                                 │
-└───────────────────────────┴─────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     核心业务层 (Shared)                       │
-├─────────────────────────────────────────────────────────────┤
-│  - 登录协议 (AuthService) - 支持详细日志                     │
-│  - 联网探测 (NetworkDetector) - 支持详细日志                 │
-│  - 重试策略 (RetryPolicy)                                    │
-│  - 日志模型 (Logger) - 7天自动清理，多级别日志                │
-│  - 配置管理 (ConfigManager) - 支持详细日志                   │
-│  - 账户管理 (AccountManager) - 支持详细日志                  │
-│  - WiFi管理 (WifiManager) - 支持详细日志                     │
-└─────────────────────────────────────────────────────────────┘
+- `apps/desktop`：Electron 主进程、React 渲染进程与桌面端集成
+- `apps/mobile`：React Native UI、Android 原生 WiFi / 后台服务模块
+- `packages/shared`：登录协议、网络探测、重试策略、配置、账户、WiFi 管理与日志
+- `packages/native`：Rust 原生网络模块，优先提供三平台 WiFi 快照与网络信息
+
+```text
+┌───────────────────────────────┐   ┌───────────────────────────────┐
+│ Electron (Windows/macOS/Linux)│   │ React Native (Android)        │
+│ - 托盘 / 自启 / 通知          │   │ - 后台服务 / 通知             │
+│ - WiFi 事件监听与切换         │   │ - NetworkCallback 事件        │
+│ - 校园网认证调度              │   │ - 校园网认证调度              │
+└──────────────┬────────────────┘   └──────────────┬────────────────┘
+               │                                   │
+               └───────────────┬───────────────────┘
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ packages/shared                                                 │
+│ AuthService · NetworkDetector · RetryPolicy · Logger            │
+│ ConfigManager · AccountManager · WifiManager                    │
+└───────────────────────────────┬─────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ packages/native                                                 │
+│ Rust WiFi / 网络信息实现，加载失败自动回退 TypeScript 路径       │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 双重连机制说明
-
-详细架构文档请参阅 [apps/desktop/RECONNECT_ARCHITECTURE.md](./apps/desktop/RECONNECT_ARCHITECTURE.md)
+### 双重连机制
 
 1. **WiFi 自动重连（系统层）**
-   - **触发条件**：系统检测到 WiFi SSID 从存在变为 null（物理断开）
-   - **三阶段流程**：
-     - 阶段1：单WiFi重连（重试N次，间隔2s）
-     - 阶段2：优先级切换（按优先级尝试其他WiFi，间隔1s）
-     - 阶段3：全部失败（广播详细故障列表）
-   - **监测频率**：1秒检测间隔，快速响应断开事件
-
+   - 系统检测到 WiFi 断开或 SSID 变化
+   - 先重试当前 WiFi，再按优先级尝试其他配置网络
+   - 全部失败时展示故障列表和处理建议
 2. **校园网自动重连（应用层）**
-   - **触发条件**：心跳检测发现认证失效（WiFi已连接，但无法访问网络）
-   - **重连策略**：指数退避，最多重试3次
-   - **完全独立**：不触发WiFi切换，只负责认证层面的重连
-
+   - 心跳检测发现“WiFi 已连接但无法联网”
+   - 使用指数退避策略重新认证，最多重试 3 次
+   - 只处理认证层，不直接触发 WiFi 切换
 3. **协作方式**
-   - WiFi重连成功 → 触发网络状态更新 → 校园网重连检测到需要认证 → 自动登录
-   - 两个机制通过状态变化事件协作，无直接依赖
-   - 职责清晰：WiFi层管WiFi，认证层管认证
+   - WiFi 重连成功后刷新网络状态，认证流程再判断是否需要登录
+   - 两层通过状态变化协作，避免职责耦合
 
 ## 项目结构
 
-```
+```text
 NetMate/
 ├── apps/
-│   ├── desktop/          # Electron 桌面应用 (Win/macOS/Linux)
-│   └── mobile/           # React Native 移动应用 (Android)
+│   ├── desktop/              # Electron 桌面应用
+│   └── mobile/               # React Native Android 应用
 ├── packages/
-│   └── shared/           # 共享核心业务包
-├── docs/                 # 项目文档
-└── shell/                # 参考脚本
+│   ├── native/               # Rust 原生网络模块
+│   └── shared/               # 共享业务与协议
+├── patches/                  # pnpm 依赖补丁
+├── shell/                    # Git hooks、性能基准与发布脚本
+├── .github/workflows/        # CI 与多平台 Release
+├── .githooks/                # 版本化 Git hooks
+└── pnpm-workspace.yaml
 ```
-
-详细的项目结构设计请参阅 [docs/architecture.md](./docs/architecture.md)
 
 ## 快速开始
 
 ### 环境要求
 
-- Node.js >= 18
-- pnpm >= 8
-- 桌面端：无额外要求
-- 移动端：Android Studio、JDK 17
+| 依赖    | 版本 / 说明                                                   |
+| ------- | ------------------------------------------------------------- |
+| Node.js | `22`（与 CI 一致）                                            |
+| pnpm    | `10.27.0`（由根 `packageManager` 固定）                       |
+| Rust    | stable，仅构建原生模块或运行完整 CI 检查时需要                |
+| Android | JDK `17`、Android Studio、Android SDK 36、NDK `27.1.12297006` |
+| 桌面端  | 无额外运行时要求；打包需安装对应平台工具链                    |
+
+本仓库使用 `node-linker=hoisted` 和统一的 `pnpm-lock.yaml`。不要混用 `npm install` 或提交其他包管理器锁文件。
 
 ### 安装依赖
 
 ```bash
-# 安装所有依赖
 pnpm install
 ```
 
+Android 构建还会安装 `@react-native/gradle-plugin` 的 pnpm 补丁，配置位于 `pnpm-workspace.yaml`，补丁文件位于 `patches/`。请使用仓库内的 pnpm 版本，确保补丁被正确应用。
+
 ### Git Hooks
 
-首次开发时运行以下命令安装仓库 Git hooks：
+首次开发时安装仓库钩子：
 
 ```bash
 sh shell/install-git-hooks.sh
 ```
 
-安装后 Git 会使用 `.githooks/` 目录下的钩子：
-
-- **pre-commit**：对暂存的源码文件执行 ESLint（按所属包）与 Prettier 检查，并阻止暂存区与工作区不一致的部分暂存提交。
-- **commit-msg**：自动移除 AI co-author 尾注；校验提交信息需符合 `<scope>: <中文主题>` 单行格式（scope 如 `desktop` / `mobile` / `shared` / `ci` 等，多个范围用 `+` 组合）。
-- **pre-push**：推送前执行 `pnpm install --frozen-lockfile`、`pnpm lint`、`pnpm type-check`（与 CI 质量门禁对齐）。
-- **post-merge**：合并后若 hooks 或依赖定义发生变化，自动刷新 hooks 并提示 `pnpm install`。
-- **pre-rebase**：禁止在 `master` / `main` / `release/*` 分支上直接 rebase（如确需操作，可临时设置 `NETMATE_ALLOW_PROTECTED_REBASE=1`）。
+- **pre-commit**：对暂存源码执行 ESLint 和 Prettier 检查
+- **commit-msg**：要求单行 `<scope>: <中文主题>` 格式
+- **pre-push**：执行冻结安装、lint 与类型检查
+- **post-merge**：钩子或依赖定义变化时自动刷新
+- **pre-rebase**：保护 `master` / `main` / `release/*`
 
 ### 开发模式
 
 ```bash
-# 启动桌面端开发
+# 桌面端
 pnpm dev:desktop
 
-# 启动移动端开发服务 (Metro Bundler)
+# 移动端 Metro + shared 监听
 pnpm dev:mobile
-```
 
-### 移动端 Android 启动指南
-
-在 Windows 环境下运行 Android 应用，请确保已安装 JDK 17+ 和 Android Studio（含 SDK Platform-Tools）。
-
-1. **启动模拟器或连接真机**
-   - 模拟器：通过 Android Studio AVD Manager 启动。
-   - 真机：通过 USB 连接并开启"USB 调试"模式。
-
-2. **启动应用**
-   在新的终端窗口中运行：
-
-   ```bash
-   pnpm android
-   ```
-
-   _注意：请确保 `pnpm dev:mobile` 已经在另一个窗口中运行。_
-
-3. **常用命令**
-   ```bash
-   # 清理构建缓存 (如果构建失败)
-   cd apps/mobile/android && ./gradlew clean
-   ```
-
-### 构建发布
-
-```bash
-# 构建桌面端应用
-pnpm build:desktop
-
-# 构建 Android 应用
+# 在模拟器或真机上运行 Android
 pnpm android
 ```
 
+Android 真机需要开启 USB 调试；模拟器可通过 Android Studio AVD Manager 启动。`pnpm android` 运行期间应保持 `pnpm dev:mobile` 的 Metro 服务可用。
+
+### 构建
+
+```bash
+# 构建 shared 与桌面端
+pnpm build
+
+# 生成当前平台桌面安装包
+pnpm dist
+
+# 指定桌面平台
+pnpm dist:win
+pnpm dist:mac
+pnpm dist:linux
+
+# 构建 Android Release APK
+pnpm dist:android
+```
+
+Android Release 签名通过 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 注入。未提供发布签名时，Release 构建会回退到调试签名，仅适合本地验证，不能用于正式分发。
+
+### 质量检查
+
+```bash
+pnpm lint
+pnpm type-check
+pnpm test
+pnpm format:check
+
+# 桌面端 Electron E2E
+pnpm test:e2e
+
+# 网络模拟回归
+pnpm test:network
+```
+
+CI 在 Node.js 22 / pnpm 10.27.0 下执行质量门禁、网络模拟回归、三平台桌面构建、Electron E2E 和 Android 构建。Release 工作流在 CI 成功后自动打包并发布 GitHub Release；发布版本来自 `apps/desktop/package.json`。
+
 ## 配置说明
 
-应用启动后，需要配置以下信息：
+应用启动后按需配置：
 
 1. **账户信息**
-   - 用户名：校园网账号
-   - 密码：校园网密码
-   - 登录地址：认证服务器地址（默认为学校配置）
-
+   - 校园网账号与密码
+   - 认证服务器地址
+   - 服务商类型
 2. **WiFi 设置**
-   - WiFi 名称：需要自动连接的 WiFi SSID
-   - WiFi 密码：WiFi 连接密码
-
+   - SSID 与密码
+   - 优先级（`1-99`）
+   - 是否需要校园网认证及关联账户
 3. **自动化设置**
-   - 开机自启：是否开机自动运行
-   - 轮询间隔：网络状态检测间隔（秒）
-   - 自动重连：掉线后是否自动重连
+   - 开机自启
+   - 心跳检测间隔
+   - 自动重连与重试次数
+   - 日志级别与自动清理
+
+配置和日志包含个人网络信息，请勿将本地配置、日志或密钥提交到仓库。
 
 ## 登录协议
 
-本项目基于学校认证系统的 HTTP 接口实现登录：
+校园网认证基于学校 ePortal HTTP 接口：
 
-```
+```http
 POST http://{auth_server}/eportal/portal/login
 ```
 
 主要参数：
 
-- `user_account`: 用户账号
-- `user_password`: 用户密码
-- `wlan_user_ip`: 用户 IPv4 地址
-- `wlan_user_ipv6`: 用户 IPv6 地址（URL 编码）
-- `wlan_user_mac`: MAC 地址
-- `wlan_ac_ip`: AC 控制器 IP
+- `user_account`：用户账号
+- `user_password`：用户密码
+- `wlan_user_ip`：用户 IPv4 地址
+- `wlan_user_ipv6`：用户 IPv6 地址（URL 编码）
+- `wlan_user_mac`：MAC 地址
+- `wlan_ac_ip`：AC 控制器 IP
 
-## 开发指南
+具体字段兼容、在线判定和注销行为以 `packages/shared/src/services/` 中的实现为准。
 
-### 代码规范
+## 开发约定
 
-```bash
-# 代码格式化
-pnpm format
+- `packages/shared/src/services/`：核心服务
+- `packages/shared/src/utils/`：工具函数
+- `packages/shared/src/types/`：类型定义
+- `apps/desktop/electron/`：Electron 主进程
+- `apps/desktop/src/`：桌面端 UI
+- `apps/mobile/src/`：移动端 UI
+- `apps/mobile/android/app/src/main/java/`：Android 原生模块
 
-# 代码检查
-pnpm lint
-
-# 类型检查
-pnpm type-check
-```
-
-### 目录约定
-
-- `packages/shared/src/services/` - 核心服务
-- `packages/shared/src/utils/` - 工具函数
-- `packages/shared/src/types/` - 类型定义
-- `apps/desktop/electron/` - Electron 主进程
-- `apps/desktop/src/` - 桌面端 UI
-- `apps/mobile/src/` - 移动端 UI
+提交信息必须为单行 `<scope>: <中文主题>`，例如 `mobile: 修复 Gradle 插件解析`。可用 scope 包括 `desktop`、`mobile`、`shared`、`ci`、`release`、`docs`、`chore`、`build`、`test`、`deps`、`repo`。
 
 ## 故障排除
 
-### Electron 安装失败
+### Electron 二进制安装失败
 
-**问题表现：**
+如果出现：
 
-运行 `pnpm run dev:desktop` 时报错：
-
-```
+```text
 Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
 ```
 
-**问题原因：**
-
-Electron 在安装时需要下载平台特定的二进制文件（Windows 上是 electron.exe 及相关资源）。这个下载过程可能因以下原因失败：
-
-1. 网络问题导致下载中断
-2. 防火墙或代理拦截下载请求
-3. 安装过程被意外中断
-4. pnpm 缓存损坏
-
-当 Electron 的 `dist` 文件夹和 `path.txt` 文件缺失时，应用无法找到 Electron 可执行文件路径，就会抛出该错误。
-
-**解决方案：**
-
-方法一：手动运行 Electron 安装脚本（推荐）
+先尝试补装 Electron 二进制：
 
 ```bash
-# 直接运行 Electron 的安装脚本
 node node_modules/electron/install.js
 ```
 
-方法二：删除并重新安装 Electron
+若仍失败，再清理后重装：
 
 ```bash
-# Windows PowerShell
-rm -rf node_modules/electron
-pnpm install
-
-# Windows CMD
-rmdir /s /q node_modules\electron
-pnpm install
-```
-
-方法三：完全重新安装依赖
-
-```bash
-# 删除所有依赖并重新安装
 rm -rf node_modules
 pnpm install
 ```
 
-**验证修复：**
+Windows PowerShell 可使用 `Remove-Item -Recurse -Force node_modules`。修复后 `node_modules/electron` 应包含 `dist/` 和 `path.txt`。
 
-成功修复后，`node_modules/electron` 目录下应包含：
+### Android Gradle 无法解析 React Native
 
-- `dist/` 文件夹（包含 Electron 可执行文件）
-- `path.txt` 文件（记录可执行文件相对路径）
+本仓库依赖 hoisted 工作区布局，React Native 与 Gradle 插件位于仓库根目录 `node_modules`。如果 Gradle 报找不到 `react-native`、`react-native-svg` 或 `@react-native/gradle-plugin`：
 
-再次运行 `pnpm run dev:desktop` 应能正常启动应用。
+```bash
+pnpm install --frozen-lockfile
 
-### 桌面端启动后出现乱码警告
-
-**问题表现：**
-
-启动后终端显示乱码：
-
-```
-[stderr] ����: û���ҵ����� "31500"��
+# 清理可再生成的 Android 构建缓存
+cd apps/mobile/android
+./gradlew clean
 ```
 
-**问题原因：**
+若只修改了依赖布局而自动链接仍使用旧路径，删除 `apps/mobile/android/build/generated/autolinking/` 后重新运行 Gradle。该目录是可再生成的构建缓存，不应提交。
 
-这是 Windows 控制台编码问题导致的中文乱码，原文是"错误: 没有找到进程 31500"。这是 `vite-plugin-electron` 在开发模式下管理进程时的正常警告信息，表示在尝试清理旧的 Electron 进程时，进程已经退出。
+### Android 原生编译失败
 
-**影响范围：**
+确认 JDK 为 17，而不是系统默认的更高版本；同时检查 Android SDK、NDK 与 CMake 是否完整安装。CI 使用 Temurin JDK 17。可使用以下命令先验证 Gradle 配置：
 
-这只是一个无害的警告信息，不影响应用正常运行和开发。可以安全忽略。
-
-**消除乱码（可选）：**
-
-如果希望正确显示中文，可以在终端中设置 UTF-8 编码：
-
-```powershell
-# PowerShell
-chcp 65001
+```bash
+bash apps/mobile/android/gradlew -p apps/mobile/android help
 ```
 
-然后重新运行 `pnpm run dev:desktop`。
+### 桌面端出现进程清理乱码
+
+Windows 控制台可能把“没有找到进程”显示为乱码。这通常是 `vite-plugin-electron` 清理已退出进程时的无害警告。可执行 `chcp 65001` 切换到 UTF-8 后重试。
 
 ## 许可证
 
@@ -417,5 +309,7 @@ ISC License
 
 ## 相关链接
 
-- [项目仓库](https://github.com/Twiink/TUST-Campusnet-Login)
-- [问题反馈](https://github.com/Twiink/TUST-Campusnet-Login/issues)
+- [项目仓库](https://github.com/Twiink/TUST-CampusNetwork-Login)
+- [问题反馈](https://github.com/Twiink/TUST-CampusNetwork-Login/issues)
+- [更新日志](./CHANGELOG.md)
+- [性能报告](./PERFORMANCE.md)
