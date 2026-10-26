@@ -613,10 +613,19 @@ jobs:
               --title "NetMate ${TAG_NAME}" \
               --latest
           else
+            target_args=(--target "${TARGET_SHA}")
+            if tagged_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG_NAME}" --jq .sha 2>/dev/null)"; then
+              if [ "${tagged_sha}" != "${TARGET_SHA}" ]; then
+                echo "${TAG_NAME} 标签与构建提交不一致，停止发布"
+                exit 1
+              fi
+              # 已有标签决定发布提交，避免旧 target_commitish 触发 workflow 权限校验。
+              target_args=(--verify-tag)
+            fi
             gh release create "${TAG_NAME}" "${assets[@]}" \
               --title "NetMate ${TAG_NAME}" \
               --generate-notes \
-              --target "${TARGET_SHA}" \
+              "${target_args[@]}" \
               --latest
           fi
 
