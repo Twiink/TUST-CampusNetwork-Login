@@ -48,7 +48,12 @@ export const GeneralSettingsCard: React.FC<{
         </View>
 
         <View style={styles.settingRow}>
-          <Text style={[styles.settingLabel, { color: theme.colors.text }]}>断线自动重连</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>断线自动重连</Text>
+            <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+              校园网认证失效时自动登录；WiFi 断开时按优先级重连已开启自动连接的 WiFi
+            </Text>
+          </View>
           <Switch
             trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
             thumbColor={settings.autoReconnect ? theme.colors.primary : '#f4f3f4'}
@@ -58,7 +63,12 @@ export const GeneralSettingsCard: React.FC<{
         </View>
 
         <View style={styles.settingRow}>
-          <Text style={[styles.settingLabel, { color: theme.colors.text }]}>启动时自动连接</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>启动时自动连接</Text>
+            <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+              后台服务启动时若未连接 WiFi，按优先级连接已配置的 WiFi
+            </Text>
+          </View>
           <Switch
             trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
             thumbColor={settings.startupAutoConnect ? theme.colors.primary : '#f4f3f4'}
@@ -67,13 +77,33 @@ export const GeneralSettingsCard: React.FC<{
           />
         </View>
 
-        <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-          <Text style={[styles.settingLabel, { color: theme.colors.text }]}>保持当前连接</Text>
+        <View style={styles.settingRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>保持当前连接</Text>
+            <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+              启动时已连接其他 WiFi 则不切换；关闭后会建议切换到最高优先级的已配置 WiFi
+            </Text>
+          </View>
           <Switch
             trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
             thumbColor={settings.keepCurrentConnection ? theme.colors.primary : '#f4f3f4'}
             value={settings.keepCurrentConnection}
             onValueChange={v => onToggleSetting('keepCurrentConnection', v)}
+          />
+        </View>
+
+        <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.settingLabel, { color: theme.colors.text }]}>自动检查更新</Text>
+            <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+              启动时检查 GitHub 新版本（12 小时内只检查一次）
+            </Text>
+          </View>
+          <Switch
+            trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
+            thumbColor={settings.autoUpdate ? theme.colors.primary : '#f4f3f4'}
+            value={settings.autoUpdate}
+            onValueChange={v => onToggleSetting('autoUpdate', v)}
           />
         </View>
 

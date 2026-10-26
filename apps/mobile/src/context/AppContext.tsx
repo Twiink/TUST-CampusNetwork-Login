@@ -26,6 +26,10 @@ import {
 import { createMobileServices } from './mobileServices';
 import { useAccountActions } from './useAccountActions';
 import { isAutoStartAvailable, setAutoStartEnabled } from '../native/AutoStart';
+import { useAutoAuth } from '../hooks/useAutoAuth';
+import { usePermissionGuide } from '../hooks/usePermissionGuide';
+import { autoCheckForUpdate } from '../native/AppUpdater';
+import type { PermissionItem, PermissionKey } from '../native/Permissions';
 
 export interface LogEntry {
   id: string;
@@ -66,8 +70,13 @@ interface AppContextType {
   requestPermission: () => Promise<boolean>;
   isModuleAvailable: boolean;
 
-  // 刷新网络信息
-  refreshNetworkInfo: () => Promise<void>;
+  // 权限引导（自动认证所需权限的状态与申请）
+  permissionItems: PermissionItem[];
+  requestAppPermission: (key: PermissionKey) => Promise<void>;
+  runPermissionGuide: () => Promise<void>;
+
+  // 刷新网络信息（返回本次读取的最新值；模块不可用或读取失败时为 null）
+  refreshNetworkInfo: () => Promise<NetworkInfo | null>;
 
   // 服务引用（供高级用例使用）
   services: {
@@ -109,6 +118,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo>(defaultNetworkInfo);
   const [hasPermission, setHasPermission] = useState(false);
+  const [servicesReady, setServicesReady] = useState(false);
   const isModuleAvailable = isNativeModuleAvailable();
 
   // 账户状态
@@ -177,6 +187,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           networkDetector,
           logger,
         };
+        setServicesReady(true);
 
         addLog('success', '配置加载完成');
 
@@ -217,15 +228,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [addLog, isModuleAvailable]);
 
   // 刷新网络信息
-  const refreshNetworkInfo = useCallback(async () => {
-    if (!isModuleAvailable) return;
+  const refreshNetworkInfo = useCallback(async (): Promise<NetworkInfo | null> => {
+    if (!isModuleAvailable) return null;
 
     try {
       const info = await getNetworkInfo();
       setNetworkInfo(info);
       setNetworkStatus(info.connected ? 'connected' : 'disconnected');
+      return info;
     } catch (error) {
       console.warn('刷新网络信息失败:', error);
+      return null;
     }
   }, [isModuleAvailable]);
 
@@ -265,10 +278,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const shouldRun = config.settings.enableHeartbeat || config.settings.autoReconnect;
       const running = await isBackgroundServiceRunning();
 
-      if (shouldRun && !running) {
+      if (shouldRun) {
+        // 已运行时再次启动是幂等的，用于把新的检测间隔传给服务
         await startBackgroundService(config.settings.heartbeatIntervalSeconds * 1000);
-        addLog('info', '后台服务已启动');
-      } else if (!shouldRun && running) {
+        if (!running) {
+          addLog('info', '后台服务已启动');
+        }
+      } else if (running) {
         await stopBackgroundService();
         addLog('info', '后台服务已停止');
       }
@@ -294,10 +310,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // 刷新网络信息获取最新 IP
-    await refreshNetworkInfo();
+    // 使用本次刷新的返回值：setState 要到下一次渲染才生效，闭包里的 networkInfo 仍是旧值
+    const latestInfo = (await refreshNetworkInfo()) ?? networkInfo;
 
-    if (!networkInfo.ipv4) {
+    if (!latestInfo.ipv4) {
       addLog('error', '无法获取 IP 地址，请检查网络连接');
       return;
     }
@@ -309,13 +325,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { authService } = servicesRef.current;
       authService.setServerUrl(currentAccount.serverUrl);
 
-      const result = await authService.login({
+      // 手动登录使用带重试封装（3 次、间隔 2 秒），与桌面端及参考实现一致
+      const result = await authService.loginWithRetry({
         serverUrl: currentAccount.serverUrl,
         userAccount: currentAccount.username,
         userPassword: currentAccount.password,
-        wlanUserIp: networkInfo.ipv4,
-        wlanUserIpv6: networkInfo.ipv6 || undefined,
-        wlanUserMac: networkInfo.mac || undefined,
+        wlanUserIp: latestInfo.ipv4,
+        wlanUserIpv6: latestInfo.ipv6 || undefined,
+        wlanUserMac: latestInfo.mac || undefined,
         isp: currentAccount.isp,
       });
 
@@ -339,16 +356,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    if (!networkInfo.ipv4) {
-      addLog('error', '无法获取 IP 地址');
-      return;
-    }
-
     addLog('info', '正在登出...');
 
     try {
       const { authService } = servicesRef.current;
-      const result = await authService.logout(networkInfo.ipv4);
+      // 注销请求不依赖本机 IP（与参考实现一致），IP 仅用于日志
+      const result = await authService.logout(networkInfo.ipv4 || undefined);
 
       if (result.success) {
         setNetworkStatus('disconnected');
@@ -360,6 +373,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addLog('error', `登出异常: ${error instanceof Error ? error.message : '未知错误'}`);
     }
   }, [networkInfo.ipv4, addLog]);
+
+  // 自动认证：前台检查 + 配置同步给原生后台引擎
+  const markAuthenticated = useCallback(() => {
+    setNetworkStatus('connected');
+  }, []);
+  useAutoAuth({
+    servicesRef,
+    config,
+    accounts,
+    currentAccount,
+    ready: servicesReady,
+    addLog,
+    onAuthenticated: markAuthenticated,
+  });
+
+  // 自动更新：配置加载完成后检查一次（12 小时内只查一次）
+  const autoUpdateEnabled = config.settings.autoUpdate;
+  useEffect(() => {
+    if (!servicesReady || !autoUpdateEnabled) return;
+    autoCheckForUpdate()
+      .then(release => {
+        if (release) {
+          addLog('info', `发现新版本 ${release.version}`);
+        }
+      })
+      .catch(() => undefined);
+  }, [servicesReady, autoUpdateEnabled, addLog]);
+
+  // 权限引导：首次启动与开启自动重连时逐项申请；定位授予后立即刷新 SSID
+  const handleLocationGranted = useCallback(() => {
+    setHasPermission(true);
+    refreshNetworkInfo().catch(() => undefined);
+  }, [refreshNetworkInfo]);
+  const permissionGuide = usePermissionGuide({
+    ready: servicesReady,
+    autoAuthEnabled: config.settings.autoReconnect,
+    addLog,
+    onLocationGranted: handleLocationGranted,
+  });
 
   // 账户管理
   const { addAccount, updateAccount, removeAccount, switchAccount } = useAccountActions({
@@ -395,6 +447,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestPermission,
         isModuleAvailable,
         refreshNetworkInfo,
+        permissionItems: permissionGuide.items,
+        requestAppPermission: permissionGuide.request,
+        runPermissionGuide: permissionGuide.runGuide,
         services: servicesRef.current,
       }}
     >

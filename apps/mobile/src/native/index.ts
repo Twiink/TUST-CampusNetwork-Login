@@ -11,8 +11,11 @@ export { default as BackgroundService } from './BackgroundService';
 export * from './AutoStart';
 export { default as AutoStart } from './AutoStart';
 
-export * from './Notification';
-export { default as Notification } from './Notification';
-
 export * from './AppUpdater';
 export { default as AppUpdater } from './AppUpdater';
+
+export * from './AutoAuth';
+export { default as AutoAuth } from './AutoAuth';
+
+export * from './Permissions';
+export { default as Permissions } from './Permissions';

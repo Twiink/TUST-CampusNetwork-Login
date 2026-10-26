@@ -6,6 +6,7 @@ import { AccountConfig, WifiConfig } from '@repo/shared';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
 import { WifiConfigCard } from '../components/settings/WifiConfigCard';
+import { PermissionsCard } from '../components/settings/PermissionsCard';
 import {
   DEFAULT_NEW_ACCOUNT,
   DEFAULT_NEW_WIFI,
@@ -32,7 +33,7 @@ const styles = StyleSheet.create({
 });
 
 export const SettingsScreen: React.FC = () => {
-  const { config, setConfig } = useApp();
+  const { config, setConfig, permissionItems, requestAppPermission, runPermissionGuide } = useApp();
   const { theme } = useTheme();
 
   const [newAccount, setNewAccount] = useState<NewAccountForm>(DEFAULT_NEW_ACCOUNT);
@@ -150,6 +151,16 @@ export const SettingsScreen: React.FC = () => {
           settings={config.settings}
           onToggleSetting={toggleSetting}
           onToggleNotificationSetting={toggleNotificationSetting}
+        />
+
+        <PermissionsCard
+          items={permissionItems}
+          onRequest={item => {
+            requestAppPermission(item.key).catch(() => undefined);
+          }}
+          onRunGuide={() => {
+            runPermissionGuide().catch(() => undefined);
+          }}
         />
 
         <AccountsCard

@@ -2,10 +2,9 @@
  * Hooks 导出
  */
 
-export { useNetwork, type UseNetworkResult } from './useNetwork';
-export { useHeartbeat, type UseHeartbeatOptions, type UseHeartbeatResult } from './useHeartbeat';
+export { useAutoAuth, describeAutoAuthResult, type UseAutoAuthOptions } from './useAutoAuth';
 export {
-  useAutoReconnect,
-  type UseAutoReconnectOptions,
-  type UseAutoReconnectResult,
-} from './useAutoReconnect';
+  usePermissionGuide,
+  type UsePermissionGuideOptions,
+  type UsePermissionGuideResult,
+} from './usePermissionGuide';

@@ -5,6 +5,7 @@
  */
 
 import { Platform, Linking, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import DeviceInfo from 'react-native-device-info';
 
 export interface ReleaseInfo {
@@ -33,9 +34,12 @@ export interface UpdateStatus {
   error: string | null;
 }
 
-// GitHub 仓库信息
+// GitHub 仓库信息（与 git remote origin 一致）
 const GITHUB_OWNER = 'Twiink';
-const GITHUB_REPO = 'TUST-Campusnet-Login';
+const GITHUB_REPO = 'TUST-CampusNetwork-Login';
+/** 自动检查的最短间隔，避免每次冷启动都请求 GitHub API（未认证限额 60 次/小时） */
+const AUTO_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
+const LAST_CHECK_KEY = 'netmate:update-last-check';
 
 /**
  * 获取当前应用版本
@@ -113,17 +117,24 @@ export async function checkForUpdate(): Promise<ReleaseInfo | null> {
 
 /**
  * 获取适合当前平台的下载资源
+ * Android 发布 ABI 分包（app-<abi>-release.apk）与通用包（app-universal-release.apk），
+ * 优先选择与设备首选 ABI 匹配的分包，体积更小；匹配不到时用通用包。
  */
-export function getPlatformAsset(release: ReleaseInfo): ReleaseAsset | null {
+export function getPlatformAsset(
+  release: ReleaseInfo,
+  supportedAbis: string[] = []
+): ReleaseAsset | null {
   if (Platform.OS === 'android') {
-    // 查找 APK 文件
-    return (
-      release.assets.find(
-        asset =>
-          asset.name.endsWith('.apk') ||
-          asset.contentType === 'application/vnd.android.package-archive'
-      ) || null
+    const apks = release.assets.filter(
+      asset =>
+        asset.name.endsWith('.apk') ||
+        asset.contentType === 'application/vnd.android.package-archive'
     );
+    for (const abi of supportedAbis) {
+      const match = apks.find(asset => asset.name.includes(`-${abi}-`));
+      if (match) return match;
+    }
+    return apks.find(asset => asset.name.includes('universal')) || apks[0] || null;
   }
 
   if (Platform.OS === 'ios') {
@@ -138,7 +149,8 @@ export function getPlatformAsset(release: ReleaseInfo): ReleaseAsset | null {
  * 打开下载页面
  */
 export async function openDownloadPage(release: ReleaseInfo): Promise<void> {
-  const asset = getPlatformAsset(release);
+  const abis = Platform.OS === 'android' ? await DeviceInfo.supportedAbis().catch(() => []) : [];
+  const asset = getPlatformAsset(release, abis);
 
   if (asset) {
     await Linking.openURL(asset.downloadUrl);
@@ -178,7 +190,30 @@ export async function checkAndPromptUpdate(): Promise<boolean> {
   return false;
 }
 
+/**
+ * 启动时自动检查更新（settings.autoUpdate 开启时调用）。
+ * 距上次检查不足 12 小时则跳过；发现新版本时弹出更新对话框。
+ */
+export async function autoCheckForUpdate(now: number = Date.now()): Promise<ReleaseInfo | null> {
+  if (Platform.OS !== 'android') return null;
+  try {
+    const last = Number(await AsyncStorage.getItem(LAST_CHECK_KEY));
+    if (Number.isFinite(last) && last > 0 && now - last < AUTO_CHECK_INTERVAL_MS) {
+      return null;
+    }
+    await AsyncStorage.setItem(LAST_CHECK_KEY, String(now));
+  } catch {
+    // 存储不可用时照常检查
+  }
+  const release = await checkForUpdate();
+  if (release) {
+    showUpdateDialog(release);
+  }
+  return release;
+}
+
 export default {
+  autoCheckForUpdate,
   getCurrentVersion,
   compareVersions,
   checkForUpdate,

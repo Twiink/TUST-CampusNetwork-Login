@@ -109,9 +109,11 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-jest.mock('react-native/Libraries/Alert/Alert', () => ({
-  alert: jest.fn(),
-}));
+// react-native/index.js 通过 require('./Libraries/Alert/Alert').default 取 Alert，需同时提供 default
+jest.mock('react-native/Libraries/Alert/Alert', () => {
+  const alertMock = { alert: jest.fn() };
+  return { __esModule: true, ...alertMock, default: alertMock };
+});
 
 jest.mock('react-native/Libraries/EventEmitter/NativeEventEmitter');
 
