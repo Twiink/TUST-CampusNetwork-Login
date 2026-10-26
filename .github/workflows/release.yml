@@ -17,9 +17,14 @@ on:
         required: false
         default: false
         type: boolean
+      artifact_run_id:
+        description: '可选，复用指定 Release run 的成功构建产物，仅重新发布'
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
@@ -52,6 +57,7 @@ jobs:
       target_sha: ${{ steps.resolve.outputs.target_sha }}
       release_exists: ${{ steps.resolve.outputs.release_exists }}
       existing_asset_count: ${{ steps.resolve.outputs.existing_asset_count }}
+      artifact_run_id: ${{ steps.resolve.outputs.artifact_run_id }}
 
     steps:
       - name: 检出目标提交
@@ -66,8 +72,28 @@ jobs:
           INPUT_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.release_version || '' }}
           FORCE_PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.force_publish || false }}
           TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ARTIFACT_RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.artifact_run_id || '' }}
         run: |
           version_input="${INPUT_VERSION}"
+
+          if [ -n "${ARTIFACT_RUN_ID}" ]; then
+            [[ "${ARTIFACT_RUN_ID}" =~ ^[0-9]+$ ]] || { echo 'artifact_run_id 必须为数字'; exit 1; }
+            source_info="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}" --jq '[.path, .head_sha, .status] | @tsv')"
+            IFS=$'\t' read -r source_workflow source_sha source_status <<< "${source_info}"
+            if [ "${source_workflow}" != '.github/workflows/release.yml' ] || [ "${source_status}" != 'completed' ]; then
+              echo '仅支持复用已结束的 Release 运行产物'
+              exit 1
+            fi
+            builds_ready="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ARTIFACT_RUN_ID}/jobs?filter=latest&per_page=100" --jq '[.jobs[] | select(.conclusion == "success") | .name] | contains(["打包 Windows EXE", "打包 macOS DMG", "打包 Linux AppImage/DEB", "打包 Android APK"])')"
+            if [ "${builds_ready}" != 'true' ]; then
+              echo '原运行的四个平台构建尚未全部成功，不能复用'
+              exit 1
+            fi
+            TARGET_SHA="${source_sha}"
+            if [ -z "${version_input}" ]; then
+              version_input="$(gh api "repos/${GITHUB_REPOSITORY}/contents/apps/desktop/package.json?ref=${TARGET_SHA}" --jq .content | base64 --decode | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")"
+            fi
+          fi
 
           if [ -z "${version_input}" ]; then
             version_input="$(node -p "require('./apps/desktop/package.json').version")"
@@ -123,6 +149,7 @@ jobs:
             echo "target_sha=${TARGET_SHA}"
             echo "release_exists=${release_exists}"
             echo "existing_asset_count=${existing_asset_count}"
+            echo "artifact_run_id=${ARTIFACT_RUN_ID}"
           } >> "${GITHUB_OUTPUT}"
 
       - name: 输出跳过原因
@@ -133,7 +160,7 @@ jobs:
     name: 打包 Windows EXE
     runs-on: windows-latest
     needs: resolve-release
-    if: needs.resolve-release.outputs.should_publish == 'true'
+    if: needs.resolve-release.outputs.should_publish == 'true' && needs.resolve-release.outputs.artifact_run_id == ''
     timeout-minutes: 40
 
     steps:
@@ -216,13 +243,14 @@ jobs:
             apps/desktop/release/**/latest.yml
             apps/desktop/release/**/*.blockmap
             apps/desktop/dist/**/*.exe
+            !apps/desktop/release/**/win-unpacked/**
           if-no-files-found: error
 
   build-macos:
     name: 打包 macOS DMG
     runs-on: macos-latest
     needs: resolve-release
-    if: needs.resolve-release.outputs.should_publish == 'true'
+    if: needs.resolve-release.outputs.should_publish == 'true' && needs.resolve-release.outputs.artifact_run_id == ''
     timeout-minutes: 40
 
     steps:
@@ -315,7 +343,7 @@ jobs:
     name: 打包 Linux AppImage/DEB
     runs-on: ubuntu-latest
     needs: resolve-release
-    if: needs.resolve-release.outputs.should_publish == 'true'
+    if: needs.resolve-release.outputs.should_publish == 'true' && needs.resolve-release.outputs.artifact_run_id == ''
     timeout-minutes: 40
 
     steps:
@@ -405,7 +433,7 @@ jobs:
     name: 打包 Android APK
     runs-on: ubuntu-latest
     needs: resolve-release
-    if: needs.resolve-release.outputs.should_publish == 'true'
+    if: needs.resolve-release.outputs.should_publish == 'true' && needs.resolve-release.outputs.artifact_run_id == ''
     timeout-minutes: 40
     env:
       ANDROID_VERSION_NAME: ${{ needs.resolve-release.outputs.android_version_name }}
@@ -495,10 +523,23 @@ jobs:
       - build-macos
       - build-linux
       - build-android
-    if: needs.resolve-release.outputs.should_publish == 'true'
+    if: |
+      !cancelled() &&
+      needs.resolve-release.result == 'success' &&
+      needs.resolve-release.outputs.should_publish == 'true' &&
+      (
+        needs.resolve-release.outputs.artifact_run_id != '' ||
+        (
+          needs.build-windows.result == 'success' &&
+          needs.build-macos.result == 'success' &&
+          needs.build-linux.result == 'success' &&
+          needs.build-android.result == 'success'
+        )
+      )
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: read
 
     steps:
       - name: 检出 master（用于同步 CHANGELOG）
@@ -511,24 +552,32 @@ jobs:
         with:
           name: release-windows-exe
           path: release-assets/windows
+          run-id: ${{ needs.resolve-release.outputs.artifact_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 下载 macOS 产物
         uses: actions/download-artifact@v8
         with:
           name: release-macos-dmg
           path: release-assets/macos
+          run-id: ${{ needs.resolve-release.outputs.artifact_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 下载 Linux 产物
         uses: actions/download-artifact@v8
         with:
           name: release-linux-packages
           path: release-assets/linux
+          run-id: ${{ needs.resolve-release.outputs.artifact_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 下载 Android 产物
         uses: actions/download-artifact@v8
         with:
           name: release-android-apk
           path: release-assets/android
+          run-id: ${{ needs.resolve-release.outputs.artifact_run_id || github.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 检查待发布资产
         run: |
@@ -540,8 +589,7 @@ jobs:
           TAG_NAME: ${{ needs.resolve-release.outputs.tag }}
           TARGET_SHA: ${{ needs.resolve-release.outputs.target_sha }}
         run: |
-          shopt -s nullglob
-          assets=(release-assets/windows/* release-assets/macos/* release-assets/linux/* release-assets/android/*)
+          mapfile -d '' -t assets < <(find release-assets -type f ! -path '*/win-unpacked/*' -print0 | sort -z)
 
           if [ "${#assets[@]}" -eq 0 ]; then
             echo "未找到可发布资产"
