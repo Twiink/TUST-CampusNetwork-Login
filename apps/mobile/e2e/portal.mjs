@@ -76,9 +76,14 @@ createServer(async (request, response) => {
       response.setHeader('Content-Length', statSync(file).size);
       const stream = createReadStream(file, { highWaterMark: slow ? 65536 : 1024 * 1024 });
       response.on('close', () => stream.destroy());
+      let sent = 0;
       for await (const bytes of stream) {
         if (response.destroyed) break;
         response.write(bytes);
+        sent += bytes.length;
+        // Keep a real download in progress through app restarts, independent of APK size.
+        while (slow && sent >= 1024 * 1024 && !response.destroyed)
+          await new Promise(resolve => setTimeout(resolve, 100));
         if (slow) await new Promise(resolve => setTimeout(resolve, 50));
       }
       response.end();

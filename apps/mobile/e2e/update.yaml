@@ -4,8 +4,9 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     centerElement: true
+    waitToSettleTimeoutMs: 1000
     timeout: 60000
-    speed: 80
+    speed: 40
     element: '检查更新'
     direction: DOWN
 - tapOn: '检查更新'
@@ -13,8 +14,9 @@ appId: com.netmate.app.e2e
     element: '下载更新'
     direction: DOWN
     timeout: 15000
-    speed: 80
+    speed: 40
     centerElement: true
+    waitToSettleTimeoutMs: 1000
 - tapOn: '下载更新'
 - extendedWaitUntil:
     visible: '取消下载'
@@ -24,8 +26,9 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     centerElement: true
+    waitToSettleTimeoutMs: 1000
     timeout: 60000
-    speed: 80
+    speed: 40
     element: '取消下载'
     direction: DOWN
 - assertVisible: '下载进度.*'

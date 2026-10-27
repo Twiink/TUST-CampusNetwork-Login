@@ -225,6 +225,7 @@ export const AccountsCard: React.FC<{
         </Text>
       )}
       <TouchableOpacity
+        testID="add-account"
         style={[
           styles.btnPrimary,
           {

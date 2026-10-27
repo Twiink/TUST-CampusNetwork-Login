@@ -5,8 +5,9 @@ appId: com.netmate.app.e2e
 - runFlow: { file: 'flows/add-account.yaml', env: { USERNAME: 'temporary' } }
 - scrollUntilVisible:
     centerElement: true
+    waitToSettleTimeoutMs: 1000
     timeout: 60000
-    speed: 80
+    speed: 40
     element: '编辑账号 temporary'
     direction: UP
 - tapOn: '编辑账号 temporary'
@@ -20,7 +21,7 @@ appId: com.netmate.app.e2e
       element: { id: 'save-edit' },
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: { id: 'save-edit' }
@@ -29,28 +30,30 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     centerElement: true
+    waitToSettleTimeoutMs: 1000
     timeout: 60000
-    speed: 80
+    speed: 40
     element: '删除账号 temporary-edited'
     direction: DOWN
 - tapOn: '删除账号 temporary-edited'
 - assertNotVisible: '删除账号 temporary-edited'
 - scrollUntilVisible:
-    { element: { id: 'scan-wifi' }, direction: UP, timeout: 60000, speed: 80, centerElement: true }
+    { element: { id: 'scan-wifi' }, direction: UP, timeout: 60000, speed: 40, centerElement: true }
 - tapOn: { id: 'scan-wifi' }
 - scrollUntilVisible:
     centerElement: true
+    waitToSettleTimeoutMs: 1000
     element: '选择网络 Nearby-WIFI'
     direction: DOWN
     timeout: 60000
-    speed: 80
+    speed: 40
 - tapOn: '选择网络 Nearby-WIFI'
 - scrollUntilVisible:
     {
       element: { id: 'add-wifi-password' },
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: { id: 'add-wifi-password' }
@@ -61,19 +64,19 @@ appId: com.netmate.app.e2e
       element: { id: 'add-requires-auth' },
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: { id: 'add-requires-auth' }
 - scrollUntilVisible:
-    { element: { id: 'add-wifi' }, direction: DOWN, timeout: 60000, speed: 80, centerElement: true }
+    { element: { id: 'add-wifi' }, direction: DOWN, timeout: 60000, speed: 40, centerElement: true }
 - tapOn: { id: 'add-wifi' }
 - scrollUntilVisible:
     {
       element: '编辑 WiFi Nearby-WIFI',
       direction: UP,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: '编辑 WiFi Nearby-WIFI'
@@ -87,7 +90,7 @@ appId: com.netmate.app.e2e
       element: { id: 'save-edit' },
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: { id: 'save-edit' }
@@ -96,7 +99,7 @@ appId: com.netmate.app.e2e
       element: '自动连接 Nearby-edited',
       direction: UP,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: '自动连接 Nearby-edited'
@@ -108,7 +111,7 @@ appId: com.netmate.app.e2e
       element: '自动连接 Nearby-edited',
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - assertVisible: { text: '自动连接 Nearby-edited', checked: false }
@@ -117,7 +120,7 @@ appId: com.netmate.app.e2e
       element: '删除 WiFi Nearby-edited',
       direction: DOWN,
       timeout: 60000,
-      speed: 80,
+      speed: 40,
       centerElement: true,
     }
 - tapOn: '删除 WiFi Nearby-edited'
