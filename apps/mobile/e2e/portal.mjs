@@ -5,7 +5,8 @@ const root = path.resolve(process.argv[2]);
 const radio = { ssid: 'TUST-WIFI', enabled: true, failConnections: false };
 let online = false,
   slow = false,
-  invalid = false;
+  invalid = false,
+  updatesAvailable = false;
 const attempts = [];
 createServer(async (request, response) => {
   const url = new URL(request.url, 'http://127.0.0.1:38081');
@@ -22,6 +23,7 @@ createServer(async (request, response) => {
     if (url.searchParams.has('online')) online = url.searchParams.get('online') === 'true';
     if (url.searchParams.has('slow')) slow = url.searchParams.get('slow') === 'true';
     if (url.searchParams.has('invalid')) invalid = url.searchParams.get('invalid') === 'true';
+    if (url.searchParams.has('slow') || url.searchParams.has('invalid')) updatesAvailable = true;
     response.end('{}');
     return;
   }
@@ -50,7 +52,7 @@ createServer(async (request, response) => {
   if (url.pathname === '/releases/latest') {
     response.end(
       JSON.stringify({
-        tag_name: 'v1.0.2',
+        tag_name: updatesAvailable ? 'v1.0.2' : 'v1.0.1',
         name: 'E2E update',
         body: '受控更新验证',
         html_url: 'https://example.test/release',

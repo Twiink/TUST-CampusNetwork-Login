@@ -333,11 +333,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const native = isAutoAuthAvailable() ? await getAuthSnapshot() : null;
         const loaded = services.configManager.getConfig()!;
         if (
-          native?.paused &&
-          native.revision >= (loaded.revision ?? 0) &&
-          !loaded.settings.autoAuthPaused
+          native &&
+          (native.revision > (loaded.revision ?? 0) ||
+            (native.revision === (loaded.revision ?? 0) &&
+              native.paused !== loaded.settings.autoAuthPaused))
         ) {
-          await services.configManager.updateSettings({ autoAuthPaused: true });
+          await services.configManager.update(current => ({
+            revision: native.revision,
+            settings: { ...current.settings, autoAuthPaused: native.paused },
+          }));
         }
         await syncConfiguration(services.configManager.getConfig()!);
         if (!mounted.current) return;

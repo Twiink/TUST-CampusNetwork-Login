@@ -45,6 +45,7 @@ export interface AutoReconnectDeps {
   onReconnected: (ssid: string) => Promise<void>;
   /** 首次连接前的等待（毫秒）；启动自动连接无需等待硬件重置 */
   initialDelayMs?: number;
+  shouldContinue?: () => boolean | Promise<boolean>;
 }
 
 /** 单个 WiFi 重试次数：读新字段，兼容旧 maxRetries，至少 1 次 */
@@ -116,9 +117,11 @@ export async function executeAutoReconnect(
   }
 
   const failedList: WifiReconnectFailure[] = [];
+  if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
 
   try {
     for (const [index, wifi] of plan.entries()) {
+      if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
       if (index === 0 && disconnectedSsid) {
         logger.info(`----- 阶段1：尝试重连到断开的WiFi -----`);
       } else {
@@ -136,6 +139,7 @@ export async function executeAutoReconnect(
         failedList,
         deps
       );
+      if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
       if (success) {
         logger.success(`WiFi自动连接成功: ${wifi.ssid}`);
         await onReconnected(wifi.ssid);
@@ -143,6 +147,7 @@ export async function executeAutoReconnect(
       }
     }
 
+    if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
     logger.error(`----- 阶段3：所有WiFi连接失败 -----`);
     logger.error(`失败的WiFi数量: ${failedList.length}`);
     for (const failed of failedList) {
@@ -238,7 +243,9 @@ async function retryConnectToWifi(
         await sleep(2000);
       }
 
+      if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
       const success = await wifiSwitcherService.connectToConfiguredNetwork(ssid);
+      if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
 
       if (success) {
         logger.success(`连接成功: ${ssid} (第 ${attempt}/${maxRetries} 次)`);

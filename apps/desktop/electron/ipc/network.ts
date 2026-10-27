@@ -71,7 +71,7 @@ export function registerNetworkIPC(
       const wifi = runtimePorts.wifi
         ? await runtimePorts.wifi.getCurrentWifi()
         : await getCurrentWifiSSID();
-      return wifi;
+      return wifi ?? { connected: false, ssid: null };
     } catch (error) {
       logger.error('IPC错误：获取WiFi SSID失败', {
         错误: error instanceof Error ? error.message : String(error),
@@ -88,7 +88,7 @@ export function registerNetworkIPC(
       const fullInfo = runtimePorts.wifi
         ? {
             ...(await runtimePorts.wifi.getNetworkInfo()),
-            wifi: await runtimePorts.wifi.getCurrentWifi(),
+            wifi: (await runtimePorts.wifi.getCurrentWifi()) ?? { connected: false, ssid: null },
           }
         : await getFullNetworkInfo();
       return fullInfo;

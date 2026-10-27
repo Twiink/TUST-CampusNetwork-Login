@@ -73,7 +73,7 @@ export class ConfigManager {
       const validation = validateAppConfig(next);
       if (!validation.valid)
         throw new AppError(ErrorCode.CONFIG_INVALID, validation.errors.join('; '));
-      next.revision = (current.revision ?? 0) + 1;
+      next.revision = Math.max(current.revision ?? 0, next.revision ?? 0) + 1;
       try {
         await this.storage.set(CONFIG_STORAGE_KEY, copy(next));
       } catch (error) {

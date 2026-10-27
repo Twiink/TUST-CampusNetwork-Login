@@ -182,17 +182,18 @@ fn read_interfaces() -> (
         }
 
         let family = unsafe { *entry.ifa_addr }.sa_family;
-        if family == AF_INET_MACOS && ipv4.is_none() {
+        let length = unsafe { *entry.ifa_addr }.sa_len as usize;
+        if family == AF_INET_MACOS && ipv4.is_none() && length >= std::mem::size_of::<libc::sockaddr_in>() {
             let addr = unsafe { &*(entry.ifa_addr.cast::<libc::sockaddr_in>()) };
             if addr.sin_addr.s_addr.to_ne_bytes()[0] != 127 {
                 ipv4 = Some(Ipv4Addr::from(addr.sin_addr.s_addr.to_ne_bytes()).to_string());
                 selected_name = Some(name.clone());
-                if !entry.ifa_netmask.is_null() {
+                if !entry.ifa_netmask.is_null() && unsafe { *entry.ifa_netmask }.sa_len as usize >= std::mem::size_of::<libc::sockaddr_in>() {
                     let netmask = unsafe { &*(entry.ifa_netmask.cast::<libc::sockaddr_in>()) };
                     mask = Some(Ipv4Addr::from(netmask.sin_addr.s_addr.to_ne_bytes()).to_string());
                 }
             }
-        } else if family == AF_LINK_MACOS {
+        } else if family == AF_LINK_MACOS && length >= std::mem::size_of::<libc::sockaddr_dl>() {
             let addr = unsafe { &*(entry.ifa_addr.cast::<libc::sockaddr_dl>()) };
             let offset = usize::from(addr.sdl_nlen).min(addr.sdl_data.len());
             if addr.sdl_alen >= 6 && offset + 6 <= addr.sdl_data.len() {
@@ -205,7 +206,7 @@ fn read_interfaces() -> (
                     ),
                 );
             }
-        } else if family == AF_INET6_MACOS && ipv6.is_none() {
+        } else if family == AF_INET6_MACOS && ipv6.is_none() && length >= std::mem::size_of::<libc::sockaddr_in6>() {
             let addr = unsafe { &*(entry.ifa_addr.cast::<libc::sockaddr_in6>()) };
             let text = Ipv6Addr::from(addr.sin6_addr.s6_addr).to_string();
             if !text.starts_with("fe80") && text != "::1" {
@@ -267,6 +268,7 @@ fn parse_default_gateway(bytes: &[u8]) -> Option<String> {
         }
 
         let flags = header.rtm_flags;
+        if header.rtm_version != libc::RTM_VERSION as u8 { offset += message_len; continue; }
         let addrs = header.rtm_addrs;
         let body = &bytes[offset + std::mem::size_of::<libc::rt_msghdr>()..offset + message_len];
         if flags & RTF_UP != 0
@@ -306,6 +308,7 @@ fn sockaddr_rounded_len(length: u8) -> usize {
 }
 
 fn sockaddr_family_prefix_len(sockaddr: &[u8]) -> Option<usize> {
+    if usize::from(*sockaddr.first()?) > sockaddr.len() { return None; }
     match *sockaddr.get(1)? {
         AF_INET_MACOS => sockaddr.get(4..8).map(|bytes| {
             u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).count_ones() as usize
@@ -322,7 +325,7 @@ fn sockaddr_family_prefix_len(sockaddr: &[u8]) -> Option<usize> {
 }
 
 fn sockaddr_ipv4(sockaddr: &[u8]) -> Option<String> {
-    if sockaddr.get(1)? != &AF_INET_MACOS || usize::from(*sockaddr.first()?) > sockaddr.len() {
+    if sockaddr.get(1)? != &AF_INET_MACOS || usize::from(*sockaddr.first()?) > sockaddr.len() || *sockaddr.first()? < 8 {
         return None;
     }
     let bytes = sockaddr.get(4..8)?;

@@ -83,6 +83,7 @@ export class WifiEventListener {
   private startupHandled = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSsid: string | null = null;
+  private reconnectGeneration = 0;
   private cancelRetry(): void {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -209,6 +210,7 @@ export class WifiEventListener {
     }
 
     this.isRunning = false;
+    this.reconnectGeneration++;
     this.cancelRetry();
     this.pendingSsid = null;
     this.lastSsid = null;
@@ -368,7 +370,13 @@ export class WifiEventListener {
   }
 
   private reconnectDeps() {
+    const generation = this.reconnectGeneration;
     return {
+      shouldContinue: async () =>
+        this.isRunning &&
+        generation === this.reconnectGeneration &&
+        this.configManager?.getSettings().autoReconnect !== false &&
+        (await this.networkDetector.isWifiEnabled()),
       logger: this.logger,
       wifiManager: this.wifiManager!,
       wifiSwitcherService: this.wifiSwitcherService!,
@@ -393,6 +401,8 @@ export class WifiEventListener {
       this.pendingSsid = null;
     } else if (result === false) {
       this.lastAllFailedAt = Date.now();
+      this.pendingSsid ??=
+        this.wifiManager?.getWifiConfigs().find((wifi) => wifi.autoConnect)?.ssid ?? null;
       this.scheduleRetry(cooldownMinutes * 60_000);
       if (cooldownMinutes > 0) {
         this.logger.info(`WiFi 自动重连全部失败，${cooldownMinutes} 分钟内不再尝试`);
@@ -404,6 +414,7 @@ export class WifiEventListener {
    * 配置变化后清除冷却期，新 WiFi/新密码可以立即尝试
    */
   resetCooldown(): void {
+    this.reconnectGeneration++;
     this.lastAllFailedAt = 0;
     this.cancelRetry();
     if (this.configManager?.getSettings().autoReconnect && this.pendingSsid)

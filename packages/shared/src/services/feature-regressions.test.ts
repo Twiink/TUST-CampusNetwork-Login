@@ -96,6 +96,18 @@ describe('审查回归：配置、认证与脱敏', () => {
     expect(resolveLoginAccounts(config, wifi.ssid)).toEqual([account]);
   });
 
+  it('恢复原生较新暂停状态时版本保持递增，后续修改不会被拒绝', async () => {
+    const config = new ConfigManager(new MemoryStorageAdapter());
+    await config.load();
+    await config.update((current) => ({
+      revision: 20,
+      settings: { ...current.settings, autoAuthPaused: true },
+    }));
+    expect(config.getConfig()?.revision).toBe(21);
+    await config.updateSettings({ autoAuthPaused: false });
+    expect(config.getConfig()?.revision).toBe(22);
+  });
+
   it('单个账号抛异常后继续备用账号，串行注销最后执行', async () => {
     const service = new AuthService();
     vi.spyOn(service, 'login')

@@ -197,6 +197,10 @@ jobs:
           else
             pnpm test:e2e
           fi
+      - name: 验证桌面用例没有跳过
+        shell: bash
+        run: |
+          node -e 'const { stats } = require("./apps/desktop/test-results/results.json"); if (stats.expected < 25 || stats.skipped || stats.unexpected) throw new Error("E2E incomplete: " + JSON.stringify(stats));'
       - name: 归档桌面诊断
         if: always()
         uses: actions/upload-artifact@v7
@@ -226,6 +230,8 @@ jobs:
           java-version: '17'
           cache: gradle
       - run: pnpm install --frozen-lockfile
+      - name: 构建移动端共享依赖
+        run: pnpm --filter @repo/shared build
       - name: 构建并验证原生单元测试
         working-directory: apps/mobile/android
         env:

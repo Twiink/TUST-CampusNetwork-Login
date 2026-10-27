@@ -34,6 +34,12 @@ adb shell dumpsys deviceidle whitelist +com.netmate.app.e2e
 adb shell settings put secure location_mode 3
 run_flow() {
   maestro test --format junit --output "$E2E_ARTIFACTS/$1.xml" --debug-output "$E2E_ARTIFACTS/$1" "apps/mobile/e2e/$1.yaml"
+  python3 - "$E2E_ARTIFACTS/$1.xml" <<'PY'
+import sys, xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+if not list(root.iter('testcase')) or any(list(root.iter(tag)) for tag in ['failure', 'error', 'skipped']):
+    raise SystemExit('Maestro flow is missing, failed or skipped')
+PY
 }
 run_flow config-auth
 curl -fsS 'http://127.0.0.1:38081/control?ssid=&failConnections=true&online=false'
