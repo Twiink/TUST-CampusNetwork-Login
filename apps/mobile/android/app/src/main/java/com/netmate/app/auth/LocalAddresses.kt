@@ -18,7 +18,7 @@ object LocalAddresses {
 
     fun resolve(connectivityManager: ConnectivityManager, network: Network? = null): Pair<String?, String?> {
         val wifiAddresses = wifiLinkAddresses(connectivityManager, network)
-        val fallbackAddresses by lazy { interfaceAddresses() }
+        val fallbackAddresses by lazy { if (network != null) emptyList() else interfaceAddresses() }
 
         val ipv4 = selectIPv4(wifiAddresses) ?: selectIPv4(fallbackAddresses)
         val ipv6 = selectIPv6(wifiAddresses) ?: selectIPv6(fallbackAddresses)

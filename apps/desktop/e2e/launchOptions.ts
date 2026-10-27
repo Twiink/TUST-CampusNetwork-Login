@@ -12,7 +12,7 @@ export function createElectronLaunchOptions(
   platform: NodeJS.Platform = process.platform,
   baseEnv: ElectronLaunchEnvInput = process.env
 ) {
-  const args = [path.join(currentDir, 'electron-main.mjs')];
+  const args = [path.join(currentDir, '..', 'dist-e2e', 'e2e-main.js')];
   const env = {
     ...Object.fromEntries(
       Object.entries({ ...process.env, ...baseEnv }).filter(

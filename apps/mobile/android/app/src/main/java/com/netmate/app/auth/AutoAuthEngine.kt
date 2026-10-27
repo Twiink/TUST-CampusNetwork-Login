@@ -1,281 +1,203 @@
 package com.netmate.app.auth
 
 import android.content.Context
-import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.wifi.WifiManager
-import android.util.Log
-import java.util.concurrent.ConcurrentHashMap
+import com.netmate.app.logging.NetMateLogs
+import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
-/**
- * 原生自动认证引擎：BackgroundService（网络事件 + 定时）、AutoAuthWorker（WorkManager 兜底）
- * 与 AutoAuthModule（JS 前台触发）共用。对齐参考实现 tust-portal-desktop background.rs：
- * 每次检查只看「现在是否需要登录」——需要认证 且 探测不到 204 才登录。
- *
- * 所有检查（含 WiFi 自动重连）串行执行（单线程），同一时刻最多一个流程；
- * 连续登录失败按指数退避，避免密码错误时持续请求门户。
- */
+/** One serial engine for foreground, background, manual login and logout. */
 object AutoAuthEngine {
-
-    private const val TAG = "AutoAuthEngine"
-    private const val MIN_LOGIN_INTERVAL_MS = 30_000L
-    private const val BASE_FAILURE_BACKOFF_MS = 60_000L
-    private const val MAX_FAILURE_BACKOFF_MS = 15 * 60_000L
-
-    /** 触发来源；manual 不受退避限制，也不受连续失败阈值限制 */
     const val TRIGGER_MANUAL = "manual"
-    /** 网络事件触发（WiFi 刚连上、强制门户），视为确定需要检查，不受连续失败阈值限制 */
     const val TRIGGER_NETWORK = "network"
-
-    private val executor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "netmate-auto-auth").apply { isDaemon = true }
-    }
+    private val executor = Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "netmate-auth").apply { isDaemon = true } }
     private val listeners = CopyOnWriteArraySet<(AutoAuthResult) -> Unit>()
-
-    /** 后台读不到 SSID 时，复用前台读到的同一网络连接的 SSID（networkHandle 在一次连接内稳定） */
-    private val ssidByNetwork = ConcurrentHashMap<Long, String>()
-
-    // 以下状态只在 executor 线程读写
+    val statusListeners = CopyOnWriteArraySet<(JSONObject) -> Unit>()
+    @Volatile private var authenticatedKey: String? = null
+    @Volatile private var internetKey: String? = null
+    private val reconnectGeneration = java.util.concurrent.atomic.AtomicLong()
+    private var observedKey: String? = null
+    @Volatile private var loggedOutKey: String? = null
+    @Volatile private var authenticating = false
+    @Volatile private var retryTask: ScheduledFuture<*>? = null
     private var lastLoginAt = 0L
-    private var consecutiveFailures = 0
-    /** 当前 WiFi 曾确认在线；用于连续失败阈值与「认证恢复」通知 */
+    private var failures = 0
     private var wasOnline = false
-    /** 已在线后连续检测不到 204 的次数 */
     private var offlineStreak = 0
-    /** 本次连接是否已因掉线发生过认证（成功后发「认证恢复」通知） */
-    private var lostAuthentication = false
-    private val wifiReconnector = WifiReconnector()
+    private val reconnector = WifiReconnector()
+    @Volatile var portalClient = PortalClient()
 
-    @Volatile
-    var portalClient: PortalClient = PortalClient()
+    fun addListener(listener: (AutoAuthResult) -> Unit) { listeners.add(listener) }
+    fun removeListener(listener: (AutoAuthResult) -> Unit) { listeners.remove(listener) }
+    fun rememberSsid(network: Network, ssid: String) = WifiEnvironment.rememberSsid(network, ssid)
+    internal fun readSsid(context: Context, network: Network): String? = WifiEnvironment.snapshot(context).ssid
 
-    fun addListener(listener: (AutoAuthResult) -> Unit) {
-        listeners.add(listener)
+    fun stopReconnect(context: Context) {
+        reconnectGeneration.incrementAndGet()
+        retryTask?.cancel(false); retryTask = null
+        AutoAuthStore.savePendingSsid(context, null)
+        ReconnectEvents.publish(JSONObject().put("status", "idle"))
     }
 
-    fun removeListener(listener: (AutoAuthResult) -> Unit) {
-        listeners.remove(listener)
-    }
-
-    /** 配置变化后清除退避与冷却，新账号/新密码/新 WiFi 可以立即尝试 */
     fun resetBackoff() {
-        executor.execute {
-            consecutiveFailures = 0
-            lastLoginAt = 0L
-            wifiReconnector.resetCooldown()
-        }
+        reconnectGeneration.incrementAndGet()
+        retryTask?.cancel(false)
+        retryTask = null
+        executor.execute { failures = 0; lastLoginAt = 0; reconnector.resetCooldown() }
     }
 
-    fun rememberSsid(network: Network, ssid: String) {
-        ssidByNetwork[network.networkHandle] = ssid
+    fun snapshot(context: Context): JSONObject {
+        val wifi = WifiEnvironment.snapshot(context)
+        val profile = AutoAuthStore.loadProfile(context)
+        val requires = profile?.let { AutoAuthPolicy.decide(it.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive).requiresAuth } ?: false
+        val reachable = wifi.connected && (internetKey == wifi.key || (wifi.validated && !wifi.captive && loggedOutKey != wifi.key))
+        val authenticated = wifi.connected && (authenticatedKey == wifi.key || reachable)
+        return JSONObject().put("networkKey", wifi.key).put("ssid", wifi.ssid ?: JSONObject.NULL)
+            .put("wifiConnected", wifi.connected).put("authenticated", requires && authenticated)
+            .put("internetReachable", reachable).put("requiresAuth", requires)
+            .put("authenticating", authenticating).put("paused", profile?.authPaused ?: false)
+            .put("revision", profile?.revision ?: 0).put("timestamp", System.currentTimeMillis())
     }
-
-    /** 异步检查；返回 Future，结果为 null 表示本轮无需（或暂不）登录 */
-    fun checkAsync(context: Context, trigger: String): Future<AutoAuthResult?> {
-        val appContext = context.applicationContext
-        return executor.submit<AutoAuthResult?> { runCheck(appContext, trigger) }
+    private fun publishStatus(context: Context) {
+        val state = snapshot(context)
+        statusListeners.forEach { try { it(state) } catch (_: Exception) {} }
     }
-
-    /** 同步检查（WorkManager Worker 已在后台线程，直接排队等待结果） */
-    fun checkBlocking(context: Context, trigger: String): AutoAuthResult? =
-        checkAsync(context, trigger).get()
-
-    /**
-     * WiFi 断开：发送断开通知，并按「断线自动重连」执行 WiFi 三阶段重连。
-     * @param ssid 断开前的 SSID（由服务在连接期间记录）
-     */
-    fun onWifiLost(context: Context, ssid: String?) {
-        val appContext = context.applicationContext
-        executor.execute {
-            try {
-                resetConnectionState()
-                val profile = AutoAuthStore.loadProfile(appContext) ?: return@execute
-                EventNotifier.notify(
-                    appContext,
-                    EventNotifier.Kind.WIFI_DISCONNECTED,
-                    "WiFi 已断开",
-                    if (ssid != null) "已断开 $ssid" else "WiFi 连接已断开",
-                )
-                if (profile.enabled) {
-                    wifiReconnector.run(appContext, profile, ssid, "lost")
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "WiFi 断开处理异常", e)
-            }
-        }
-    }
-
-    /**
-     * 启动时自动连接（settings.startupAutoConnect）：未连接 WiFi 时按优先级尝试已配置 WiFi。
-     * 已连接 WiFi 时，「保持当前连接」开启则不动；关闭则在当前 WiFi 不在已配置列表中时切换到最高优先级的 WiFi。
-     */
-    fun onStartup(context: Context) {
-        val appContext = context.applicationContext
-        executor.execute {
-            try {
-                val profile = AutoAuthStore.loadProfile(appContext) ?: return@execute
-                if (!profile.startupAutoConnect) return@execute
-                val state = WifiConnector.state(appContext)
-                if (!state.enabled) return@execute
-                if (state.connected) {
-                    val configured = state.ssid != null && profile.autoConnectWifis.any { it.ssid == state.ssid }
-                    if (profile.keepCurrentConnection || configured || state.ssid == null) return@execute
-                    // 不保持当前连接：建议最高优先级的已配置 WiFi，由系统决定是否切换
-                    profile.autoConnectWifis.minByOrNull { it.priority }?.let { best ->
-                        WifiConnector.connect(appContext, best.ssid, best.password)
-                    }
-                    return@execute
-                }
-                wifiReconnector.run(appContext, profile, null, "startup")
-            } catch (e: Exception) {
-                Log.w(TAG, "启动自动连接异常", e)
-            }
-        }
-    }
-
-    private fun resetConnectionState() {
-        wasOnline = false
-        offlineStreak = 0
-        lostAuthentication = false
-    }
-
-    private fun runCheck(context: Context, trigger: String): AutoAuthResult? {
-        return try {
-            doCheck(context, trigger)
-        } catch (e: Exception) {
-            Log.w(TAG, "自动认证检查异常", e)
-            null
-        }
-    }
-
-    private fun doCheck(context: Context, trigger: String): AutoAuthResult? {
-        val profile = AutoAuthStore.loadProfile(context) ?: return null
-        if (!profile.enabled) return null
-
-        val connectivityManager =
-            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = LocalAddresses.wifiNetworks(connectivityManager).firstOrNull() ?: return null
-        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return null
-        val captivePortal = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
-
-        val ssid = readSsid(context, network)
-        val (ipv4, ipv6) = LocalAddresses.resolve(connectivityManager, network)
-        val decision = AutoAuthPolicy.decide(profile, ssid, ipv4, captivePortal)
-        if (!decision.requiresAuth || ipv4 == null) return null
-        if (decision.accounts.isEmpty()) {
-            Log.d(TAG, "需要认证但没有可用账号: ${decision.reason}")
-            return null
-        }
-
-        val client = portalClient
-        if (client.isOnline(network)) {
-            consecutiveFailures = 0
-            wasOnline = true
-            offlineStreak = 0
-            return null
-        }
-
-        // 连续失败阈值：已在线后偶发的探测失败（网络抖动）不立即重新认证。
-        // 强制门户、网络事件、手动触发视为确定掉线，不受阈值限制。
-        val definite = captivePortal || trigger == TRIGGER_MANUAL || trigger == TRIGGER_NETWORK
-        if (wasOnline && !definite) {
-            offlineStreak += 1
-            if (offlineStreak < profile.failureThreshold) {
-                Log.d(TAG, "检测失败 $offlineStreak/${profile.failureThreshold}，暂不重新认证")
-                return null
-            }
-        }
-        if (wasOnline) lostAuthentication = true
-
-        val now = System.currentTimeMillis()
-        if (trigger != TRIGGER_MANUAL && now - lastLoginAt < currentCooldownMs()) {
-            Log.d(TAG, "处于冷却期，跳过本轮认证（连续失败 $consecutiveFailures 次）")
-            return null
-        }
-        lastLoginAt = now
-
-        var lastOutcome: PortalClient.LoginOutcome? = null
-        var lastAccount: AutoAuthAccount? = null
-        for (account in decision.accounts) {
-            val outcome = client.login(
-                PortalClient.Credentials(account.username, account.password, account.isp, account.serverUrl),
-                ipv4,
-                ipv6,
-                network,
-            )
-            lastOutcome = outcome
-            lastAccount = account
-            if (outcome.success) break
-        }
-
-        val success = lastOutcome?.success == true
-        if (success) {
-            consecutiveFailures = 0
-            offlineStreak = 0
-            wasOnline = true
-            if (lostAuthentication) {
-                lostAuthentication = false
-                EventNotifier.notify(
-                    context,
-                    EventNotifier.Kind.AUTH_RECOVERED,
-                    "校园网认证已恢复",
-                    "认证失效后已自动重新登录（${lastAccount?.username ?: ""}）",
-                )
-            }
-            // 提示系统重新验证该 WiFi，使其恢复为可上网的默认网络（不再走移动数据）
-            try {
-                connectivityManager.reportNetworkConnectivity(network, true)
-            } catch (_: Exception) {
-                // 仅为优化项
-            }
-        } else {
-            consecutiveFailures += 1
-        }
-
-        val result = AutoAuthResult(
-            success = success,
-            message = lastOutcome?.message ?: "登录失败",
-            trigger = trigger,
-            username = lastAccount?.username,
-            attempts = lastOutcome?.attempts ?: 0,
-            timestamp = System.currentTimeMillis(),
-        )
+    private fun emit(context: Context, result: AutoAuthResult): AutoAuthResult {
         AutoAuthStore.saveLastResult(context, result)
-        listeners.forEach { listener ->
-            try {
-                listener(result)
-            } catch (e: Exception) {
-                Log.w(TAG, "自动认证结果回调异常", e)
-            }
-        }
+        NetMateLogs.log(context, if (result.success) "success" else "warn", result.message, "auth")
+        listeners.forEach { try { it(result) } catch (_: Exception) {} }
+        publishStatus(context)
         return result
     }
+    fun checkAsync(context: Context, trigger: String): Future<AutoAuthResult?> = executor.submit<AutoAuthResult?> {
+        try { check(context.applicationContext, trigger) }
+        catch (_: Exception) { NetMateLogs.log(context, "warn", "认证检查失败，请检查网络与权限", "auth"); null }
+    }
+    fun checkBlocking(context: Context, trigger: String): AutoAuthResult? = checkAsync(context, trigger).get()
 
-    private fun currentCooldownMs(): Long {
-        if (consecutiveFailures == 0) return MIN_LOGIN_INTERVAL_MS
-        val exponent = (consecutiveFailures - 1).coerceAtMost(4)
-        return (BASE_FAILURE_BACKOFF_MS shl exponent).coerceAtMost(MAX_FAILURE_BACKOFF_MS)
+    fun logoutAsync(context: Context): Future<AutoAuthResult> {
+        AutoAuthStore.pause(context)
+        publishStatus(context)
+        return executor.submit<AutoAuthResult> {
+            val wifi = WifiEnvironment.snapshot(context)
+            val server = AutoAuthStore.sessionServer(context)
+                ?: AutoAuthStore.loadProfile(context)?.accounts?.firstOrNull()?.serverUrl
+            val outcome = if (!wifi.connected || server.isNullOrBlank()) PortalClient.LoginOutcome(false, "无法注销：请连接认证时使用的 WiFi", 0)
+                else portalClient.logout(server, wifi.network)
+            if (outcome.success) { authenticatedKey = null; internetKey = null; loggedOutKey = wifi.key; wasOnline = false }
+            emit(context, AutoAuthResult(outcome.success, outcome.message, "logout", null, outcome.attempts, System.currentTimeMillis(), wifi.key))
+        }
     }
 
-    internal fun readSsid(context: Context, network: Network): String? {
-        val ssid = try {
-            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-            @Suppress("DEPRECATION")
-            wifiManager.connectionInfo?.ssid
-                ?.takeIf { it != WifiManager.UNKNOWN_SSID && it != "0x" && it.isNotBlank() }
-                ?.removeSurrounding("\"")
-        } catch (e: Exception) {
-            null
+    private fun check(context: Context, trigger: String): AutoAuthResult? {
+        val stored = AutoAuthStore.loadProfile(context) ?: return null
+        val manual = trigger == TRIGGER_MANUAL
+        val wifi = WifiEnvironment.snapshot(context)
+        if (observedKey != wifi.key) { observedKey = wifi.key; wasOnline = false; offlineStreak = 0; failures = 0; lastLoginAt = 0 }
+        if (!wifi.connected) {
+            authenticatedKey = null
+            publishStatus(context)
+            val pending = AutoAuthStore.pendingSsid(context)
+            if (stored.enabled && pending != null && retryTask == null) reconnect(context, pending, trigger)
+            return if (manual) emit(context, AutoAuthResult(false, "请先连接 WiFi", trigger, null, 0, System.currentTimeMillis(), wifi.key)) else null
         }
-        if (ssid != null) {
-            ssidByNetwork[network.networkHandle] = ssid
-            return ssid
+        retryTask?.cancel(false); retryTask = null
+        AutoAuthStore.savePendingSsid(context, null)
+        val client = portalClient
+        val online = (wifi.validated && !wifi.captive && loggedOutKey != wifi.key) || client.isOnline(wifi.network)
+        internetKey = if (online) wifi.key else null
+        if (online) {
+            authenticatedKey = wifi.key; loggedOutKey = null; failures = 0; offlineStreak = 0; wasOnline = true
+            publishStatus(context)
+            return if (manual) emit(context, AutoAuthResult(true, "当前 WiFi 已联网", trigger, null, 0, System.currentTimeMillis(), wifi.key)) else null
         }
-        // Android 10+ 后台读取 SSID 需要后台定位权限，读不到时用同一连接内前台缓存的值
-        return ssidByNetwork[network.networkHandle]
+        authenticatedKey = null
+        publishStatus(context)
+        if ((!stored.enabled || stored.authPaused) && !manual) return null
+        if (trigger == "status") return null
+        val decision = AutoAuthPolicy.decide(stored.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive)
+        if (!decision.requiresAuth || wifi.ipv4 == null || decision.accounts.isEmpty()) {
+            return if (manual) emit(context, AutoAuthResult(false, if (decision.accounts.isEmpty()) "请先配置认证账号" else "当前网络无需认证", trigger, null, 0, System.currentTimeMillis(), wifi.key)) else null
+        }
+        if (!manual && wasOnline && !wifi.captive && trigger != TRIGGER_NETWORK && ++offlineStreak < stored.failureThreshold) return null
+        val cooldown = if (failures == 0) 30_000L else (60_000L shl (failures - 1).coerceAtMost(4)).coerceAtMost(900_000L)
+        if (!manual && System.currentTimeMillis() - lastLoginAt < cooldown) return null
+        lastLoginAt = System.currentTimeMillis()
+        fun valid(): Boolean {
+            val current = AutoAuthStore.loadProfile(context) ?: return false
+            return current.revision == stored.revision && (manual || (current.enabled && !current.authPaused)) && WifiEnvironment.snapshot(context).key == wifi.key
+        }
+        var outcome = PortalClient.LoginOutcome(false, "所有账号认证失败", 0)
+        var account: AutoAuthAccount? = null
+        authenticating = true; publishStatus(context)
+        try {
+            for (candidate in decision.accounts) {
+                if (!valid()) return null
+                account = candidate
+                outcome = try { client.login(PortalClient.Credentials(candidate.username, candidate.password, candidate.isp, candidate.serverUrl), wifi.ipv4, wifi.ipv6, wifi.network, ::valid) }
+                    catch (_: Exception) { PortalClient.LoginOutcome(false, "认证请求失败", 1) }
+                if (outcome.success) break
+            }
+            if (!valid()) return null
+            if (outcome.success) {
+                internetKey = if (client.isOnline(wifi.network)) wifi.key else null
+                if (!valid()) return null
+                authenticatedKey = wifi.key; loggedOutKey = null; failures = 0
+                AutoAuthStore.saveSession(context, account!!.serverUrl)
+                if (wasOnline) EventNotifier.notify(context, EventNotifier.Kind.AUTH_RECOVERED, "校园网认证已恢复", "已重新登录认证门户")
+                wasOnline = true
+            } else { failures += 1 }
+            return emit(context, AutoAuthResult(outcome.success, outcome.message, trigger, account?.username, outcome.attempts, System.currentTimeMillis(), wifi.key))
+        } finally { authenticating = false; publishStatus(context) }
+    }
+
+    fun onWifiLost(context: Context, ssid: String?) {
+        authenticatedKey = null; wasOnline = false
+        if (ssid != null) AutoAuthStore.savePendingSsid(context, ssid)
+        publishStatus(context)
+        executor.execute {
+            EventNotifier.notify(context, EventNotifier.Kind.WIFI_DISCONNECTED, "WiFi 已断开", ssid ?: "无线连接已断开")
+            reconnect(context.applicationContext, ssid, "lost")
+        }
+    }
+    private fun reconnect(context: Context, ssid: String?, trigger: String) {
+        val profile = AutoAuthStore.loadProfile(context) ?: return
+        if (!profile.enabled || !WifiEnvironment.snapshot(context).enabled || profile.autoConnectWifis.isEmpty() || (ssid != null && profile.autoConnectWifis.none { it.ssid == ssid })) {
+            retryTask?.cancel(false); retryTask = null; AutoAuthStore.savePendingSsid(context, null)
+            ReconnectEvents.publish(JSONObject().put("status", "idle"))
+            return
+        }
+        val generation = reconnectGeneration.get()
+        val success = reconnector.run(context, profile, ssid, trigger) { reconnectGeneration.get() == generation }
+        if (reconnectGeneration.get() != generation) return
+        if (success) {
+            AutoAuthStore.savePendingSsid(context, null); retryTask?.cancel(false); retryTask = null
+            check(context, TRIGGER_NETWORK)
+        } else {
+            val current = AutoAuthStore.loadProfile(context) ?: return
+            if (!current.enabled || !WifiEnvironment.snapshot(context).enabled || current.autoConnectWifis.isEmpty()) return
+            val target = ssid ?: current.autoConnectWifis.minByOrNull { it.priority }!!.ssid
+            AutoAuthStore.savePendingSsid(context, target)
+            val delay = (current.wifiCooldownMinutes * 60_000L).coerceAtLeast(5000)
+            ReconnectEvents.publish(JSONObject().put("status", "cooldown").put("ssid", target).put("nextRetryAt", System.currentTimeMillis() + delay))
+            retryTask?.cancel(false)
+            retryTask = executor.schedule({ retryTask = null; reconnect(context, target, "retry") }, delay, TimeUnit.MILLISECONDS)
+        }
+    }
+    fun onStartup(context: Context) {
+        executor.execute {
+            val profile = AutoAuthStore.loadProfile(context) ?: return@execute
+            val wifi = WifiEnvironment.snapshot(context)
+            val pending = AutoAuthStore.pendingSsid(context)
+            if (pending != null || (profile.startupAutoConnect && !wifi.connected)) reconnect(context, pending, "startup")
+            else if (profile.enabled && profile.startupAutoConnect && !profile.keepCurrentConnection && wifi.connected && profile.wifiRules.none { it.ssid == wifi.ssid }) {
+                val preferred = profile.autoConnectWifis.minByOrNull { it.priority }
+                if (preferred != null && preferred.ssid != wifi.ssid && WifiConnector.connect(context, preferred.ssid, preferred.password)) check(context, TRIGGER_NETWORK)
+            }
+        }
     }
 }

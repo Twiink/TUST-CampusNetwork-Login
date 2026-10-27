@@ -16,6 +16,8 @@ import {
  * 网络信息接口（扩展版）
  */
 export interface NetworkInfo {
+  networkKey?: string;
+  validated?: boolean;
   /** WiFi 是否已启用 */
   wifiEnabled: boolean;
   /** 是否已连接 WiFi */
@@ -344,9 +346,8 @@ export async function scanWifiNetworks(): Promise<ScannedWifiNetwork[]> {
 
   try {
     return await WifiModule.scanWifiNetworks();
-  } catch (error) {
-    console.warn('scanWifiNetworks error:', error);
-    return [];
+  } catch {
+    throw new Error('扫描失败，请检查附近设备和定位权限后重试');
   }
 }
 
@@ -385,3 +386,10 @@ export default {
   onWifiChanged,
   isNativeModuleAvailable,
 };
+
+export async function openWifiSettings(): Promise<void> {
+  const module = NativeModules.WifiModule as
+    | { openWifiSettings?: () => Promise<boolean> }
+    | undefined;
+  await module?.openWifiSettings?.();
+}

@@ -118,7 +118,10 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode resolvedVersionCode
         versionName resolvedVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
+    sourceSets { test { resources.srcDir(rootProject.file("../../../packages/shared/fixtures")) } }
+    testBuildType "e2e"
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -139,6 +142,17 @@ android {
         debug {
             signingConfig signingConfigs.debug
         }
+        e2e {
+            initWith release
+            applicationIdSuffix ".e2e"
+            manifestPlaceholders = [usesCleartextTraffic: true]
+            signingConfig signingConfigs.debug
+            debuggable false
+            minifyEnabled false
+            shrinkResources false
+            matchingFallbacks = ['release']
+            versionNameSuffix "-e2e"
+        }
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
@@ -154,7 +168,7 @@ android {
     // universalApk true 额外产出一个包含全部架构的通用包（便于无法识别 ABI 的分发渠道）。
     splits {
         abi {
-            enable true
+            enable !project.hasProperty("e2eBuild")
             reset()
             include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             universalApk true
@@ -163,15 +177,13 @@ android {
 }
 
 // 为各 ABI 分包设置差异化 versionCode，避免同渠道分发时安装冲突。
-// 规则：基础 versionCode * 10 + ABI 序号（通用包保持基础值）。
+// 规则：基础 versionCode * 10 + ABI 序号（通用包 ABI 序号为 0）。
 android.applicationVariants.all { variant ->
     variant.outputs.each { output ->
         def abiCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
         def abi = output.getFilter(com.android.build.OutputFile.ABI)
-        if (abi != null) {
-            def base = variant.versionCode ?: resolvedVersionCode
-            output.versionCodeOverride = base * 10 + abiCodes.get(abi, 0)
-        }
+        def base = variant.versionCode ?: resolvedVersionCode
+        output.versionCodeOverride = base * 10 + abiCodes.get(abi, 0)
     }
 }
 
@@ -182,6 +194,8 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     // 本地 JVM 单测中 android.jar 的 org.json 只是空桩，用真实实现替代
     testImplementation("org.json:json:20180813")
 

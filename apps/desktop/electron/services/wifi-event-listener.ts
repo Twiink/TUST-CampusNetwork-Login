@@ -81,6 +81,36 @@ export class WifiEventListener {
   /** 最近一次「全部 WiFi 失败」的时间（冷却期起点） */
   private lastAllFailedAt = 0;
   private startupHandled = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingSsid: string | null = null;
+  private cancelRetry(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+  private scheduleRetry(delay: number): void {
+    this.cancelRetry();
+    if (!this.isRunning || !this.pendingSsid) return;
+    this.retryTimer = setTimeout(
+      () => {
+        this.retryTimer = null;
+        void (async () => {
+          if (
+            !this.isRunning ||
+            !this.pendingSsid ||
+            this.configManager?.getSettings().autoReconnect === false
+          )
+            return;
+          if (await probeCurrentSsid(this.platform, this.logger)) {
+            this.pendingSsid = null;
+            return;
+          }
+          if (!(await this.networkDetector.isWifiEnabled())) return;
+          await this.handleWifiDisconnect(this.pendingSsid);
+        })().catch((error) => this.logger.error('WiFi 重试失败', error));
+      },
+      Math.max(5000, delay)
+    );
+  }
 
   constructor(options: WifiEventListenerOptions) {
     this.platform = process.platform;
@@ -179,6 +209,8 @@ export class WifiEventListener {
     }
 
     this.isRunning = false;
+    this.cancelRetry();
+    this.pendingSsid = null;
     this.lastSsid = null;
     this.logger.info('WiFi 事件监听器已停止');
   }
@@ -240,6 +272,10 @@ export class WifiEventListener {
 
       // 检测 SSID 是否发生变化
       if (currentSsid !== this.lastSsid) {
+        if (currentSsid) {
+          this.cancelRetry();
+          this.pendingSsid = null;
+        }
         const prevSsid = this.lastSsid;
         this.lastSsid = currentSsid;
 
@@ -280,6 +316,7 @@ export class WifiEventListener {
     if (this.isReconnecting || !this.wifiManager || !this.wifiSwitcherService) {
       return;
     }
+    this.pendingSsid = disconnectedSsid;
     const settings = this.configManager?.getConfig()?.settings;
     // 「断线自动重连」关闭时不重连 WiFi（与 Android 端一致）
     if (settings && !settings.autoReconnect) {
@@ -352,8 +389,11 @@ export class WifiEventListener {
   private recordReconnectResult(result: boolean | null, cooldownMinutes: number): void {
     if (result === true) {
       this.lastAllFailedAt = 0;
+      this.cancelRetry();
+      this.pendingSsid = null;
     } else if (result === false) {
       this.lastAllFailedAt = Date.now();
+      this.scheduleRetry(cooldownMinutes * 60_000);
       if (cooldownMinutes > 0) {
         this.logger.info(`WiFi 自动重连全部失败，${cooldownMinutes} 分钟内不再尝试`);
       }
@@ -365,6 +405,9 @@ export class WifiEventListener {
    */
   resetCooldown(): void {
     this.lastAllFailedAt = 0;
+    this.cancelRetry();
+    if (this.configManager?.getSettings().autoReconnect && this.pendingSsid)
+      this.scheduleRetry(5000);
   }
 
   /**
@@ -405,6 +448,7 @@ export class WifiEventListener {
    * 通知网络状态变化
    */
   private async notifyNetworkStatusChange(): Promise<void> {
+    const expectedSsid = this.lastSsid;
     try {
       // 检查窗口是否有效
       if (!this.window || this.window.isDestroyed()) {
@@ -439,6 +483,8 @@ export class WifiEventListener {
       // 获取完整的网络状态
       this.logger.info('正在获取完整的网络状态信息...');
       const networkStatus = await this.networkDetector.getNetworkStatus();
+      if (!this.isRunning || this.lastSsid !== expectedSsid || networkStatus.ssid !== expectedSsid)
+        return;
       this.logger.success('网络状态获取成功', {
         wifiConnected: networkStatus.wifiConnected,
         ssid: networkStatus.ssid,

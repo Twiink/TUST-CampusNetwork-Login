@@ -68,6 +68,15 @@ function renderHome(config = makeConfig(), overrides: Record<string, unknown> = 
     login,
     logout,
     config,
+    networkInfo: {
+      wifiEnabled: true,
+      connected: true,
+      ssid: 'TUST-WIFI',
+      ipv4: '10.1.2.3',
+      ipv6: null,
+      mac: null,
+    },
+    refreshNetworkInfo: nativeWifi.getNetworkInfo,
     ...overrides,
   });
   return { ...render(<HomeScreen />), login, logout };
@@ -95,7 +104,7 @@ describe('HomeScreen', () => {
       ipv6: null,
       mac: null,
     });
-    renderHome();
+    renderHome(makeConfig(), { networkInfo: { connected: false } });
 
     expect(await screen.findByText('未连接 WiFi')).toBeTruthy();
     expect(screen.queryByText('立即连接')).toBeNull();
@@ -110,11 +119,11 @@ describe('HomeScreen', () => {
     expect(screen.getAllByText(/TUST-WIFI/).length).toBeGreaterThan(0);
   });
 
-  it('认证 WiFi 无关联账号时提示配置账号', async () => {
+  it('认证 WiFi 无有效关联时回退当前账号', async () => {
     renderHome(makeConfig([]));
 
-    expect(await screen.findByText('未配置账户')).toBeTruthy();
-    expect(screen.queryByText('立即连接')).toBeNull();
+    expect(await screen.findByText('20250001')).toBeTruthy();
+    expect(screen.getByText('立即连接')).toBeTruthy();
   });
 
   it('无需认证的 WiFi 不显示登录或断开操作', async () => {
@@ -164,7 +173,7 @@ describe('HomeScreen', () => {
     const config = makeConfig();
     config.wifiList[0].requiresAuth = false;
     renderHome(config);
-    await waitFor(() => expect(nativeWifi.getNetworkInfo).toHaveBeenCalled());
+    await screen.findByText('无需认证');
     const callsBeforeRefresh = nativeWifi.getNetworkInfo.mock.calls.length;
 
     fireEvent.press(screen.getByText('🔄'));

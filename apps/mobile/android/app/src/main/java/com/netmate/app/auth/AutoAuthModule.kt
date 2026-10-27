@@ -1,6 +1,8 @@
 package com.netmate.app.auth
 
 import com.facebook.react.bridge.Arguments
+import com.netmate.app.bridge.toNativeMap
+import org.json.JSONObject
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -30,21 +32,36 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         }
     }
 
+    private val statusListener: (JSONObject) -> Unit = { value ->
+        if (reactApplicationContext.hasActiveReactInstance()) reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("netmate:authSnapshot", value.toNativeMap())
+    }
+    private val progressListener: (JSONObject) -> Unit = { value ->
+        if (reactApplicationContext.hasActiveReactInstance()) reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("netmate:wifiReconnectProgress", value.toNativeMap())
+    }
     override fun initialize() {
         super.initialize()
         AutoAuthEngine.addListener(resultListener)
+        AutoAuthEngine.statusListeners.add(statusListener)
+        ReconnectEvents.listeners.add(progressListener)
     }
 
     override fun invalidate() {
         AutoAuthEngine.removeListener(resultListener)
+        AutoAuthEngine.statusListeners.remove(statusListener)
+        ReconnectEvents.listeners.remove(progressListener)
         super.invalidate()
     }
 
     @ReactMethod
     fun syncProfile(json: String, promise: Promise) {
         try {
+            val before = AutoAuthStore.loadProfile(reactApplicationContext)
             val profile = AutoAuthStore.saveProfile(reactApplicationContext, json)
-            AutoAuthEngine.resetBackoff()
+            if (before == null || before.enabled != profile.enabled || before.wifiRules != profile.wifiRules || before.wifiCooldownMinutes != profile.wifiCooldownMinutes || before.wifiRetries != profile.wifiRetries) {
+                AutoAuthEngine.resetBackoff()
+                if (!profile.enabled || profile.autoConnectWifis.isEmpty()) AutoAuthEngine.stopReconnect(reactApplicationContext)
+                else AutoAuthEngine.onStartup(reactApplicationContext)
+            }
             if (profile.enabled) {
                 AutoAuthWorker.schedule(reactApplicationContext)
             } else {
@@ -69,6 +86,20 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         }.start()
     }
 
+    @ReactMethod fun login(promise: Promise) { AutoAuthStore.resume(reactApplicationContext); checkNow(AutoAuthEngine.TRIGGER_MANUAL, promise) }
+    @ReactMethod fun logout(promise: Promise) {
+        val future = AutoAuthEngine.logoutAsync(reactApplicationContext)
+        Thread {
+            try { promise.resolve(future.get().toWritableMap()) }
+            catch (_: Exception) { promise.reject("AUTH_LOGOUT", "注销失败，自动认证保持暂停") }
+        }.start()
+    }
+    @ReactMethod fun getSnapshot(promise: Promise) {
+        promise.resolve(AutoAuthEngine.snapshot(reactApplicationContext).toNativeMap())
+        AutoAuthEngine.checkAsync(reactApplicationContext, "status")
+    }
+    @ReactMethod fun getReconnectProgress(promise: Promise) { promise.resolve(ReconnectEvents.latest.toNativeMap()) }
+
     @ReactMethod
     fun getLastResult(promise: Promise) {
         promise.resolve(AutoAuthStore.loadLastResult(reactApplicationContext)?.toWritableMap())
@@ -82,6 +113,7 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     fun removeListeners(@Suppress("UNUSED_PARAMETER") count: Double) = Unit
 
     private fun AutoAuthResult.toWritableMap(): WritableMap = Arguments.createMap().apply {
+        if (networkKey != null) putString("networkKey", networkKey)
         putBoolean("success", success)
         putString("message", message)
         putString("trigger", trigger)

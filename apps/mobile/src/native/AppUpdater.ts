@@ -4,7 +4,7 @@
  * 通过 GitHub Releases API 检查和下载更新
  */
 
-import { Platform, Linking, Alert } from 'react-native';
+import { NativeModules, Platform, Linking, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DeviceInfo from 'react-native-device-info';
 
@@ -54,8 +54,8 @@ export function getCurrentVersion(): string {
  * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
  */
 export function compareVersions(v1: string, v2: string): number {
-  const parts1 = v1.replace(/^v/, '').split('.').map(Number);
-  const parts2 = v2.replace(/^v/, '').split('.').map(Number);
+  const parts1 = v1.replace(/^v/, '').split(/[+-]/)[0].split('.').map(Number);
+  const parts2 = v2.replace(/^v/, '').split(/[+-]/)[0].split('.').map(Number);
 
   for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
     const p1 = parts1[i] || 0;
@@ -71,10 +71,11 @@ export function compareVersions(v1: string, v2: string): number {
 /**
  * 检查更新
  */
-export async function checkForUpdate(): Promise<ReleaseInfo | null> {
+export async function checkForUpdate(throwOnError = false): Promise<ReleaseInfo | null> {
   try {
     const response = await fetch(
-      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
+      NativeModules.NetMateUpdater?.updateFeedUrl ??
+        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
       {
         headers: {
           Accept: 'application/vnd.github.v3+json',
@@ -109,8 +110,8 @@ export async function checkForUpdate(): Promise<ReleaseInfo | null> {
     }
 
     return null;
-  } catch (error) {
-    console.warn('Failed to check for update:', error);
+  } catch {
+    if (throwOnError) throw new Error('检查更新失败，请检查网络后重试');
     return null;
   }
 }
@@ -171,7 +172,9 @@ export function showUpdateDialog(release: ReleaseInfo): void {
     },
     {
       text: '更新',
-      onPress: () => openDownloadPage(release),
+      onPress: () => {
+        startUpdateDownload(release).catch(() => Alert.alert('下载失败', '请在配置设置中重试更新'));
+      },
     },
   ]);
 }
@@ -222,3 +225,40 @@ export default {
   showUpdateDialog,
   checkAndPromptUpdate,
 };
+
+export interface DownloadStatus {
+  state: 'idle' | 'downloading' | 'downloaded' | 'failed';
+  progress: number;
+  version: string | null;
+  error?: string;
+  message?: string;
+  installAllowed: boolean;
+}
+const updater = NativeModules.NetMateUpdater as
+  | {
+      start(url: string, version: string): Promise<DownloadStatus>;
+      getStatus(): Promise<DownloadStatus>;
+      cancel(): Promise<DownloadStatus>;
+      install(): Promise<'permission-required' | 'installer-opened'>;
+    }
+  | undefined;
+export async function getDownloadStatus(): Promise<DownloadStatus> {
+  return updater
+    ? updater.getStatus()
+    : { state: 'idle', progress: 0, version: null, installAllowed: false };
+}
+export async function startUpdateDownload(release: ReleaseInfo): Promise<DownloadStatus> {
+  const asset = getPlatformAsset(release, await DeviceInfo.supportedAbis().catch(() => []));
+  if (!updater || !asset) throw new Error('当前平台没有可用的安装包');
+  return updater.start(asset.downloadUrl, release.version);
+}
+export async function cancelUpdateDownload(): Promise<DownloadStatus> {
+  if (!updater) throw new Error('更新模块不可用');
+  return updater.cancel();
+}
+export async function installDownloadedUpdate(): Promise<
+  'permission-required' | 'installer-opened'
+> {
+  if (!updater) throw new Error('更新模块不可用');
+  return updater.install();
+}

@@ -1,4 +1,4 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test as base, expect } from '@playwright/test';
@@ -54,8 +54,7 @@ export const test = base.extend<ElectronFixtures>({
         }
       }
     } finally {
-      await test.step('Close Electron', () => electronApp.close());
-      await rm(userDataDir, { recursive: true, force: true });
+      await test.step('Close Electron', () => electronApp.close().catch(() => undefined));
     }
   },
   appWindow: async ({ electronApp }, provide, testInfo) => {

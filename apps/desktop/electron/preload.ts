@@ -48,6 +48,7 @@ const IPC_CHANNELS = {
 } as const;
 
 const IPC_EVENTS = {
+  CONFIG_CHANGED: 'event:config:changed',
   NETWORK_STATUS_CHANGED: 'event:network:statusChanged',
   NETWORK_STATUS_LOADING: 'event:network:statusLoading',
   HEARTBEAT_COUNTDOWN: 'event:heartbeat:countdown',

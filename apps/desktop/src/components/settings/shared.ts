@@ -26,6 +26,7 @@ export const DEFAULT_NEW_ACCOUNT: NewAccountForm = {
 };
 
 export interface NewWifiForm {
+  security?: string;
   ssid: string;
   password: string;
   requiresAuth: boolean;

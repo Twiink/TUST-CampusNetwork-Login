@@ -47,6 +47,8 @@ export interface AppSettings {
   /** 连续失败阈值 */
   heartbeatFailureThreshold: number;
   autoReconnect: boolean;
+  /** 用户主动断开认证；跨重启保留，不影响 WiFi 自动关联。 */
+  autoAuthPaused: boolean;
   /** 单个 WiFi 重试次数 */
   wifiReconnectRetries: number;
   /** @deprecated 兼容旧界面，等同于 wifiReconnectRetries */
@@ -67,6 +69,8 @@ export interface AppSettings {
 }
 
 export interface AppConfig {
+  /** 每次成功提交递增，供原生层拒绝过期快照。 */
+  revision?: number;
   /** 配置结构版本；预留给迁移判断，不参与业务逻辑 */
   version?: number;
   accounts: AccountConfig[];

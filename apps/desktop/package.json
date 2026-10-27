@@ -17,7 +17,9 @@
     "format:check": "prettier --check .",
     "type-check": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "test:e2e": "node ./scripts/ensure-electron-binary.mjs && pnpm run build && playwright test -c playwright.config.ts"
+    "test:e2e": "node ./scripts/ensure-electron-binary.mjs && pnpm run build:e2e && playwright test -c playwright.config.ts",
+    "build:e2e": "vite build --mode e2e",
+    "prebuild:e2e": "pnpm -C ../../packages/shared build"
   },
   "description": "NetMate - 校园网自动登录助手",
   "homepage": "https://github.com/Twiink/TUST-CampusNetwork-Login#readme",

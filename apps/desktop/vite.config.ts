@@ -4,7 +4,7 @@ import electron from 'vite-plugin-electron/simple';
 import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@repo/shared': path.resolve(import.meta.dirname, '../../packages/shared/src/index.ts'),
@@ -15,11 +15,14 @@ export default defineConfig({
     electron({
       main: {
         // Shortcut of `build.lib.entry`.
-        entry: 'electron/main.ts',
+        entry: mode === 'e2e' ? 'electron/e2e-main.ts' : 'electron/main.ts',
         vite: {
           build: {
             // 主进程压缩：减小 bundle 体积与解析内存开销
             minify: 'esbuild',
+            ...(mode === 'e2e'
+              ? { outDir: 'dist-e2e', rollupOptions: { output: { entryFileNames: 'e2e-main.js' } } }
+              : {}),
           },
         },
       },
@@ -43,4 +46,4 @@ export default defineConfig({
           : {},
     }),
   ],
-});
+}));

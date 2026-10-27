@@ -46,7 +46,7 @@ describe('WifiModule bridge', () => {
       ipv6: null,
       mac: null,
     });
-    await expect(WifiModule.scanWifiNetworks()).resolves.toEqual([]);
+    await expect(WifiModule.scanWifiNetworks()).rejects.toThrow('扫描失败');
     await expect(WifiModule.connectToWifi('TUST', 'pass')).resolves.toBe(false);
     await expect(WifiModule.disconnectWifi()).resolves.toBe(false);
   });

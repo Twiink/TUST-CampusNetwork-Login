@@ -55,6 +55,8 @@ data class AutoAuthProfile(
     /** settings.keepCurrentConnection */
     val keepCurrentConnection: Boolean = true,
     val notifications: NotificationFlags = NotificationFlags(),
+    val revision: Long = 0,
+    val authPaused: Boolean = false,
 ) {
     /** 开启了自动连接的 WiFi（WiFi 重连与启动连接的候选） */
     val autoConnectWifis: List<AutoAuthWifiRule>
@@ -93,6 +95,8 @@ data class AutoAuthProfile(
             } ?: NotificationFlags()
             return AutoAuthProfile(
                 enabled = root.optBoolean("enabled", false),
+                revision = root.optLong("revision", 0),
+                authPaused = root.optBoolean("authPaused", false),
                 currentAccountId = currentAccountId?.takeIf { it.isNotEmpty() },
                 accounts = accounts,
                 wifiRules = wifiRules,

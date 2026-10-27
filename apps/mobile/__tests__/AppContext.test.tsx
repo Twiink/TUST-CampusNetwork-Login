@@ -1,392 +1,232 @@
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
-import { createDefaultAppConfig, type AccountConfig, type AppConfig } from '@repo/shared';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import {
+  AccountManager,
+  AuthService,
+  ConfigManager,
+  MemoryStorageAdapter,
+  WifiManager,
+  createDefaultAppConfig,
+  createLogger,
+  type AppConfig,
+} from '@repo/shared';
 import { AppProvider, useApp } from '../src/context/AppContext';
-import type { MobileServices } from '../src/context/mobileServices';
 import { createMobileServices } from '../src/context/mobileServices';
-import * as WifiModule from '../src/native/WifiModule';
-import { useAutoAuth } from '../src/hooks/useAutoAuth';
-import { usePermissionGuide } from '../src/hooks/usePermissionGuide';
+import * as NativeAuth from '../src/native/AutoAuth';
+import * as Wifi from '../src/native/WifiModule';
 
-jest.mock('../src/context/mobileServices', () => ({
-  createMobileServices: jest.fn(),
+jest.mock('../src/context/mobileServices', () => ({ createMobileServices: jest.fn() }));
+jest.mock('../src/hooks/useAutoAuth', () => ({ useAutoAuth: jest.fn() }));
+jest.mock('../src/hooks/usePermissionGuide', () => ({
+  usePermissionGuide: () => ({ items: [], request: jest.fn(), runGuide: jest.fn() }),
 }));
-
-jest.mock('../src/native/WifiModule', () => ({
-  getNetworkInfo: jest.fn(),
-  requestLocationPermission: jest.fn(),
-  hasLocationPermission: jest.fn(),
-  isNativeModuleAvailable: jest.fn(),
-}));
-
-jest.mock('../src/native/BackgroundService', () => ({
-  isBackgroundServiceAvailable: () => false,
-  isBackgroundServiceRunning: jest.fn().mockResolvedValue(false),
-  startBackgroundService: jest.fn().mockResolvedValue(false),
-  stopBackgroundService: jest.fn().mockResolvedValue(false),
-}));
-
-jest.mock('../src/native/AutoStart', () => ({
-  isAutoStartAvailable: () => false,
-  setAutoStartEnabled: jest.fn().mockResolvedValue(false),
-}));
-
 jest.mock('../src/native/AppUpdater', () => ({
   autoCheckForUpdate: jest.fn().mockResolvedValue(null),
 }));
-
-jest.mock('../src/hooks/useAutoAuth', () => ({
-  useAutoAuth: jest.fn(),
+jest.mock('../src/native/BackgroundService', () => ({ isBackgroundServiceAvailable: () => false }));
+jest.mock('../src/native/AutoStart', () => ({ isAutoStartAvailable: () => false }));
+jest.mock('../src/native/Logs', () => ({
+  queryPersistentLogs: jest.fn().mockResolvedValue([]),
+  appendPersistentLog: jest.fn().mockResolvedValue(undefined),
+  clearPersistentLogs: jest.fn().mockResolvedValue(undefined),
+  onPersistentLog: () => null,
+  exportPersistentLogs: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../src/native/WifiModule', () => ({
+  isNativeModuleAvailable: () => true,
+  hasLocationPermission: jest.fn().mockResolvedValue(true),
+  requestLocationPermission: jest.fn().mockResolvedValue(true),
+  getNetworkInfo: jest.fn(),
+  startWatching: jest.fn().mockResolvedValue(true),
+  stopWatching: jest.fn().mockResolvedValue(true),
+  onWifiChanged: () => ({ remove: jest.fn() }),
+}));
+jest.mock('../src/native/AutoAuth', () => ({
+  ...jest.requireActual('../src/native/AutoAuth'),
+  isAutoAuthAvailable: jest.fn(),
+  syncAutoAuthProfile: jest.fn(),
+  getAuthSnapshot: jest.fn(),
+  nativeLogin: jest.fn(),
+  nativeLogout: jest.fn(),
+  onAuthSnapshot: () => null,
+  onWifiReconnectProgress: () => null,
+  getReconnectProgress: jest.fn().mockResolvedValue(null),
 }));
 
-jest.mock('../src/hooks/usePermissionGuide', () => ({
-  usePermissionGuide: jest.fn(),
-}));
-
-const mockCreateMobileServices = createMobileServices as jest.Mock;
-const mockGetNetworkInfo = WifiModule.getNetworkInfo as jest.Mock;
-const mockHasLocationPermission = WifiModule.hasLocationPermission as jest.Mock;
-const mockRequestLocationPermission = WifiModule.requestLocationPermission as jest.Mock;
-const mockIsNativeModuleAvailable = WifiModule.isNativeModuleAvailable as jest.Mock;
-const mockUseAutoAuth = useAutoAuth as jest.Mock;
-const mockUsePermissionGuide = usePermissionGuide as jest.Mock;
-
-const firstAccount: AccountConfig = {
+const account = {
   id: 'a1',
-  name: '账号一',
-  username: '20250001',
-  password: 'secret-1',
-  serverUrl: 'http://10.10.102.50:801',
-  isp: 'campus',
+  name: 'One',
+  username: '20260001',
+  password: 'secret',
+  serverUrl: 'http://portal.test',
+  isp: 'campus' as const,
 };
-
-const secondAccount: AccountConfig = {
-  id: 'a2',
-  name: '账号二',
-  username: '20250002',
-  password: 'secret-2',
-  serverUrl: 'http://10.10.102.50:801',
-  isp: 'cmcc',
+const network = {
+  wifiEnabled: true,
+  connected: true,
+  ssid: 'TUST',
+  ipv4: '10.1.2.3',
+  ipv6: null,
+  mac: null,
+  networkKey: 'one',
 };
-
-function makeConfig(): AppConfig {
-  return {
-    ...createDefaultAppConfig(),
-    accounts: [firstAccount, secondAccount],
-    currentAccountId: firstAccount.id,
+const initial = () =>
+  createDefaultAppConfig({
+    accounts: [account, { ...account, id: 'a2', username: 'second' }],
+    currentAccountId: 'a1',
     wifiList: [
       {
         id: 'w1',
-        ssid: 'TUST-WIFI',
-        password: 'wifi-password',
+        ssid: 'TUST',
+        password: '',
         autoConnect: true,
         requiresAuth: true,
-        linkedAccountIds: [secondAccount.id],
-        linkedAccountId: secondAccount.id,
-        priority: 10,
+        linkedAccountIds: ['a2', 'a1'],
+        priority: 1,
         lastConnectedAt: null,
       },
     ],
-  };
-}
-
-function createServices(config: AppConfig) {
-  let currentConfig = config;
-  const configManager = {
-    load: jest.fn().mockResolvedValue(config),
-    getConfig: jest.fn(() => currentConfig),
-    update: jest.fn(async (partial: Partial<AppConfig>) => {
-      currentConfig = {
-        ...currentConfig,
-        ...partial,
-        settings: partial.settings
-          ? { ...currentConfig.settings, ...partial.settings }
-          : currentConfig.settings,
-      };
-      return currentConfig;
-    }),
-  };
-  const authService = {
-    setServerUrl: jest.fn(),
-    loginWithRetry: jest.fn().mockResolvedValue({ success: true, message: '登录成功' }),
-    loginWithAccounts: jest.fn().mockResolvedValue({ success: true, message: '登录成功' }),
-    logout: jest.fn().mockResolvedValue({ success: true, message: '注销成功' }),
-  };
-  const accountManager = {
-    getAccountById: jest.fn(
-      (id: string) => currentConfig.accounts.find(account => account.id === id) ?? null
-    ),
-    getCurrentAccount: jest.fn(
-      () =>
-        currentConfig.accounts.find(account => account.id === currentConfig.currentAccountId) ??
-        null
-    ),
-  };
+  });
+async function setup(config: AppConfig = initial(), existing?: MemoryStorageAdapter) {
+  const storage = existing ?? new MemoryStorageAdapter();
+  if (!existing) await storage.set('app_config', config);
+  const manager = new ConfigManager(storage);
+  const logger = createLogger();
+  const auth = new AuthService(undefined, logger);
+  jest
+    .spyOn(auth, 'loginWithAccounts')
+    .mockResolvedValue({ success: true, message: '登录成功', attempts: [] });
+  jest.spyOn(auth, 'logout').mockResolvedValue({ success: false, message: '注销失败' });
   const services = {
-    authService,
-    configManager,
-    accountManager,
-    wifiManager: {},
+    configManager: manager,
+    authService: auth,
+    accountManager: new AccountManager(manager),
+    wifiManager: new WifiManager(manager),
+    logger,
     networkDetector: {},
-    logger: { stopAutoCleanup: jest.fn() },
-  } as unknown as MobileServices;
-
-  return { services, configManager, authService, getCurrentConfig: () => currentConfig };
+  };
+  (createMobileServices as jest.Mock).mockReturnValue(services);
+  const view = renderHook(useApp, {
+    wrapper: ({ children }: { children: React.ReactNode }) => <AppProvider>{children}</AppProvider>,
+  });
+  await waitFor(() => expect(view.result.current.configurationState).toBe('saved'));
+  return { ...view, storage, manager, auth };
 }
-
-describe('AppProvider', () => {
-  let latest: ReturnType<typeof useApp> | undefined;
-
-  function Consumer() {
-    latest = useApp();
-    return (
-      <>
-        <Text testID="current-account">{latest.currentAccount?.username ?? 'none'}</Text>
-        <Text testID="account-count">{latest.accounts.length}</Text>
-        <Text testID="logs">{latest.logs.map(log => log.message).join('\n')}</Text>
-        <Text testID="network-status">{latest.networkStatus}</Text>
-      </>
-    );
-  }
-
-  beforeEach(() => {
-    latest = undefined;
-    jest.clearAllMocks();
-    mockIsNativeModuleAvailable.mockReturnValue(true);
-    mockHasLocationPermission.mockResolvedValue(true);
-    mockRequestLocationPermission.mockResolvedValue(true);
-    mockGetNetworkInfo.mockResolvedValue({
-      wifiEnabled: true,
-      connected: true,
-      ssid: 'TUST-WIFI',
-      ipv4: '10.1.2.3',
-      ipv6: null,
-      mac: null,
-    });
-    mockUseAutoAuth.mockReset();
-    mockUsePermissionGuide.mockReturnValue({
-      items: [],
-      request: jest.fn(),
-      runGuide: jest.fn(),
-    });
+beforeEach(() => {
+  jest.clearAllMocks();
+  (NativeAuth.isAutoAuthAvailable as jest.Mock).mockReturnValue(false);
+  (NativeAuth.syncAutoAuthProfile as jest.Mock).mockResolvedValue(true);
+  (NativeAuth.getAuthSnapshot as jest.Mock).mockResolvedValue({
+    networkKey: 'one',
+    wifiConnected: true,
+    requiresAuth: true,
+    authenticated: false,
+    internetReachable: false,
+    paused: false,
+    revision: 0,
   });
+  (Wifi.getNetworkInfo as jest.Mock).mockResolvedValue(network);
+});
 
-  it('加载配置后同步 accounts 与 currentAccount，并在 setConfig 时保持一致', async () => {
-    const config = makeConfig();
-    const { services, configManager } = createServices(config);
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('current-account').props.children).toBe('20250001')
-    );
-    expect(screen.getByTestId('account-count').props.children).toBe(2);
-
-    const next = {
-      ...config,
-      currentAccountId: secondAccount.id,
-    };
-    await act(async () => {
-      latest?.setConfig(next);
-    });
-
-    expect(configManager.update).toHaveBeenCalledWith({ currentAccountId: secondAccount.id });
-    expect(screen.getByTestId('current-account').props.children).toBe('20250002');
-  });
-
-  it('保存失败时写入可见错误日志', async () => {
-    const config = makeConfig();
-    const { services, configManager } = createServices(config);
-    configManager.update.mockRejectedValueOnce(new Error('磁盘不可用'));
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() => expect(screen.getByTestId('account-count').props.children).toBe(2));
-    await act(async () => {
-      latest?.setConfig({ ...config, currentAccountId: secondAccount.id });
-    });
-
-    await waitFor(() =>
-      expect(screen.getByTestId('logs').props.children).toContain('保存配置失败: 磁盘不可用')
-    );
-  });
-
-  it('连续函数式更新会合并状态并按顺序持久化', async () => {
-    const config = makeConfig();
-    const { services, configManager } = createServices(config);
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() => expect(screen.getByTestId('account-count').props.children).toBe(2));
-    await act(async () => {
-      latest?.setConfig(current => ({
+test('配置队列合并设置、账号和 WiFi 修改，等待落盘后发布', async () => {
+  const { result, manager } = await setup();
+  await act(async () => {
+    await Promise.all([
+      result.current.setConfig(current => ({
         ...current,
         settings: { ...current.settings, autoReconnect: false },
-      }));
-      latest?.setConfig(current => ({
+      })),
+      result.current.setConfig(current => ({
         ...current,
-        settings: { ...current.settings, enableHeartbeat: false },
-      }));
-    });
-
-    await waitFor(() => expect(configManager.update).toHaveBeenCalledTimes(2));
-    const firstSaved = configManager.update.mock.calls[0][0] as AppConfig;
-    const secondSaved = configManager.update.mock.calls[1][0] as AppConfig;
-    expect(firstSaved.settings).toMatchObject({
-      autoReconnect: false,
-      enableHeartbeat: true,
-    });
-    expect(secondSaved.settings).toMatchObject({
-      autoReconnect: false,
-      enableHeartbeat: false,
-    });
+        wifiList: current.wifiList.map(wifi => ({ ...wifi, priority: 3 })),
+      })),
+      result.current.updateAccount('a1', { name: 'Edited' }),
+    ]);
   });
-
-  it('手动登录优先使用当前 WiFi 关联账号，而不是当前账号', async () => {
-    const config = makeConfig();
-    const { services, authService } = createServices(config);
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('current-account').props.children).toBe('20250001')
-    );
-    await act(async () => {
-      await latest?.login();
-    });
-
-    expect(authService.loginWithRetry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userAccount: secondAccount.username,
-        userPassword: secondAccount.password,
-      })
-    );
-    expect(authService.loginWithAccounts).not.toHaveBeenCalled();
+  expect(result.current.config).toMatchObject({
+    revision: 3,
+    settings: { autoReconnect: false },
+    wifiList: [{ priority: 3 }],
   });
-
-  it('多个关联账号按配置顺序依次尝试登录', async () => {
-    const config = makeConfig();
-    config.wifiList[0].linkedAccountIds = [secondAccount.id, firstAccount.id];
-    const { services, authService } = createServices(config);
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('current-account').props.children).toBe('20250001')
-    );
-    await act(async () => {
-      await latest?.login();
-    });
-
-    expect(authService.loginWithAccounts).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({ id: secondAccount.id }),
-        expect.objectContaining({ id: firstAccount.id }),
-      ],
-      expect.objectContaining({ wlanUserIp: '10.1.2.3' })
-    );
-    expect(screen.getByTestId('network-status').props.children).toBe('connected');
+  expect(result.current.accounts[0].name).toBe('Edited');
+  expect(manager.getConfig()).toEqual(result.current.config);
+});
+test('保存失败后保留已显示配置，重试实际未完成的修改', async () => {
+  const { result, storage } = await setup();
+  jest.spyOn(storage, 'set').mockRejectedValueOnce(new Error('disk full'));
+  await act(async () => {
+    await expect(
+      result.current.setConfig(current => ({
+        ...current,
+        settings: { ...current.settings, autoAuthPaused: true },
+      }))
+    ).rejects.toThrow('disk full');
   });
-
-  it('没有可用账户或 IP 时阻止登录并记录原因', async () => {
-    const config = makeConfig();
-    config.accounts = [];
-    config.currentAccountId = null;
-    config.wifiList[0].linkedAccountIds = [];
-    const { services, authService } = createServices(config);
-    mockCreateMobileServices.mockReturnValue(services);
-
-    const firstRender = render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() => expect(screen.getByTestId('account-count').props.children).toBe(0));
-    await act(async () => {
-      await latest?.login();
-    });
-    expect(screen.getByTestId('logs').props.children).toContain('请先选择账户');
-    expect(authService.loginWithRetry).not.toHaveBeenCalled();
-    firstRender.unmount();
-
-    const ipConfig = makeConfig();
-    const ipServices = createServices(ipConfig);
-    mockCreateMobileServices.mockReturnValue(ipServices.services);
-    mockGetNetworkInfo.mockResolvedValue({
-      wifiEnabled: true,
-      connected: true,
-      ssid: 'TUST-WIFI',
-      ipv4: null,
-      ipv6: null,
-      mac: null,
-    });
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('current-account').props.children).toBe('20250001')
-    );
-    await act(async () => {
-      await latest?.login();
-    });
-    expect(screen.getByTestId('logs').props.children).toContain('无法获取 IP 地址，请检查网络连接');
+  expect(result.current.configurationState).toBe('error');
+  expect(result.current.config.settings.autoAuthPaused).toBe(false);
+  await act(async () => {
+    await result.current.retryConfigurationSync();
   });
-
-  it('登录失败和登出成功会同步网络状态', async () => {
-    const config = makeConfig();
-    const { services, authService } = createServices(config);
-    authService.loginWithRetry.mockResolvedValue({ success: false, message: '密码错误' });
-    mockCreateMobileServices.mockReturnValue(services);
-
-    render(
-      <AppProvider>
-        <Consumer />
-      </AppProvider>
-    );
-
-    await waitFor(() =>
-      expect(screen.getByTestId('current-account').props.children).toBe('20250001')
-    );
-    await act(async () => {
-      await latest?.login();
-    });
-    expect(screen.getByTestId('network-status').props.children).toBe('disconnected');
-    expect(screen.getByTestId('logs').props.children).toContain('登录失败: 密码错误');
-
-    await act(async () => {
-      await latest?.logout();
-    });
-    expect(authService.logout).toHaveBeenCalledWith('10.1.2.3');
-    expect(screen.getByTestId('logs').props.children).toContain('登出成功');
+  expect(result.current.config.settings.autoAuthPaused).toBe(true);
+  expect(result.current.configurationState).toBe('saved');
+});
+test('后台拒绝同步时不展示已生效，重试后才发布', async () => {
+  (NativeAuth.isAutoAuthAvailable as jest.Mock).mockReturnValue(true);
+  const { result, manager } = await setup();
+  (NativeAuth.syncAutoAuthProfile as jest.Mock).mockResolvedValueOnce(false);
+  await act(async () => {
+    await expect(
+      result.current.setConfig(current => ({
+        ...current,
+        settings: { ...current.settings, autoAuthPaused: true },
+      }))
+    ).rejects.toThrow('后台未确认');
   });
+  expect(manager.getSettings().autoAuthPaused).toBe(true);
+  expect(result.current.config.settings.autoAuthPaused).toBe(false);
+  await act(async () => {
+    await result.current.retryConfigurationSync();
+  });
+  expect(result.current.config.settings.autoAuthPaused).toBe(true);
+});
+test('关联账号按顺序登录，注销失败也保留暂停并跨重启恢复', async () => {
+  const view = await setup();
+  await act(async () => {
+    await view.result.current.login();
+  });
+  expect(view.auth.loginWithAccounts).toHaveBeenCalledWith(
+    [expect.objectContaining({ id: 'a2' }), expect.objectContaining({ id: 'a1' })],
+    expect.objectContaining({ wlanUserIp: network.ipv4 }),
+    { retrySingle: true }
+  );
+  await act(async () => {
+    await view.result.current.logout();
+  });
+  expect(view.result.current.config.settings.autoAuthPaused).toBe(true);
+  view.unmount();
+  const restarted = await setup(initial(), view.storage);
+  expect(restarted.result.current.config.settings.autoAuthPaused).toBe(true);
+  await act(async () => {
+    await restarted.result.current.resumeAutoAuth();
+  });
+  expect(restarted.result.current.config.settings.autoAuthPaused).toBe(false);
+});
+test('较早的异步网络读取不会覆盖新网络', async () => {
+  const { result } = await setup();
+  let finish!: (value: typeof network) => void;
+  (Wifi.getNetworkInfo as jest.Mock)
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finish = resolve;
+        })
+    )
+    .mockResolvedValueOnce({ ...network, ssid: 'New', networkKey: 'two' });
+  await act(async () => {
+    const older = result.current.refreshNetworkInfo();
+    await result.current.refreshNetworkInfo();
+    finish({ ...network, ssid: 'Old' });
+    await older;
+  });
+  expect(result.current.networkInfo.ssid).toBe('New');
 });

@@ -1,256 +1,132 @@
-/**
- * 配置管理服务
- */
-
+/** Configuration commits are serialized and published only after durable storage succeeds. */
 import { AppConfig, AppSettings } from '../types/config';
-import {
-  validateAppConfig,
-  createDefaultAppConfig,
-  normalizeAppConfig,
-  normalizeAppSettings,
-} from '../utils/validator';
+import { validateAppConfig, createDefaultAppConfig, normalizeAppConfig } from '../utils/validator';
 import { DEFAULT_APP_SETTINGS } from '../constants/defaults';
+import { normalizeAppSettings } from '../utils/validator';
 import { ErrorCode, AppError } from '../constants/errors';
 import { StorageAdapter, MemoryStorageAdapter } from './StorageAdapter';
 import type { Logger } from '../models/Logger';
 
-/**
- * 配置存储键
- */
 const CONFIG_STORAGE_KEY = 'app_config';
+type ConfigPatch = Partial<AppConfig> | ((current: AppConfig) => Partial<AppConfig>);
+const copy = (config: AppConfig): AppConfig => JSON.parse(JSON.stringify(config)) as AppConfig;
 
-/**
- * 配置管理服务类
- */
 export class ConfigManager {
-  private storage: StorageAdapter;
   private config: AppConfig | null = null;
-  private logger: Logger | null;
+  private queue: Promise<unknown> = Promise.resolve();
+  private loading: Promise<AppConfig> | null = null;
+  private listeners = new Set<(config: AppConfig) => void>();
 
-  constructor(storage?: StorageAdapter, logger?: Logger) {
-    this.storage = storage || new MemoryStorageAdapter();
-    this.logger = logger || null;
-  }
+  constructor(
+    private storage: StorageAdapter = new MemoryStorageAdapter(),
+    private logger?: Logger
+  ) {}
 
-  /**
-   * 设置存储适配器
-   */
   setStorage(storage: StorageAdapter): void {
     this.storage = storage;
   }
 
-  /**
-   * 加载配置
-   */
   async load(): Promise<AppConfig> {
-    this.logger?.debug('开始加载应用配置');
-
-    try {
-      const stored = await this.storage.get<AppConfig>(CONFIG_STORAGE_KEY);
-
-      if (stored) {
-        this.logger?.debug('发现已存储的配置，开始验证');
-        const normalized = normalizeAppConfig(stored);
-
-        // 验证存储的配置
-        const validation = validateAppConfig(normalized);
-        if (validation.valid) {
-          this.config = normalized;
-
-          this.logger?.success('应用配置加载成功', {
-            账户数量: this.config.accounts.length,
-            WiFi配置数量: this.config.wifiList.length,
-            自动重连: this.config.settings.autoReconnect ? '已启用' : '已禁用',
-            心跳检测: this.config.settings.enableHeartbeat ? '已启用' : '已禁用',
-            心跳间隔: `${this.config.settings.heartbeatIntervalSeconds}秒`,
-          });
-
-          if (this.needsMigration(stored, normalized)) {
-            this.logger?.info('检测到旧配置结构，已自动迁移并保存');
-            await this.save(normalized);
+    if (this.config) return copy(this.config);
+    if (!this.loading) {
+      this.loading = (async () => {
+        try {
+          const stored = await this.storage.get<AppConfig>(CONFIG_STORAGE_KEY);
+          let config = stored ? normalizeAppConfig(stored) : createDefaultAppConfig();
+          if (!validateAppConfig(config).valid) config = createDefaultAppConfig();
+          config = normalizeAppConfig(config);
+          if (!stored || JSON.stringify(stored) !== JSON.stringify(config)) {
+            await this.storage.set(CONFIG_STORAGE_KEY, copy(config));
           }
-
-          return this.config;
-        } else {
-          this.logger?.warn('存储的配置验证失败，将使用默认配置', {
-            错误: validation.errors.join('; '),
-          });
+          this.config = config;
+          return copy(config);
+        } catch (error) {
+          throw new AppError(
+            ErrorCode.CONFIG_LOAD_FAILED,
+            error instanceof Error ? error.message : '加载配置失败'
+          );
+        } finally {
+          this.loading = null;
         }
-      } else {
-        this.logger?.info('未找到已存储的配置，将创建默认配置');
-      }
-
-      // 如果没有配置或配置无效，创建默认配置
-      this.config = createDefaultAppConfig();
-      await this.save();
-
-      this.logger?.success('默认配置已创建并保存');
-
-      return this.config;
-    } catch (error) {
-      this.logger?.error('加载配置失败', {
-        错误: error instanceof Error ? error.message : String(error),
-      });
-
-      throw new AppError(
-        ErrorCode.CONFIG_LOAD_FAILED,
-        error instanceof Error ? error.message : '加载配置失败'
-      );
+      })();
     }
+    return this.loading;
   }
 
-  private needsMigration(stored: unknown, normalized: AppConfig): boolean {
-    const storedVersion = (stored as { version?: number }).version;
-    if (storedVersion === (normalized.version ?? 1)) {
-      return false;
-    }
-    return JSON.stringify(stored) !== JSON.stringify(normalized);
+  subscribe(listener: (config: AppConfig) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
-  /**
-   * 保存配置
-   */
-  async save(config?: AppConfig): Promise<void> {
-    this.logger?.debug('开始保存应用配置');
-
-    try {
-      if (config) {
-        this.logger?.debug('验证提供的配置');
-        const normalized = normalizeAppConfig(config);
-        const validation = validateAppConfig(normalized);
-        if (!validation.valid) {
-          this.logger?.error('配置验证失败', {
-            错误: validation.errors.join('; '),
-          });
-          throw new AppError(ErrorCode.CONFIG_INVALID, validation.errors.join('; '));
-        }
-        this.config = normalized;
-        this.logger?.debug('配置验证通过');
-      }
-
-      if (!this.config) {
-        this.logger?.error('保存配置失败：没有可保存的配置');
-        throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '没有可保存的配置');
-      }
-
-      await this.storage.set(CONFIG_STORAGE_KEY, this.config);
-
-      this.logger?.success('应用配置保存成功', {
-        账户数量: this.config.accounts.length,
-        WiFi配置数量: this.config.wifiList.length,
-      });
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-
-      this.logger?.error('保存配置异常', {
-        错误: error instanceof Error ? error.message : String(error),
-      });
-
-      throw new AppError(
-        ErrorCode.CONFIG_SAVE_FAILED,
-        error instanceof Error ? error.message : '保存配置失败'
-      );
-    }
-  }
-
-  /**
-   * 获取当前配置
-   */
   getConfig(): AppConfig | null {
-    return this.config;
+    return this.config ? copy(this.config) : null;
   }
-
-  /**
-   * 更新配置
-   */
-  async update(partial: Partial<AppConfig>): Promise<AppConfig> {
-    this.logger?.info('更新应用配置');
-
-    if (!this.config) {
-      this.logger?.debug('配置未加载，先加载配置');
-      await this.load();
-    }
-
-    this.config = {
-      ...this.config!,
-      ...partial,
-      settings: partial.settings
-        ? {
-            ...this.config!.settings,
-            ...partial.settings,
-          }
-        : this.config!.settings,
-    };
-
-    // normalize 只在显式传入 config 的 save() 中执行，避免每次 update 深拷贝整份配置。
-    await this.save();
-
-    this.logger?.success('应用配置更新成功');
-
-    return this.config;
-  }
-
-  /**
-   * 更新设置
-   */
-  async updateSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
-    this.logger?.info('更新应用设置', settings);
-
-    if (!this.config) {
-      this.logger?.debug('配置未加载，先加载配置');
-      await this.load();
-    }
-
-    this.config!.settings = normalizeAppSettings({
-      ...this.config!.settings,
-      ...settings,
-    });
-
-    await this.save();
-
-    this.logger?.success('应用设置更新成功', {
-      自动重连: this.config!.settings.autoReconnect ? '已启用' : '已禁用',
-      心跳检测: this.config!.settings.enableHeartbeat ? '已启用' : '已禁用',
-      心跳间隔: `${this.config!.settings.heartbeatIntervalSeconds}秒`,
-    });
-
-    return this.config!.settings;
-  }
-
-  /**
-   * 获取设置
-   */
   getSettings(): AppSettings {
-    return this.config?.settings || normalizeAppSettings(DEFAULT_APP_SETTINGS);
+    return this.getConfig()?.settings ?? normalizeAppSettings(DEFAULT_APP_SETTINGS);
   }
 
-  /**
-   * 重置配置
-   */
-  async reset(): Promise<AppConfig> {
-    this.logger?.warn('重置应用配置为默认值');
-
-    this.config = createDefaultAppConfig();
-    await this.save();
-
-    this.logger?.success('应用配置已重置为默认值');
-
-    return this.config;
+  private commit(build: (current: AppConfig) => AppConfig): Promise<AppConfig> {
+    const operation = this.queue.then(async () => {
+      if (!this.config) await this.load();
+      const current = copy(this.config!);
+      const next = normalizeAppConfig(build(current));
+      const validation = validateAppConfig(next);
+      if (!validation.valid)
+        throw new AppError(ErrorCode.CONFIG_INVALID, validation.errors.join('; '));
+      next.revision = (current.revision ?? 0) + 1;
+      try {
+        await this.storage.set(CONFIG_STORAGE_KEY, copy(next));
+      } catch (error) {
+        throw new AppError(
+          ErrorCode.CONFIG_SAVE_FAILED,
+          error instanceof Error ? error.message : '保存配置失败'
+        );
+      }
+      this.config = next;
+      this.logger?.debug('配置已提交', { revision: next.revision });
+      for (const listener of this.listeners) {
+        try {
+          listener(copy(next));
+        } catch {
+          /* A subscriber cannot undo a durable commit. */
+        }
+      }
+      return copy(next);
+    });
+    this.queue = operation.catch(() => undefined);
+    return operation;
   }
 
-  /**
-   * 验证配置
-   */
+  async save(config?: AppConfig): Promise<void> {
+    await this.commit((current) => {
+      if (config?.revision !== undefined && config.revision < (current.revision ?? 0))
+        throw new AppError(ErrorCode.CONFIG_INVALID, '配置已更新，请刷新后重试');
+      return config ? copy(config) : current;
+    });
+  }
+
+  update(patch: ConfigPatch): Promise<AppConfig> {
+    return this.commit((current) => {
+      const partial = typeof patch === 'function' ? patch(copy(current)) : patch;
+      if (partial.revision !== undefined && partial.revision < (current.revision ?? 0))
+        throw new AppError(ErrorCode.CONFIG_INVALID, '配置已更新，请刷新后重试');
+      return { ...current, ...partial, settings: { ...current.settings, ...partial.settings } };
+    });
+  }
+
+  async updateSettings(settings: Partial<AppSettings>): Promise<AppSettings> {
+    return (await this.update((current) => ({ settings: { ...current.settings, ...settings } })))
+      .settings;
+  }
+
+  reset(): Promise<AppConfig> {
+    return this.commit(() => createDefaultAppConfig());
+  }
   validate(config: Partial<AppConfig>): { valid: boolean; errors: string[] } {
     return validateAppConfig(config);
   }
 }
 
-/**
- * 创建配置管理服务实例
- */
 export function createConfigManager(storage?: StorageAdapter, logger?: Logger): ConfigManager {
   return new ConfigManager(storage, logger);
 }

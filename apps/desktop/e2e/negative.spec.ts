@@ -15,12 +15,8 @@ test('空表单提交不会新增账户', async ({ appWindow: window }) => {
   await expect(accountRows).toHaveCount(1);
 });
 
-test('日志筛选无匹配级别时显示空态提示', async ({ appWindow: window }) => {
+test('真实业务日志包含调试级别', async ({ appWindow: window }) => {
   await openPage(window, '运行日志');
-
-  // 桩数据中没有 debug 级别日志
   await window.getByRole('button', { name: '调试' }).click();
-
-  await expect(window.getByText('暂无 调试 级别的日志')).toBeVisible();
-  await expect(window.getByText('心跳检测正常')).toHaveCount(0);
+  await expect(window.getByText('网络探测完成').first()).toBeVisible();
 });

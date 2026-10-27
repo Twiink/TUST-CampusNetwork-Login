@@ -1,3 +1,5 @@
+import { runtimePorts } from '../runtime-ports';
+import * as native from '@repo/native';
 /**
  * WiFi 切换服务
  * 提供 WiFi 扫描和切换功能（跨平台）
@@ -5,6 +7,12 @@
 
 import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { isIP } from 'node:net';
+import { createHash } from 'node:crypto';
+import { createDesktopWifiAdapter } from './wifi-adapter';
 import { execWindowsText, execWindowsFileText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
@@ -21,6 +29,7 @@ export interface AvailableNetwork {
  * 获取可用的 WiFi 网络列表
  */
 export async function scanAvailableNetworks(): Promise<AvailableNetwork[]> {
+  if (runtimePorts.scan) return runtimePorts.scan();
   switch (process.platform) {
     case 'darwin':
       return await scanMacOS();
@@ -37,8 +46,18 @@ export async function scanAvailableNetworks(): Promise<AvailableNetwork[]> {
  * macOS: 扫描可用 WiFi 网络
  */
 async function scanMacOS(): Promise<AvailableNetwork[]> {
+  if (native.scanWifi) {
+    const networks = await native.scanWifi();
+    return networks
+      .filter((network) => network.ssid)
+      .map((network) => ({
+        ssid: network.ssid!,
+        signal: Math.max(0, Math.min(100, Math.round((((network.rssi ?? -100) + 100) * 100) / 60))),
+        security: network.security ?? 'Unknown',
+      }));
+  }
   try {
-    // 使用 airport 命令扫描
+    // Compatibility fallback for older systems without the CoreWLAN module.
     const { stdout } = await execAsync(
       '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -s',
       { timeout: 10000 }
@@ -69,7 +88,7 @@ async function scanMacOS(): Promise<AvailableNetwork[]> {
 
     return networks;
   } catch {
-    return [];
+    throw new Error('WiFi 扫描失败，请检查系统权限和无线设备');
   }
 }
 
@@ -105,7 +124,7 @@ async function scanWindows(): Promise<AvailableNetwork[]> {
 
     return networks;
   } catch {
-    return [];
+    throw new Error('WiFi 扫描失败，请检查系统权限和无线设备');
   }
 }
 
@@ -136,7 +155,7 @@ async function scanLinux(): Promise<AvailableNetwork[]> {
 
     return networks;
   } catch {
-    return [];
+    throw new Error('WiFi 扫描失败，请检查系统权限和无线设备');
   }
 }
 
@@ -145,12 +164,17 @@ async function scanLinux(): Promise<AvailableNetwork[]> {
  * @param ssid WiFi SSID
  * @param password WiFi 密码（可选，如果未提供则尝试连接已保存的网络）
  */
-export async function connectToNetwork(ssid: string, password?: string): Promise<boolean> {
+export async function connectToNetwork(
+  ssid: string,
+  password?: string,
+  security?: string,
+  readConnection?: () => Promise<ConnectionSnapshot>
+): Promise<boolean> {
   switch (process.platform) {
     case 'darwin':
       return await connectMacOS(ssid, password);
     case 'win32':
-      return await connectWindows(ssid, password);
+      return await connectWindowsInternal(ssid, password, security, readConnection);
     case 'linux':
       return await connectLinux(ssid, password);
     default:
@@ -177,53 +201,136 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
     await execFileAsync('networksetup', connectArgs, { timeout: 30000 });
     return true;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`连接失败: ${errorMessage}`);
+    throw safeConnectionError(error);
   }
 }
 
-/**
- * Windows: 连接到 WiFi
- * @param ssid WiFi SSID
- * @param password WiFi密码
- */
-async function connectWindows(ssid: string, password?: string): Promise<boolean> {
-  return await connectWindowsInternal(ssid, password);
+export interface ConnectionSnapshot {
+  ssid?: string | null;
+  connected: boolean;
+  ip?: string | null;
 }
 
-/**
- * Windows: 连接到 WiFi 的内部实现
- * 仅使用Windows已保存的WiFi配置文件
- */
-async function connectWindowsInternal(ssid: string, _password?: string): Promise<boolean> {
+export async function waitForTargetNetwork(
+  ssid: string,
+  read: () => Promise<ConnectionSnapshot>,
+  timeoutMs = 30_000,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+): Promise<boolean> {
+  for (let elapsed = 0; elapsed <= timeoutMs; elapsed += 500) {
+    const state = await read();
+    const ip = state.ip?.split('%')[0];
+    const usable =
+      ip && isIP(ip) !== 0 && !/^(169\.254\.|127\.|0\.0\.0\.0$|fe80:|::$|::1$)/i.test(ip);
+    if (state.connected && state.ssid === ssid && usable) return true;
+    if (elapsed < timeoutMs) await sleep(500);
+  }
+  return false;
+}
+
+function safeConnectionError(error: unknown): Error {
+  const code =
+    error && typeof error === 'object' && 'code' in error ? String(error.code) : 'UNKNOWN';
+  return new Error(
+    `连接失败（系统错误 ${/^[A-Z0-9_-]+$/i.test(code) ? code : 'UNKNOWN'}），请检查密码、信号及系统网络权限`
+  );
+}
+
+const xml = (text: string) =>
+  text.replace(
+    /[<>&"']/g,
+    (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[char]!
+  );
+export function buildWindowsWifiProfile(
+  ssid: string,
+  password: string,
+  security = ''
+): { name: string; xml: string } {
+  if (/enterprise|eap|企业/i.test(security)) throw new Error('企业认证网络请使用系统已保存的配置');
+  const name = `NetMate-${createHash('sha256').update(ssid).digest('hex').slice(0, 16)}`;
+  const authentication = !password ? 'open' : /WPA3|SAE/i.test(security) ? 'WPA3SAE' : 'WPA2PSK';
+  const sharedKey = password
+    ? `<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>${xml(password)}</keyMaterial></sharedKey>`
+    : '';
+  return {
+    name,
+    xml: `<?xml version="1.0" encoding="UTF-8"?><WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1"><name>${name}</name><SSIDConfig><SSID><hex>${Buffer.from(ssid, 'utf8').toString('hex')}</hex><name>${xml(ssid)}</name></SSID></SSIDConfig><connectionType>ESS</connectionType><connectionMode>manual</connectionMode><MSM><security><authEncryption><authentication>${authentication}</authentication><encryption>${password ? 'AES' : 'none'}</encryption><useOneX>false</useOneX></authEncryption>${sharedKey}</security></MSM></WLANProfile>`,
+  };
+}
+
+async function readConnectionSnapshot(): Promise<ConnectionSnapshot> {
+  const adapter = createDesktopWifiAdapter();
+  const wifi = await adapter.getCurrentWifi();
+  if (!wifi?.connected) return { connected: false };
+  const info = await adapter.getNetworkInfo();
+  return { connected: true, ssid: wifi.ssid, ip: info.ipv4 || info.ipv6 };
+}
+
+async function connectWindowsInternal(
+  ssid: string,
+  password?: string,
+  security?: string,
+  read = readConnectionSnapshot
+): Promise<boolean> {
+  let temporaryDirectory: string | undefined;
   try {
-    // 检查是否已有保存的配置文件（输出按 GBK 解码，中文 SSID 才能正确匹配）
-    let hasProfile = false;
+    let profileName = ssid;
+    let existing = false;
     try {
-      const profileOutput = await execWindowsFileText(
-        'netsh',
-        ['wlan', 'show', 'profile', `name="${ssid}"`],
-        3000
-      );
-      hasProfile = profileOutput.includes(ssid);
+      existing = (
+        await execWindowsFileText('netsh', ['wlan', 'show', 'profile', `name=${ssid}`], 3000)
+      ).includes(ssid);
     } catch {
-      hasProfile = false;
+      /* New network. */
     }
-
-    // 只使用已保存的配置文件连接
-    if (hasProfile) {
-      await execFileAsync('netsh', ['wlan', 'connect', `name="${ssid}"`], { timeout: 30000 });
-      return true;
+    if (/enterprise|eap|企业|WEP/i.test(security ?? '')) {
+      if (!existing) throw new Error('需要系统已保存的网络配置');
+    } else if (!existing || password !== undefined) {
+      const profile = buildWindowsWifiProfile(ssid, password ?? '', security);
+      temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'netmate-wlan-'));
+      const file = path.join(temporaryDirectory, 'profile.xml');
+      await writeFile(file, profile.xml, { mode: 0o600 });
+      await execFileAsync('netsh', ['wlan', 'add', 'profile', `filename=${file}`, 'user=current'], {
+        timeout: 10000,
+        windowsHide: true,
+      });
+      profileName = profile.name;
     }
-
-    // 没有配置文件，抛出错误提示用户手动连接
-    throw new Error(
-      `未找到WiFi配置文件。请先在Windows系统中手动连接一次WiFi "${ssid}"，之后应用可自动重连`
-    );
+    await execFileAsync('netsh', ['wlan', 'connect', `name=${profileName}`, `ssid=${ssid}`], {
+      timeout: 30000,
+      windowsHide: true,
+    });
+    return await waitForTargetNetwork(ssid, read);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(errorMessage);
+    throw safeConnectionError(error);
+  } finally {
+    if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
   }
+}
+
+export async function isWifiRadioEnabled(): Promise<boolean> {
+  try {
+    if (process.platform === 'linux') {
+      const { stdout } = await execFileAsync('nmcli', ['radio', 'wifi'], {
+        timeout: 3000,
+        env: { ...process.env, LC_ALL: 'C' },
+      });
+      return stdout.trim() === 'enabled';
+    }
+    if (process.platform === 'win32') {
+      const output = await execWindowsText('netsh wlan show interfaces', 3000);
+      return !/Software Off|软件 关闭|软件关|无线接口.*不存在|no wireless interface/i.test(output);
+    }
+    if (process.platform === 'darwin') {
+      const { stdout } = await execFileAsync('networksetup', ['-getairportpower', 'en0'], {
+        timeout: 3000,
+      });
+      return /: On/i.test(stdout);
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 /**
@@ -239,8 +346,7 @@ async function connectLinux(ssid: string, password?: string): Promise<boolean> {
     await execFileAsync('nmcli', connectArgs, { timeout: 30000 });
     return true;
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`连接失败: ${errorMessage}`);
+    throw safeConnectionError(error);
   }
 }
 
@@ -248,14 +354,26 @@ async function connectLinux(ssid: string, password?: string): Promise<boolean> {
  * WiFi 切换服务类
  */
 export class WifiSwitcherService {
-  private configuredNetworks: Array<{ ssid: string; password: string; priority: number }> = [];
+  async scan(): Promise<AvailableNetwork[]> {
+    return (this.ports.scan ?? scanAvailableNetworks)();
+  }
+
+  constructor(
+    private ports: { scan?: typeof scanAvailableNetworks; connect?: typeof connectToNetwork } = {}
+  ) {}
+  private configuredNetworks: Array<{
+    ssid: string;
+    password: string;
+    priority: number;
+    security?: string;
+  }> = [];
 
   /**
    * 设置已配置的网络列表（按优先级排序）
    * @param networks WiFi配置列表（包含SSID、密码和优先级）
    */
   setConfiguredNetworks(
-    networks: Array<{ ssid: string; password: string; priority: number }>
+    networks: Array<{ ssid: string; password: string; priority: number; security?: string }>
   ): void {
     // 按优先级排序（数字越小优先级越高）
     this.configuredNetworks = networks.sort((a, b) => a.priority - b.priority);
@@ -267,8 +385,8 @@ export class WifiSwitcherService {
    */
   async getNextAvailableNetwork(
     currentSsid: string | null
-  ): Promise<{ ssid: string; password: string } | null> {
-    const availableNetworks = await scanAvailableNetworks();
+  ): Promise<{ ssid: string; password: string; security?: string } | null> {
+    const availableNetworks = await (this.ports.scan ?? scanAvailableNetworks)();
     const availableSsids = new Set(availableNetworks.map((n) => n.ssid));
 
     // 找到当前网络在配置列表中的位置
@@ -282,6 +400,7 @@ export class WifiSwitcherService {
         return {
           ssid: this.configuredNetworks[i].ssid,
           password: this.configuredNetworks[i].password,
+          security: this.configuredNetworks[i].security,
         };
       }
     }
@@ -292,6 +411,7 @@ export class WifiSwitcherService {
         return {
           ssid: this.configuredNetworks[i].ssid,
           password: this.configuredNetworks[i].password,
+          security: this.configuredNetworks[i].security,
         };
       }
     }
@@ -311,7 +431,11 @@ export class WifiSwitcherService {
       return { success: false, ssid: null };
     }
 
-    const connected = await connectToNetwork(nextNetwork.ssid, nextNetwork.password);
+    const connected = await (this.ports.connect ?? connectToNetwork)(
+      nextNetwork.ssid,
+      nextNetwork.password,
+      nextNetwork.security
+    );
     return { success: connected, ssid: connected ? nextNetwork.ssid : null };
   }
 
@@ -326,7 +450,11 @@ export class WifiSwitcherService {
       throw new Error(`未找到WiFi配置: ${ssid}`);
     }
 
-    return await connectToNetwork(network.ssid, network.password);
+    return await (this.ports.connect ?? connectToNetwork)(
+      network.ssid,
+      network.password,
+      network.security
+    );
   }
 }
 

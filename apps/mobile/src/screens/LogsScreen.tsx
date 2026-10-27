@@ -19,8 +19,9 @@ const LOG_LEVEL_OPTIONS: { value: LogLevel; label: string; emoji: string }[] = [
 ];
 
 export const LogsScreen: React.FC = () => {
-  const { logs, clearLogs } = useApp();
+  const { logs, clearLogs, exportLogs, loadMoreLogs } = useApp();
   const { theme } = useTheme();
+  const [error, setError] = useState<string | null>(null);
   const [filterLevel, setFilterLevel] = useState<LogLevel>('all');
 
   const filteredLogs = useMemo(() => {
@@ -92,6 +93,20 @@ export const LogsScreen: React.FC = () => {
           </View>
         </View>
 
+        {error && (
+          <Text accessibilityRole="alert" style={{ color: theme.colors.danger }}>
+            {error}
+          </Text>
+        )}
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="导出日志"
+          onPress={() => {
+            exportLogs().catch(() => setError('导出失败，请重试'));
+          }}
+        >
+          <Text style={{ color: theme.colors.primary, padding: 16 }}>导出日志</Text>
+        </TouchableOpacity>
         {/* Header */}
         <View style={[styles.headerContainer, { borderBottomColor: theme.colors.border + '20' }]}>
           <Text style={[styles.logCount, { color: theme.colors.textSecondary }]}>
@@ -138,6 +153,17 @@ export const LogsScreen: React.FC = () => {
               <Text style={[styles.message, { color: theme.colors.text }]}>{log.message}</Text>
             </View>
           )}
+          ListFooterComponent={
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityLabel="加载更多日志"
+              onPress={() => {
+                loadMoreLogs().catch(() => setError('加载历史日志失败'));
+              }}
+            >
+              <Text style={{ color: theme.colors.primary, padding: 16 }}>加载更多日志</Text>
+            </TouchableOpacity>
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={{ fontSize: 40, marginBottom: 16 }}>📝</Text>

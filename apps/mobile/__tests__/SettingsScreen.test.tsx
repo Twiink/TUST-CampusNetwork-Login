@@ -1,9 +1,10 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { createDefaultAppConfig, type AccountConfig, type AppConfig } from '@repo/shared';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { useApp, type ConfigUpdate } from '../src/context/AppContext';
 
+jest.mock('../src/components/settings/UpdateCard', () => ({ UpdateCard: () => null }));
 jest.mock('../src/context/AppContext', () => ({
   useApp: jest.fn(),
 }));
@@ -89,7 +90,7 @@ describe('SettingsScreen', () => {
     expect(await screen.findByText('服务器地址格式无效，仅支持 http:// 或 https://')).toBeTruthy();
   });
 
-  it('添加账号时去除首尾空白、生成 ID 并设为当前账号', () => {
+  it('添加账号时去除首尾空白、生成 ID 并设为当前账号', async () => {
     const config = makeConfig([]);
     const { setConfig } = renderSettings(config);
 
@@ -107,7 +108,9 @@ describe('SettingsScreen', () => {
     });
     expect(saved.accounts[0].id).toBeTruthy();
     expect(saved.currentAccountId).toBe(saved.accounts[0].id);
-    expect(screen.getByPlaceholderText('请输入学号/用户名').props.value).toBe('');
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('请输入学号/用户名').props.value).toBe('')
+    );
   });
 
   it('删除账号时清理两种关联字段并切换当前账号', () => {
@@ -176,7 +179,7 @@ describe('SettingsScreen', () => {
     expect(secondRender.setConfig).not.toHaveBeenCalled();
   });
 
-  it('添加认证 WiFi 时写入两种关联字段并清空表单', () => {
+  it('添加认证 WiFi 时写入两种关联字段并清空表单', async () => {
     const config = makeConfig();
     config.wifiList = [];
     const { setConfig } = renderSettings(config);
@@ -195,7 +198,9 @@ describe('SettingsScreen', () => {
       autoConnect: true,
       priority: 10,
     });
-    expect(screen.getByPlaceholderText('请输入 WiFi 名称').props.value).toBe('');
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('请输入 WiFi 名称').props.value).toBe('')
+    );
   });
 
   it('无需认证的 WiFi 添加时不保留关联账号', () => {

@@ -7,7 +7,17 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'dist-electron', 'out', 'node_modules', 'coverage', '*.config.js'],
+    ignores: [
+      'dist-e2e',
+      'test-results',
+      'playwright-report',
+      'dist',
+      'dist-electron',
+      'out',
+      'node_modules',
+      'coverage',
+      '*.config.js',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

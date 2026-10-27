@@ -1,593 +1,152 @@
 package com.netmate.app.wifi
 
 import android.Manifest
-import android.content.Context
-import android.content.BroadcastReceiver
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
 import android.content.pm.PackageManager
-import android.net.Network
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.net.wifi.ScanResult
-import android.net.wifi.WifiConfiguration
+import android.net.*
 import android.net.wifi.WifiManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.modules.core.DeviceEventManagerModule
-import com.netmate.app.auth.AutoAuthEngine
-import com.netmate.app.auth.LocalAddresses
-import java.net.NetworkInterface
+import com.netmate.app.auth.*
+import java.util.concurrent.Executors
 
-class WifiModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
-
-    override fun getName(): String = "WifiModule"
-
-    private val wifiManager: WifiManager by lazy {
-        reactApplicationContext.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-    }
-
-    private val connectivityManager: ConnectivityManager by lazy {
-        reactApplicationContext.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    }
-
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
-    private var wifiStateReceiver: BroadcastReceiver? = null
-    private var listenersInstalled = false
-    /** 监听引用计数：首页与前台自动认证各自 start/stop，最后一个 stop 才真正移除监听 */
+class WifiModule(private val context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
+    override fun getName() = "WifiModule"
+    private val manager get() = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val wifi get() = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    private var callback: ConnectivityManager.NetworkCallback? = null
+    private var receiver: BroadcastReceiver? = null
     private var watchers = 0
-
-    /**
-     * 网络变化事件监听：变化时向 JS 发送 netmate:wifiChanged 事件。
-     * 相比 JS 定时轮询，事件驱动可消除持续唤醒并降低功耗。
-     */
-    @ReactMethod
-    fun startWatching(promise: Promise) {
+    private var lastSsid: String? = null
+    private val connections = Executors.newSingleThreadExecutor()
+    private val scans = Executors.newSingleThreadExecutor()
+    private fun state() = WifiEnvironment.snapshot(context)
+    private fun changed() {
+        if (context.hasActiveReactInstance()) context.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java).emit("netmate:wifiChanged", "network")
+        state().ssid?.let { lastSsid = it }
+    }
+    @ReactMethod fun startWatching(promise: Promise) {
         try {
             synchronized(this) {
-                watchers += 1
-                installListeners()
-            }
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("WIFI_WATCH_ERROR", "Failed to start watching: ${e.message}", e)
-        }
-    }
-
-    @ReactMethod
-    fun stopWatching(promise: Promise) {
-        try {
-            synchronized(this) {
-                watchers = (watchers - 1).coerceAtLeast(0)
-                if (watchers == 0) removeListeners()
-            }
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("WIFI_WATCH_ERROR", "Failed to stop watching: ${e.message}", e)
-        }
-    }
-
-    private fun installListeners() {
-        if (listenersInstalled) return
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = emitWifiChanged("available")
-            override fun onLost(network: Network) = emitWifiChanged("lost")
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                    emitWifiChanged("capabilities")
-                }
-            }
-        }
-        val request = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .build()
-        connectivityManager.registerNetworkCallback(request, callback)
-        networkCallback = callback
-
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) {
-                when (intent.action) {
-                    WifiManager.NETWORK_STATE_CHANGED_ACTION,
-                    WifiManager.WIFI_STATE_CHANGED_ACTION -> emitWifiChanged("state")
-                }
-            }
-        }
-        val filter = IntentFilter().apply {
-            addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION)
-            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
-        }
-        reactApplicationContext.registerReceiver(receiver, filter)
-        wifiStateReceiver = receiver
-        listenersInstalled = true
-    }
-
-    private fun removeListeners() {
-        networkCallback?.let {
-            try {
-                connectivityManager.unregisterNetworkCallback(it)
-            } catch (_: Exception) {
-                // callback 未注册时忽略
-            }
-        }
-        networkCallback = null
-
-        wifiStateReceiver?.let {
-            try {
-                reactApplicationContext.unregisterReceiver(it)
-            } catch (_: Exception) {
-                // receiver 未注册时忽略
-            }
-        }
-        wifiStateReceiver = null
-        listenersInstalled = false
-    }
-
-    private fun emitWifiChanged(reason: String) {
-        reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-            .emit("netmate:wifiChanged", reason)
-    }
-
-    override fun onCatalystInstanceDestroy() {
-        synchronized(this) { watchers = 0 }
-        removeListeners()
-    }
-
-    /**
-     * 检查是否有位置权限（Android 8.0+ 获取 WiFi SSID 需要位置权限）
-     */
-    private fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            reactApplicationContext,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    /**
-     * 获取当前连接的 WiFi SSID
-     */
-    @ReactMethod
-    fun getCurrentSSID(promise: Promise) {
-        try {
-            if (!hasLocationPermission()) {
-                promise.resolve(null)
-                return
-            }
-
-            @Suppress("DEPRECATION")
-            val wifiInfo = wifiManager.connectionInfo
-            val ssid = wifiInfo?.ssid
-
-            if (ssid == null || ssid == "<unknown ssid>" || ssid == "0x") {
-                promise.resolve(null)
-            } else {
-                // 去掉 SSID 两端的引号
-                promise.resolve(ssid.replace("\"", ""))
-            }
-        } catch (e: Exception) {
-            promise.reject("WIFI_ERROR", "Failed to get SSID: ${e.message}", e)
-        }
-    }
-
-    /**
-     * 获取当前设备的 IPv4 地址
-     */
-    @ReactMethod
-    fun getIPAddress(promise: Promise) {
-        try {
-            promise.resolve(resolveLocalAddresses().first)
-        } catch (e: Exception) {
-            promise.reject("NETWORK_ERROR", "Failed to get IP address: ${e.message}", e)
-        }
-    }
-
-    /**
-     * 获取当前设备的 IPv6 地址
-     */
-    @ReactMethod
-    fun getIPv6Address(promise: Promise) {
-        try {
-            promise.resolve(resolveLocalAddresses().second)
-        } catch (e: Exception) {
-            promise.reject("NETWORK_ERROR", "Failed to get IPv6 address: ${e.message}", e)
-        }
-    }
-
-    private fun resolveLocalAddresses(): Pair<String?, String?> =
-        LocalAddresses.resolve(connectivityManager)
-
-    /**
-     * 获取 WiFi MAC 地址
-     * 注意：Android 6.0+ 系统会返回固定值 02:00:00:00:00:00
-     */
-    @ReactMethod
-    fun getMacAddress(promise: Promise) {
-        try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (networkInterface.name.equals("wlan0", ignoreCase = true)) {
-                    val mac = networkInterface.hardwareAddress
-                    if (mac != null) {
-                        val macAddress = mac.joinToString(":") { String.format("%02x", it) }
-                        promise.resolve(macAddress)
-                        return
+                watchers++
+                if (callback == null) {
+                    val listener = object : ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: Network) { changed(); AutoAuthEngine.checkAsync(context, AutoAuthEngine.TRIGGER_NETWORK) }
+                        override fun onLost(network: Network) { val lost = lastSsid; changed(); if (!state().connected) AutoAuthEngine.onWifiLost(context, lost) }
+                        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { changed() }
+                        override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) { changed() }
                     }
+                    manager.registerNetworkCallback(NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build(), listener)
+                    callback = listener
+                    val listenerReceiver = object : BroadcastReceiver() { override fun onReceive(c: Context, intent: Intent) { changed(); if (!state().enabled) AutoAuthEngine.stopReconnect(context) } }
+                    ContextCompat.registerReceiver(context, listenerReceiver, IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+                    receiver = listenerReceiver
                 }
             }
-            promise.resolve(null)
-        } catch (e: Exception) {
-            promise.reject("NETWORK_ERROR", "Failed to get MAC address: ${e.message}", e)
-        }
+            promise.resolve(true)
+        } catch (_: Exception) { promise.reject("WIFI_WATCH", "无法监听 WiFi，请检查权限") }
     }
-
-    /**
-     * 检查 WiFi 是否已启用
-     */
-    @ReactMethod
-    fun isWifiEnabled(promise: Promise) {
-        try {
-            promise.resolve(wifiManager.isWifiEnabled)
-        } catch (e: Exception) {
-            promise.reject("WIFI_ERROR", "Failed to check WiFi status: ${e.message}", e)
-        }
+    @ReactMethod fun stopWatching(promise: Promise) {
+        synchronized(this) { watchers = (watchers - 1).coerceAtLeast(0); if (watchers == 0) release() }
+        promise.resolve(true)
     }
-
-    /**
-     * 检查是否已连接到 WiFi
-     */
-    @ReactMethod
-    fun isConnected(promise: Promise) {
-        try {
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
-            val isWifiConnected = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-            promise.resolve(isWifiConnected)
-        } catch (e: Exception) {
-            promise.reject("NETWORK_ERROR", "Failed to check connection status: ${e.message}", e)
-        }
+    private fun release() {
+        callback?.let { try { manager.unregisterNetworkCallback(it) } catch (_: Exception) {} }; callback = null
+        receiver?.let { try { context.unregisterReceiver(it) } catch (_: Exception) {} }; receiver = null
     }
-
-    /**
-     * 获取完整的网络信息（包含扩展 WiFi 详细信息）
-     */
-    @ReactMethod
-    fun getNetworkInfo(promise: Promise) {
+    override fun invalidate() { release(); connections.shutdownNow(); scans.shutdownNow(); super.invalidate() }
+    @ReactMethod fun addListener(name: String) = Unit
+    @ReactMethod fun removeListeners(count: Double) = Unit
+    private fun permission() = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    @ReactMethod fun checkLocationPermission(promise: Promise) { promise.resolve(permission()) }
+    @ReactMethod fun getCurrentSSID(promise: Promise) { promise.resolve(state().ssid) }
+    @ReactMethod fun getIPAddress(promise: Promise) { promise.resolve(state().ipv4) }
+    @ReactMethod fun getIPv6Address(promise: Promise) { promise.resolve(state().ipv6) }
+    @ReactMethod fun getMacAddress(promise: Promise) { promise.resolve(null) }
+    @ReactMethod fun isWifiEnabled(promise: Promise) { promise.resolve(state().enabled) }
+    @ReactMethod fun isConnected(promise: Promise) { promise.resolve(state().connected) }
+    @ReactMethod fun getNetworkInfo(promise: Promise) {
         try {
+            val value = state()
             val result = Arguments.createMap()
-
-            // WiFi 状态
-            result.putBoolean("wifiEnabled", wifiManager.isWifiEnabled)
-
-            // 连接状态
-            val network = connectivityManager.activeNetwork
-            val capabilities = connectivityManager.getNetworkCapabilities(network)
-            val isWifiConnected = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-            result.putBoolean("connected", isWifiConnected)
-
-            // 获取 WifiInfo 对象（包含详细信息）
-            @Suppress("DEPRECATION")
-            val wifiInfo = wifiManager.connectionInfo
-
-            // SSID
-            if (hasLocationPermission() && isWifiConnected && wifiInfo != null) {
-                val ssid = wifiInfo.ssid
-                if (ssid != null && ssid != "<unknown ssid>" && ssid != "0x") {
-                    val cleanSsid = ssid.replace("\"", "")
-                    result.putString("ssid", cleanSsid)
-                    // 前台读到的 SSID 交给后台自动认证复用（Android 10+ 后台读不到 SSID）
-                    network?.let { AutoAuthEngine.rememberSsid(it, cleanSsid) }
-                } else {
-                    result.putNull("ssid")
-                }
-
-                // 信号强度 (RSSI to percentage: -100 to -40 dBm -> 0-100%)
-                val rssi = wifiInfo.rssi
-                val signalStrength = when {
-                    rssi >= -40 -> 100
-                    rssi <= -100 -> 0
-                    else -> ((rssi + 100) * 100 / 60).coerceIn(0, 100)
-                }
-                result.putInt("signalStrength", signalStrength)
-                result.putInt("rssi", rssi)
-
-                // 连接速度 (Mbps)
-                val linkSpeed = wifiInfo.linkSpeed
-                result.putInt("linkSpeed", linkSpeed)
-
-                // BSSID (路由器 MAC 地址)
-                val bssid = wifiInfo.bssid
-                if (bssid != null && bssid != "00:00:00:00:00:00") {
-                    result.putString("bssid", bssid)
-                } else {
-                    result.putNull("bssid")
-                }
-
-                // 频段 (通过信道判断，API 23+ 可获取 frequency)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    @Suppress("DEPRECATION")
-                    val frequency = wifiInfo.frequency
-                    result.putInt("frequency", frequency)
-
-                    // 根据频率判断信道
-                    val channel = when {
-                        frequency in 2412..2484 -> (frequency - 2412) / 5 + 1
-                        frequency == 2484 -> 14
-                        frequency in 5170..5825 -> (frequency - 5170) / 5 + 34
-                        else -> 0
-                    }
-                    result.putInt("channel", channel)
-                } else {
-                    result.putNull("frequency")
-                    result.putNull("channel")
-                }
-
-                // Network ID (配置的网络 ID)
-                val networkId = wifiInfo.networkId
-                result.putInt("networkId", networkId)
-
-                // 尝试获取安全类型（需要扫描配置的网络列表）
-                try {
-                    @Suppress("DEPRECATION")
-                    val configuredNetworks = wifiManager.configuredNetworks
-                    val currentConfig = configuredNetworks?.find { it.networkId == networkId }
-                    if (currentConfig != null) {
-                        val allowedKeyManagement = currentConfig.allowedKeyManagement
-                        val security = when {
-                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_PSK) -> "WPA-PSK"
-                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.WPA_EAP) -> "WPA-EAP"
-                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.IEEE8021X) -> "IEEE8021X"
-                            allowedKeyManagement.get(android.net.wifi.WifiConfiguration.KeyMgmt.NONE) -> {
-                                if (currentConfig.wepKeys[0] != null) "WEP" else "Open"
-                            }
-                            else -> "Unknown"
-                        }
-                        result.putString("security", security)
-                    } else {
-                        result.putNull("security")
-                    }
-                } catch (e: Exception) {
-                    // Android 10+ 不允许访问 configuredNetworks
-                    result.putNull("security")
-                }
-            } else {
-                result.putNull("ssid")
-                result.putNull("signalStrength")
-                result.putNull("rssi")
-                result.putNull("linkSpeed")
-                result.putNull("bssid")
-                result.putNull("frequency")
-                result.putNull("channel")
-                result.putNull("networkId")
-                result.putNull("security")
-            }
-
-            // IPv4/IPv6/MAC 地址
-            val (ipv4, ipv6) = resolveLocalAddresses()
-            var mac: String? = null
-
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (networkInterface.name.equals("wlan0", ignoreCase = true)) {
-                    val macBytes = networkInterface.hardwareAddress
-                    if (macBytes != null) {
-                        mac = macBytes.joinToString(":") { String.format("%02x", it) }
-                    }
-                }
-            }
-
-            if (ipv4 != null) result.putString("ipv4", ipv4) else result.putNull("ipv4")
-            if (ipv6 != null) result.putString("ipv6", ipv6) else result.putNull("ipv6")
-            if (mac != null) result.putString("mac", mac) else result.putNull("mac")
-
-            // 获取网关地址（需要使用 DhcpInfo）
-            try {
-                @Suppress("DEPRECATION")
-                val dhcpInfo = wifiManager.dhcpInfo
-                if (dhcpInfo != null) {
-                    // 转换 IP 地址格式 (int to String)
-                    val gateway = String.format(
-                        "%d.%d.%d.%d",
-                        dhcpInfo.gateway and 0xff,
-                        dhcpInfo.gateway shr 8 and 0xff,
-                        dhcpInfo.gateway shr 16 and 0xff,
-                        dhcpInfo.gateway shr 24 and 0xff
-                    )
-                    if (gateway != "0.0.0.0") {
-                        result.putString("gateway", gateway)
-                    } else {
-                        result.putNull("gateway")
-                    }
-
-                    // DNS 服务器
-                    val dns1 = String.format(
-                        "%d.%d.%d.%d",
-                        dhcpInfo.dns1 and 0xff,
-                        dhcpInfo.dns1 shr 8 and 0xff,
-                        dhcpInfo.dns1 shr 16 and 0xff,
-                        dhcpInfo.dns1 shr 24 and 0xff
-                    )
-                    val dns2 = String.format(
-                        "%d.%d.%d.%d",
-                        dhcpInfo.dns2 and 0xff,
-                        dhcpInfo.dns2 shr 8 and 0xff,
-                        dhcpInfo.dns2 shr 16 and 0xff,
-                        dhcpInfo.dns2 shr 24 and 0xff
-                    )
-
-                    val dnsList = Arguments.createArray()
-                    if (dns1 != "0.0.0.0") dnsList.pushString(dns1)
-                    if (dns2 != "0.0.0.0") dnsList.pushString(dns2)
-                    if (dnsList.size() > 0) {
-                        result.putArray("dns", dnsList)
-                    } else {
-                        result.putNull("dns")
-                    }
-
-                    // 子网掩码
-                    val netmask = String.format(
-                        "%d.%d.%d.%d",
-                        dhcpInfo.netmask and 0xff,
-                        dhcpInfo.netmask shr 8 and 0xff,
-                        dhcpInfo.netmask shr 16 and 0xff,
-                        dhcpInfo.netmask shr 24 and 0xff
-                    )
-                    if (netmask != "0.0.0.0") {
-                        result.putString("subnetMask", netmask)
-                    } else {
-                        result.putNull("subnetMask")
-                    }
-                } else {
-                    result.putNull("gateway")
-                    result.putNull("dns")
-                    result.putNull("subnetMask")
-                }
-            } catch (e: Exception) {
-                result.putNull("gateway")
-                result.putNull("dns")
-                result.putNull("subnetMask")
-            }
-
+            result.putBoolean("wifiEnabled", value.enabled); result.putBoolean("connected", value.connected)
+            result.putString("ssid", value.ssid); result.putString("ipv4", value.ipv4); result.putString("ipv6", value.ipv6)
+            result.putString("networkKey", value.key); result.putString("mac", null); result.putString("bssid", value.bssid)
+            result.putString("gateway", value.gateway); result.putString("subnetMask", null)
+            value.signal?.let { result.putInt("signalStrength", it) }
+            value.frequency?.let { result.putInt("frequency", it); result.putInt("channel", channel(it)) }
+            value.linkSpeed?.let { result.putInt("linkSpeed", it) }
+            val dns = Arguments.createArray(); value.dns.forEach { dns.pushString(it) }; result.putArray("dns", dns)
+            result.putBoolean("validated", value.validated)
             promise.resolve(result)
-        } catch (e: Exception) {
-            promise.reject("NETWORK_ERROR", "Failed to get network info: ${e.message}", e)
+        } catch (_: Exception) { promise.reject("WIFI_INFO", "读取 WiFi 信息失败，请检查权限") }
+    }
+    @ReactMethod fun connectToWifi(ssid: String, password: String?, promise: Promise) {
+        connections.execute {
+            try {
+                if (!WifiConnector.connect(context, ssid, password)) { promise.resolve(false); return@execute }
+                ReconnectEvents.publish(org.json.JSONObject().put("status", "awaiting-system").put("ssid", ssid))
+                WifiConnector.openSelection(context, ssid, password)
+                for (attempt in 0 until 60) {
+                    val value = state()
+                    if (value.connected && value.ssid == ssid && value.ipv4 != null) {
+                        ReconnectEvents.publish(org.json.JSONObject().put("status", "success").put("ssid", ssid))
+                        changed(); promise.resolve(true); return@execute
+                    }
+                    Thread.sleep(500)
+                }
+                ReconnectEvents.publish(org.json.JSONObject().put("status", "failed").put("ssid", ssid).put("message", "未连接目标 WiFi，请在系统 WiFi 设置中确认授权"))
+                promise.resolve(false)
+            } catch (_: Exception) { promise.reject("WIFI_CONNECT", "连接失败，请检查密码或系统授权") }
         }
     }
-
-    /**
-     * 检查是否有位置权限
-     */
-    @ReactMethod
-    fun checkLocationPermission(promise: Promise) {
-        promise.resolve(hasLocationPermission())
+    @ReactMethod fun openWifiSettings(promise: Promise) {
+        context.startActivity(Intent(if (Build.VERSION.SDK_INT >= 29) android.provider.Settings.Panel.ACTION_WIFI else android.provider.Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        promise.resolve(true)
     }
-
-    /**
-     * 连接到指定 WiFi
-     * Android 10+ 使用 Network Suggestion，Android 9 及以下使用旧配置 API
-     */
-    @ReactMethod
-    fun connectToWifi(ssid: String, password: String?, promise: Promise) {
-        try {
-            if (ssid.isBlank()) {
-                promise.resolve(false)
-                return
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val builder = android.net.wifi.WifiNetworkSuggestion.Builder()
-                    .setSsid(ssid)
-                    .setIsAppInteractionRequired(false)
-
-                if (!password.isNullOrBlank()) {
-                    builder.setWpa2Passphrase(password)
-                }
-
-                val status = wifiManager.addNetworkSuggestions(listOf(builder.build()))
-                promise.resolve(status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS)
-                return
-            }
-
-            @Suppress("DEPRECATION")
-            val wifiConfig = WifiConfiguration().apply {
-                SSID = "\"$ssid\""
-                status = WifiConfiguration.Status.ENABLED
-                priority = 40
-
-                if (password.isNullOrBlank()) {
-                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE)
+    @ReactMethod fun disconnectWifi(promise: Promise) {
+        @Suppress("DEPRECATION")
+        promise.resolve(wifi.disconnect())
+    }
+    @ReactMethod fun scanWifiNetworks(promise: Promise) {
+        scans.execute {
+            try {
+                val output = Arguments.createArray()
+                val fixture = WifiEnvironment.scanPort?.invoke()
+                if (fixture != null) fixture.forEach { (ssid, strength, security) ->
+                    val item = Arguments.createMap(); item.putString("ssid", ssid); item.putInt("signalStrength", strength); item.putString("security", security); output.pushMap(item)
                 } else {
-                    preSharedKey = "\"$password\""
-                    allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK)
+                    if (!permission()) { promise.reject("WIFI_PERMISSION", "扫描需要定位权限，请在权限设置中授权"); return@execute }
+                    val completed = java.util.concurrent.CountDownLatch(1)
+                    val updated = java.util.concurrent.atomic.AtomicBoolean(false)
+                    val scanReceiver = object : BroadcastReceiver() {
+                        override fun onReceive(c: Context, intent: Intent) {
+                            if (intent.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
+                                updated.set(intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false))
+                                completed.countDown()
+                            }
+                        }
+                    }
+                    ContextCompat.registerReceiver(context, scanReceiver, IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
+                    try {
+                        @Suppress("DEPRECATION")
+                        val accepted = wifi.startScan()
+                        if (!accepted) { promise.reject("WIFI_SCAN_THROTTLED", "系统暂时限制扫描，请稍后重试并确认定位服务已开启"); return@execute }
+                        if (!completed.await(15, java.util.concurrent.TimeUnit.SECONDS)) { promise.reject("WIFI_SCAN_TIMEOUT", "扫描超时，请稍后刷新"); return@execute }
+                        if (!updated.get()) { promise.reject("WIFI_SCAN_STALE", "系统未能更新附近网络，请稍后重试"); return@execute }
+                        wifi.scanResults.filter { it.SSID.isNotBlank() }.distinctBy { it.SSID to it.capabilities }.sortedByDescending { it.level }.forEach { scan ->
+                            val item = Arguments.createMap(); item.putString("ssid", scan.SSID); item.putString("bssid", scan.BSSID)
+                            item.putInt("signalStrength", ((scan.level + 100) * 100 / 60).coerceIn(0, 100)); item.putInt("frequency", scan.frequency); item.putInt("channel", channel(scan.frequency))
+                            item.putString("security", when { scan.capabilities.contains("EAP") -> "Enterprise"; scan.capabilities.contains("SAE") -> "WPA3"; scan.capabilities.contains("WPA2") -> "WPA2"; scan.capabilities.contains("WPA") -> "WPA"; scan.capabilities.contains("WEP") -> "WEP"; else -> "Open" }); output.pushMap(item)
+                        }
+                    } finally { context.unregisterReceiver(scanReceiver) }
                 }
-            }
-
-            @Suppress("DEPRECATION")
-            val networkId = wifiManager.addNetwork(wifiConfig)
-            if (networkId == -1) {
-                promise.resolve(false)
-                return
-            }
-
-            @Suppress("DEPRECATION")
-            wifiManager.disconnect()
-            @Suppress("DEPRECATION")
-            wifiManager.enableNetwork(networkId, true)
-            @Suppress("DEPRECATION")
-            wifiManager.reconnect()
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("WIFI_ERROR", "Failed to connect WiFi: ${e.message}", e)
+                promise.resolve(output)
+            } catch (_: InterruptedException) { promise.reject("WIFI_SCAN_CANCELLED", "扫描已取消") }
+            catch (_: Exception) { promise.reject("WIFI_SCAN", "扫描失败，请检查定位服务和附近设备权限") }
         }
     }
-
-    /**
-     * 断开当前 WiFi
-     */
-    @ReactMethod
-    fun disconnectWifi(promise: Promise) {
-        try {
-            @Suppress("DEPRECATION")
-            promise.resolve(wifiManager.disconnect())
-        } catch (e: Exception) {
-            promise.reject("WIFI_ERROR", "Failed to disconnect WiFi: ${e.message}", e)
-        }
-    }
-
-    /**
-     * 扫描附近 WiFi
-     */
-    @ReactMethod
-    fun scanWifiNetworks(promise: Promise) {
-        try {
-            wifiManager.startScan()
-            val results = Arguments.createArray()
-
-            wifiManager.scanResults?.forEach { scanResult ->
-                val item = Arguments.createMap()
-                item.putString("ssid", scanResult.SSID.takeIf { it.isNotBlank() })
-                item.putString("bssid", scanResult.BSSID)
-                item.putInt("signalStrength", calculateSignalStrength(scanResult.level))
-                item.putInt("frequency", scanResult.frequency)
-                item.putInt("channel", frequencyToChannel(scanResult.frequency))
-                item.putString("security", parseSecurity(scanResult))
-                results.pushMap(item)
-            }
-
-            promise.resolve(results)
-        } catch (e: Exception) {
-            promise.reject("WIFI_ERROR", "Failed to scan WiFi networks: ${e.message}", e)
-        }
-    }
-
-    private fun calculateSignalStrength(rssi: Int): Int {
-        return when {
-            rssi >= -40 -> 100
-            rssi <= -100 -> 0
-            else -> ((rssi + 100) * 100 / 60).coerceIn(0, 100)
-        }
-    }
-
-    private fun frequencyToChannel(frequency: Int): Int {
-        return when {
-            frequency in 2412..2484 -> (frequency - 2412) / 5 + 1
-            frequency == 2484 -> 14
-            frequency in 5170..5825 -> (frequency - 5170) / 5 + 34
-            else -> 0
-        }
-    }
-
-    private fun parseSecurity(scanResult: ScanResult): String {
-        val capabilities = scanResult.capabilities ?: return "Unknown"
-        return when {
-            capabilities.contains("WPA3") -> "WPA3"
-            capabilities.contains("WPA2") -> "WPA2"
-            capabilities.contains("WPA") -> "WPA"
-            capabilities.contains("WEP") -> "WEP"
-            else -> "Open"
-        }
-    }
+    private fun channel(frequency: Int) = when { frequency == 2484 -> 14; frequency in 2412..2472 -> (frequency - 2407) / 5; frequency in 5000..5900 -> (frequency - 5000) / 5; else -> 0 }
 }

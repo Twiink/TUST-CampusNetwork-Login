@@ -1,0 +1,21 @@
+appId: com.netmate.app.e2e
+---
+- launchApp
+- tapOn: '配置设置'
+- scrollUntilVisible: { element: '检查更新', direction: DOWN }
+- tapOn: '检查更新'
+- tapOn: '重试下载'
+- extendedWaitUntil:
+    visible: '授权安装更新'
+    timeout: 90000
+- tapOn: '授权安装更新'
+- tapOn: { text: 'Allow from this source|允许来自此来源的应用', optional: true }
+- back
+- extendedWaitUntil: { visible: '安装更新', timeout: 10000 }
+- tapOn: '安装更新'
+- tapOn: 'Update|更新|Install|安装'
+- extendedWaitUntil: { visible: 'Done|完成|Open|打开', timeout: 60000 }
+- launchApp
+- tapOn: '配置设置'
+- scrollUntilVisible: { element: '当前版本 1.0.2-e2e', direction: DOWN }
+- assertVisible: '当前版本 1.0.2-e2e'

@@ -3,13 +3,14 @@
  */
 
 import { app } from 'electron';
+import { runtimePorts } from './runtime-ports';
 import {
   createLogger,
   createConfigManager,
-  createAuthService,
+  AuthService,
   createAccountManager,
   createWifiManager,
-  createNetworkDetector,
+  NetworkDetector,
 } from '@repo/shared';
 import { createElectronStorage } from './services/store';
 import { createDesktopWifiAdapter } from './services/wifi-adapter';
@@ -75,6 +76,8 @@ export async function initAppServices(): Promise<AppServices & { fileLogger: Fil
 
   // 创建配置管理器
   const configManager = createConfigManager(storage, logger);
+  if (runtimePorts.seedConfig && !(await storage.get('app_config')))
+    await storage.set('app_config', runtimePorts.seedConfig);
   await configManager.load();
   const config = configManager.getConfig();
   if (config) {
@@ -91,14 +94,20 @@ export async function initAppServices(): Promise<AppServices & { fileLogger: Fil
   }
 
   // 创建其他服务
-  const authService = createAuthService(undefined, logger);
+  const authService = new AuthService(
+    config?.accounts.find((account) => account.id === config.currentAccountId)?.serverUrl,
+    logger,
+    runtimePorts.connectivityUrls
+  );
   const accountManager = createAccountManager(configManager, logger);
   const wifiManager = createWifiManager(configManager, logger);
   logger.log('info', '核心服务初始化完成', { category: 'system', source: 'Main' });
 
   // 创建 WiFi 适配器
-  const wifiAdapter = createDesktopWifiAdapter();
-  const networkDetector = createNetworkDetector(wifiAdapter, logger);
+  const wifiAdapter = runtimePorts.wifi ?? createDesktopWifiAdapter();
+  const networkDetector = new NetworkDetector(wifiAdapter, logger, {
+    connectivityCheckUrls: runtimePorts.connectivityUrls,
+  });
   logger.log('info', '网络检测服务初始化完成', { category: 'system', source: 'Main' });
 
   return {

@@ -8,6 +8,7 @@ import { createDefaultAppConfig, type AppConfig, type AppSettings } from '@repo/
 export type ConfigUpdate = AppConfig | ((current: AppConfig) => AppConfig);
 
 export function useConfig() {
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,6 +16,12 @@ export function useConfig() {
   const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   const applyConfig = useCallback((nextConfig: AppConfig | null) => {
+    if (
+      nextConfig &&
+      configRef.current &&
+      (nextConfig.revision ?? 0) < (configRef.current.revision ?? 0)
+    )
+      return;
     configRef.current = nextConfig;
     setConfig(nextConfig);
   }, []);
@@ -35,20 +42,23 @@ export function useConfig() {
   const updateConfig = useCallback(
     (update: ConfigUpdate) => {
       const task = updateQueueRef.current.then(async () => {
-        const current = configRef.current ?? createDefaultAppConfig();
-        const newConfig = typeof update === 'function' ? update(current) : update;
-
         setLoading(true);
+        setSaveState('saving');
         try {
+          const current =
+            (await window.electronAPI.config.get()) ??
+            configRef.current ??
+            createDefaultAppConfig();
+          const newConfig = typeof update === 'function' ? update(current) : update;
           const saved = await window.electronAPI.config.set(newConfig);
-          if (!saved) {
-            throw new Error('保存配置失败');
-          }
-          applyConfig(newConfig);
+          if (!saved) throw new Error('保存配置失败');
+          applyConfig((await window.electronAPI.config.get()) ?? newConfig);
           setError(null);
+          setSaveState('saved');
         } catch (err) {
           const message = err instanceof Error ? err.message : '保存配置失败';
           setError(message);
+          setSaveState('error');
           throw new Error(message);
         } finally {
           setLoading(false);
@@ -79,9 +89,13 @@ export function useConfig() {
 
   useEffect(() => {
     fetchConfig();
-  }, [fetchConfig]);
+    return window.electronAPI.on('event:config:changed', (value) =>
+      applyConfig(value as AppConfig)
+    );
+  }, [fetchConfig, applyConfig]);
 
   return {
+    saveState,
     config,
     loading,
     error,

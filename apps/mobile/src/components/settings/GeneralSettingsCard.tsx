@@ -57,6 +57,8 @@ export const GeneralSettingsCard: React.FC<{
           <Switch
             trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
             thumbColor={settings.autoReconnect ? theme.colors.primary : '#f4f3f4'}
+            testID="auto-reconnect"
+            accessibilityLabel="断线自动重连"
             value={settings.autoReconnect}
             onValueChange={v => onToggleSetting('autoReconnect', v)}
           />
@@ -202,6 +204,8 @@ export const GeneralSettingsCard: React.FC<{
                     color: theme.colors.text,
                   },
                 ]}
+                testID="wifi-retries"
+                accessibilityLabel="WiFi 重试次数"
                 value={String(settings.wifiReconnectRetries)}
                 onChangeText={text => {
                   const value = parseInt(text, 10) || 0;
@@ -235,6 +239,8 @@ export const GeneralSettingsCard: React.FC<{
                     color: theme.colors.text,
                   },
                 ]}
+                testID="wifi-cooldown"
+                accessibilityLabel="WiFi 冷却分钟"
                 value={String(settings.wifiReconnectCooldownMinutes)}
                 onChangeText={text => {
                   const value = parseInt(text, 10) || 0;

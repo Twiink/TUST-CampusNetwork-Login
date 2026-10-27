@@ -29,7 +29,7 @@ object AutoAuthPolicy {
     }
 
     fun decide(profile: AutoAuthProfile, ssid: String?, ipv4: String?, captivePortal: Boolean): Decision {
-        if (!profile.enabled) {
+        if (!profile.enabled || profile.authPaused) {
             return Decision(false, emptyList(), "自动认证已关闭")
         }
         if (ipv4.isNullOrEmpty()) {

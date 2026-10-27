@@ -9,6 +9,7 @@ import { NativeEventEmitter, NativeModules, type EmitterSubscription } from 'rea
 import type { AppConfig } from '@repo/shared';
 
 export interface AutoAuthResult {
+  networkKey?: string;
   success: boolean;
   message: string;
   /** 触发来源：foreground / wifi / manual / interval / network / worker */
@@ -19,6 +20,8 @@ export interface AutoAuthResult {
 }
 
 export interface AutoAuthProfile {
+  revision: number;
+  authPaused: boolean;
   enabled: boolean;
   currentAccountId: string | null;
   accounts: Array<{
@@ -53,6 +56,10 @@ export interface AutoAuthProfile {
 
 interface AutoAuthModuleInterface {
   syncProfile(json: string): Promise<boolean>;
+  login(): Promise<AutoAuthResult | null>;
+  logout(): Promise<AutoAuthResult>;
+  getSnapshot(): Promise<AuthSnapshot>;
+  getReconnectProgress(): Promise<WifiReconnectProgress>;
   checkNow(trigger: string): Promise<AutoAuthResult | null>;
   getLastResult(): Promise<AutoAuthResult | null>;
 }
@@ -71,6 +78,8 @@ export function isAutoAuthAvailable(): boolean {
 export function buildAutoAuthProfile(config: AppConfig): AutoAuthProfile {
   const { settings } = config;
   return {
+    revision: config.revision ?? 0,
+    authPaused: settings.autoAuthPaused === true,
     enabled: settings.autoReconnect,
     currentAccountId: config.currentAccountId,
     accounts: config.accounts
@@ -139,3 +148,52 @@ export default {
   getLastAutoAuthResult,
   onAutoAuthResult,
 };
+
+export interface AuthSnapshot {
+  networkKey: string;
+  wifiConnected: boolean;
+  authenticated: boolean;
+  internetReachable: boolean;
+  requiresAuth: boolean;
+  authenticating: boolean;
+  paused: boolean;
+  revision: number;
+  timestamp: number;
+}
+export interface WifiReconnectProgress {
+  status: 'idle' | 'awaiting-system' | 'connecting' | 'success' | 'failed' | 'cooldown';
+  ssid?: string;
+  attempt?: number;
+  maxAttempts?: number;
+  nextRetryAt?: number;
+  failedList?: Array<{ ssid: string; reason: string }>;
+  message?: string;
+}
+export async function nativeLogin(): Promise<AutoAuthResult | null> {
+  return nativeModule()?.login() ?? null;
+}
+export async function nativeLogout(): Promise<AutoAuthResult | null> {
+  return nativeModule()?.logout() ?? null;
+}
+export async function getAuthSnapshot(): Promise<AuthSnapshot | null> {
+  return nativeModule()?.getSnapshot?.() ?? null;
+}
+export async function getReconnectProgress(): Promise<WifiReconnectProgress | null> {
+  return nativeModule()?.getReconnectProgress?.() ?? null;
+}
+export function onAuthSnapshot(
+  handler: (snapshot: AuthSnapshot) => void
+): EmitterSubscription | null {
+  const module = nativeModule();
+  return module
+    ? new NativeEventEmitter(module as never).addListener('netmate:authSnapshot', handler)
+    : null;
+}
+export function onWifiReconnectProgress(
+  handler: (snapshot: WifiReconnectProgress) => void
+): EmitterSubscription | null {
+  const module = nativeModule();
+  return module
+    ? new NativeEventEmitter(module as never).addListener('netmate:wifiReconnectProgress', handler)
+    : null;
+}

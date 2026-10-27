@@ -28,18 +28,18 @@ class PortalClientTest {
         assertEquals(
             "http://10.10.102.50:801/eportal/portal/login?callback=dr1005&login_method=1" +
                 "&user_account=%2C0%2C23103421%40unicom&user_password=p%40ss%20word" +
-                "&wlan_user_ip=10.59.16.97&wlan_user_ipv6=2001%3Ada8%3A%3A1" +
-                "&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303",
+                "&wlan_user_ip=10.59.16.97" +
+                "&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303&wlan_user_ipv6=2001%3Ada8%3A%3A1",
             url
         )
     }
 
     @Test
-    fun `校园网账号不加后缀，IPv6 缺失时传空`() {
+    fun `校园网账号不加后缀，IPv6 缺失时省略`() {
         assertEquals(",0,23103421", PortalClient.buildUserAccount("23103421", "campus"))
         val url = PortalClient.buildLoginUrl("http://10.10.102.50:801/", "a", "b", "campus", "10.0.0.2", null)
         assertTrue(url.startsWith("http://10.10.102.50:801/eportal/portal/login?"))
-        assertTrue(url.contains("&wlan_user_ipv6=&"))
+        assertFalse(url.contains("wlan_user_ipv6"))
     }
 
     @Test

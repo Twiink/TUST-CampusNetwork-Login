@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - master
   pull_request:
   workflow_dispatch:
 
@@ -174,84 +172,157 @@ jobs:
         run: pnpm build
 
   desktop-e2e:
-    name: 桌面端 E2E
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: quality
-
+    name: 桌面 E2E (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v6
-
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v5
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: 设置 Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 执行 Electron E2E
-        run: xvfb-run -a pnpm test:e2e
-
-      - name: 上传 Playwright 结果
-        if: failure()
+      - run: pnpm install --frozen-lockfile
+      - name: 运行真实主进程 E2E
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a pnpm test:e2e
+          else
+            pnpm test:e2e
+          fi
+      - name: 归档桌面诊断
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: desktop-e2e-results
+          name: desktop-e2e-${{ matrix.os }}
           path: |
             apps/desktop/test-results
             apps/desktop/playwright-report
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   android-build:
-    name: Android 构建
+    name: Android 原生回归与 E2E 构建
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    needs: quality
-
+    timeout-minutes: 45
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v6
-
-      - name: 设置 pnpm
-        uses: pnpm/action-setup@v5
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v5
         with:
           version: ${{ env.PNPM_VERSION }}
-
-      - name: 设置 Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: 设置 Java
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
-
-      - name: 安装依赖
-        run: pnpm install --frozen-lockfile
-
-      - name: 构建 Android Debug APK
+      - run: pnpm install --frozen-lockfile
+      - name: 构建并验证原生单元测试
         working-directory: apps/mobile/android
+        env:
+          ANDROID_VERSION_CODE: '1001'
+          ANDROID_VERSION_NAME: '1.0.1'
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
-
-      - name: 上传 Android Debug APK
+          ./gradlew :app:testDebugUnitTest :app:assembleE2e :app:assembleE2eAndroidTest -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
+          mkdir -p ../../../android-e2e-apks
+          cp app/build/outputs/apk/e2e/app-e2e.apk ../../../android-e2e-apks/base.apk
+          cp app/build/outputs/apk/androidTest/e2e/app-e2e-androidTest.apk ../../../android-e2e-apks/test.apk
+      - name: 构建同签名更高版本更新包
+        working-directory: apps/mobile/android
+        env:
+          ANDROID_VERSION_CODE: '1002'
+          ANDROID_VERSION_NAME: '1.0.2'
+        run: |
+          ./gradlew :app:assembleE2e -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
+          cp app/build/outputs/apk/e2e/app-e2e.apk ../../../android-e2e-apks/update.apk
+          keytool -genkeypair -keystore /tmp/untrusted.jks -storepass android -keypass android -alias untrusted -keyalg RSA -validity 2 -dname 'CN=E2E Untrusted'
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks /tmp/untrusted.jks --ks-pass pass:android --key-pass pass:android --out ../../../android-e2e-apks/untrusted.apk ../../../android-e2e-apks/update.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-e2e-apks
+          path: android-e2e-apks/*.apk
+          if-no-files-found: error
+      - name: 归档原生测试结果
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: android-debug-apk
-          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          name: android-unit-results
+          path: |
+            apps/mobile/android/app/build/test-results
+            apps/mobile/android/app/build/reports/tests
           if-no-files-found: error
+
+  android-e2e:
+    name: Android E2E (API ${{ matrix.api }})
+    needs: android-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 36]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-e2e-apks
+          path: android-e2e-apks
+      - name: 安装固定 Maestro 2.12.0
+        run: |
+          curl --fail --location --retry 3 -o /tmp/maestro.zip https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.0/maestro.zip
+          unzip -q /tmp/maestro.zip -d "$HOME/.maestro"
+          echo "$HOME/.maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: 启用 KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 原生集成与 Maestro 用户流程
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          API_LEVEL: ${{ matrix.api }}
+          MAESTRO_CLI_NO_ANALYTICS: 'true'
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash apps/mobile/e2e/run-ci.sh
+      - name: 归档模拟器诊断
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-e2e-api-${{ matrix.api }}
+          path: test-results/android
+          if-no-files-found: error
+
+  acceptance:
+    name: 全平台验收门禁
+    if: always()
+    needs: [quality, network-simulation, desktop-build, desktop-e2e, android-build, android-e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 缺失、跳过或失败均不能通过
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          node -e 'for (const [name, job] of Object.entries(JSON.parse(process.env.RESULTS))) { if (job.result !== "success") throw new Error(name + ": " + job.result); }'

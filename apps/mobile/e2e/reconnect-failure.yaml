@@ -1,0 +1,7 @@
+appId: com.netmate.app.e2e
+---
+- launchApp
+- extendedWaitUntil:
+    visible: '等待下一轮重连'
+    timeout: 60000
+- assertVisible: '.*未在等待时间内连接目标网络.*'

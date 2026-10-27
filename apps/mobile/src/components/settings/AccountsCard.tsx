@@ -15,6 +15,7 @@ export const AccountsCard: React.FC<{
   setNewAccount: React.Dispatch<React.SetStateAction<NewAccountForm>>;
   error?: string | null;
   onAddAccount: () => void;
+  onEditAccount?: (id: string) => void;
   onRemoveAccount: (id: string) => void;
   onSwitchAccount: (id: string) => void;
 }> = ({
@@ -24,6 +25,7 @@ export const AccountsCard: React.FC<{
   setNewAccount,
   error,
   onAddAccount,
+  onEditAccount,
   onRemoveAccount,
   onSwitchAccount,
 }) => {
@@ -87,6 +89,14 @@ export const AccountsCard: React.FC<{
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
+                style={styles.smallBtn}
+                accessibilityRole="button"
+                accessibilityLabel={`编辑账号 ${acc.username}`}
+                onPress={() => onEditAccount?.(acc.id)}
+              >
+                <Text style={{ color: theme.colors.text }}>编辑</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                 onPress={() => onRemoveAccount(acc.id)}
                 activeOpacity={0.8}
@@ -113,6 +123,8 @@ export const AccountsCard: React.FC<{
               color: theme.colors.text,
             },
           ]}
+          testID="add-username"
+          accessibilityLabel="add-username"
           value={newAccount.username}
           onChangeText={t => setNewAccount({ ...newAccount, username: t })}
           placeholder="请输入学号/用户名"
@@ -131,6 +143,8 @@ export const AccountsCard: React.FC<{
               color: theme.colors.text,
             },
           ]}
+          testID="add-account-password"
+          accessibilityLabel="add-account-password"
           value={newAccount.password}
           onChangeText={t => setNewAccount({ ...newAccount, password: t })}
           placeholder="请输入密码"
@@ -187,6 +201,8 @@ export const AccountsCard: React.FC<{
               color: theme.colors.text,
             },
           ]}
+          testID="add-server"
+          accessibilityLabel="add-server"
           value={newAccount.serverUrl}
           onChangeText={t => setNewAccount({ ...newAccount, serverUrl: t })}
           placeholder="http://..."

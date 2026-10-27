@@ -1,3 +1,4 @@
+import { runtimePorts } from '../runtime-ports';
 /**
  * 日志相关 IPC 处理
  */
@@ -90,14 +91,16 @@ export function registerLogIPC(logger: Logger) {
 
         // 弹出保存对话框
         const win = BrowserWindow.getFocusedWindow();
-        const result = await dialog.showSaveDialog(win!, {
-          title: '导出诊断日志',
-          defaultPath: defaultFileName,
-          filters:
-            format === 'json'
-              ? [{ name: 'JSON 文件', extensions: ['json'] }]
-              : [{ name: '日志文件', extensions: ['log', 'txt'] }],
-        });
+        const result = runtimePorts.saveLogPath
+          ? { canceled: false, filePath: await runtimePorts.saveLogPath(ext) }
+          : await dialog.showSaveDialog(win!, {
+              title: '导出诊断日志',
+              defaultPath: defaultFileName,
+              filters:
+                format === 'json'
+                  ? [{ name: 'JSON 文件', extensions: ['json'] }]
+                  : [{ name: '日志文件', extensions: ['log', 'txt'] }],
+            });
 
         if (result.canceled || !result.filePath) {
           return { success: false, error: '用户取消导出' };
@@ -125,7 +128,7 @@ export function registerLogIPC(logger: Logger) {
         const logDir = path.join(app.getPath('userData'), 'logs');
         // 目录可能尚未创建（如刚启动无日志写入），先确保存在再打开
         await fs.mkdir(logDir, { recursive: true });
-        const errMsg = await shell.openPath(logDir);
+        const errMsg = await (runtimePorts.openPath ?? shell.openPath)(logDir);
         if (errMsg) {
           return { success: false, error: errMsg };
         }

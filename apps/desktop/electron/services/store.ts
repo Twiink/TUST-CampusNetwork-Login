@@ -29,14 +29,11 @@ const SENSITIVE_FIELDS = ['password', 'userPassword'];
 /**
  * Electron 存储适配器
  */
-const SAVE_DEBOUNCE_MS = 500;
 
 export class ElectronStorageAdapter implements StorageAdapter {
   private data: Record<string, unknown> = {};
   private loaded = false;
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  private savePromise: Promise<void> | null = null;
-  private saveAgain = false;
+  private writes: Promise<void> = Promise.resolve();
 
   /**
    * 加载存储文件
@@ -63,11 +60,11 @@ export class ElectronStorageAdapter implements StorageAdapter {
   /**
    * 保存存储文件
    */
-  private async saveToFile(): Promise<void> {
+  private async saveToFile(data: Record<string, unknown>): Promise<void> {
     const filePath = getStoragePath();
     const tempPath = `${filePath}.tmp`;
     // 加密时只复制命中的对象路径；非敏感子树保持原引用，不深拷贝整个配置。
-    const dataToSave = this.encryptSensitiveData({ ...this.data });
+    const dataToSave = this.encryptSensitiveData(data);
     const content = JSON.stringify(dataToSave, null, 2);
     try {
       await fsp.writeFile(tempPath, content, 'utf-8');
@@ -78,47 +75,21 @@ export class ElectronStorageAdapter implements StorageAdapter {
     }
   }
 
-  private scheduleSave(): Promise<void> {
-    this.saveAgain = true;
-    if (this.saveTimer || this.savePromise) {
-      return this.savePromise ?? Promise.resolve();
-    }
-
-    const run = async () => {
-      // 窗口内后续写入共用一次落盘；窗口内再次写入会在循环中补写。
-      await new Promise<void>((resolve) => setTimeout(resolve, SAVE_DEBOUNCE_MS));
-      do {
-        this.saveAgain = false;
-        await this.saveToFile();
-      } while (this.saveAgain);
-    };
-
-    this.saveTimer = setTimeout(() => {
-      this.saveTimer = null;
-      this.savePromise = run()
-        .catch((error) => {
-          devLog.error('Debounced storage save failed:', error);
-        })
-        .finally(() => {
-          this.savePromise = null;
-          this.saveAgain = false;
-        });
-    }, 0);
-    return this.savePromise ?? Promise.resolve();
+  private commit(
+    change: (data: Record<string, unknown>) => Record<string, unknown>
+  ): Promise<void> {
+    const operation = this.writes.then(async () => {
+      await this.ensureLoaded();
+      const next = change({ ...this.data });
+      await this.saveToFile(next);
+      this.data = next;
+    });
+    this.writes = operation.catch(() => undefined);
+    return operation;
   }
 
-  /** 退出路径使用：立即写出尚未落盘的数据 */
   async flush(): Promise<void> {
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
-      this.saveTimer = null;
-    }
-    if (this.savePromise) {
-      await this.savePromise.catch(() => undefined);
-    } else if (this.saveAgain) {
-      this.saveAgain = false;
-      await this.saveToFile();
-    }
+    await this.writes;
   }
 
   /**
@@ -187,20 +158,18 @@ export class ElectronStorageAdapter implements StorageAdapter {
   }
 
   async set<T>(key: string, value: T): Promise<void> {
-    await this.ensureLoaded();
-    this.data[key] = value;
-    return this.scheduleSave();
+    return this.commit((data) => ({ ...data, [key]: value }));
   }
 
   async remove(key: string): Promise<void> {
-    await this.ensureLoaded();
-    delete this.data[key];
-    return this.scheduleSave();
+    return this.commit((data) => {
+      delete data[key];
+      return data;
+    });
   }
 
   async clear(): Promise<void> {
-    this.data = {};
-    return this.scheduleSave();
+    return this.commit(() => ({}));
   }
 
   async keys(): Promise<string[]> {

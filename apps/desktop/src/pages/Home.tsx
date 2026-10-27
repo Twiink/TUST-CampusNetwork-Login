@@ -1,3 +1,5 @@
+import { PauseBanner } from '../components/home/PauseBanner';
+import { resolveLoginAccounts } from '@repo/shared';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useHeartbeat } from '../hooks/useHeartbeat';
@@ -137,6 +139,7 @@ export const Home: React.FC = () => {
           <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           运行状态
         </h1>
+        <PauseBanner />
 
         <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
           <Loader
@@ -166,6 +169,7 @@ export const Home: React.FC = () => {
           <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           运行状态
         </h1>
+        <PauseBanner />
 
         <HomeNoticeCard
           icon={WifiOff}
@@ -209,6 +213,7 @@ export const Home: React.FC = () => {
           <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           运行状态
         </h1>
+        <PauseBanner />
 
         {/* WiFi 基础信息 - 必须显示 */}
         <div className="card">
@@ -279,6 +284,7 @@ export const Home: React.FC = () => {
           <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           运行状态
         </h1>
+        <PauseBanner />
 
         {/* WiFi 基础信息 */}
         <div className="card">
@@ -348,8 +354,7 @@ export const Home: React.FC = () => {
   }
 
   // 第四优先级：检查是否有关联账户
-  const linkedAccountId = wifiConfig.linkedAccountIds?.[0] || wifiConfig.linkedAccountId;
-  const linkedAccount = config?.accounts.find((a) => a.id === linkedAccountId);
+  const linkedAccount = config ? resolveLoginAccounts(config, wifiSSID)[0] : undefined;
 
   if (!linkedAccount) {
     return (
@@ -358,6 +363,7 @@ export const Home: React.FC = () => {
           <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
           运行状态
         </h1>
+        <PauseBanner />
 
         {/* WiFi 基础信息 */}
         <div className="card">
@@ -427,6 +433,7 @@ export const Home: React.FC = () => {
         <Globe size={24} style={{ marginRight: 8, verticalAlign: 'middle' }} />
         运行状态
       </h1>
+      <PauseBanner />
 
       {/* WiFi 基础信息 */}
       <div className="card">

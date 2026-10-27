@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import {
   createDefaultAppConfig,
+  resolveLoginAccounts,
+  redactText,
   type AppConfig,
   type AccountConfig,
   type AccountManager,
@@ -15,6 +18,9 @@ import {
   requestLocationPermission,
   hasLocationPermission,
   isNativeModuleAvailable,
+  startWatching,
+  stopWatching,
+  onWifiChanged,
   type NetworkInfo,
 } from '../native/WifiModule';
 import {
@@ -29,70 +35,68 @@ import { isAutoStartAvailable, setAutoStartEnabled } from '../native/AutoStart';
 import { useAutoAuth } from '../hooks/useAutoAuth';
 import { usePermissionGuide } from '../hooks/usePermissionGuide';
 import { autoCheckForUpdate } from '../native/AppUpdater';
+import {
+  isAutoAuthAvailable,
+  buildAutoAuthProfile,
+  syncAutoAuthProfile,
+  nativeLogin,
+  nativeLogout,
+  getAuthSnapshot,
+  onAuthSnapshot,
+  onWifiReconnectProgress,
+  getReconnectProgress,
+  type AuthSnapshot,
+  type WifiReconnectProgress,
+} from '../native/AutoAuth';
+import {
+  appendPersistentLog,
+  queryPersistentLogs,
+  onPersistentLog,
+  clearPersistentLogs,
+  exportPersistentLogs,
+  type PersistentLogEntry,
+} from '../native/Logs';
 import type { PermissionItem, PermissionKey } from '../native/Permissions';
 
 export interface LogEntry {
   id: string;
   timestamp: string;
-  level: 'info' | 'success' | 'warn' | 'error';
+  level: PersistentLogEntry['level'];
   message: string;
 }
-
 export type ConfigUpdate = AppConfig | ((current: AppConfig) => AppConfig);
-
-function getConfigPatch(current: AppConfig, next: AppConfig): Partial<AppConfig> {
-  const patch: Partial<AppConfig> = {};
-  if (next.version !== current.version) patch.version = next.version;
-  if (next.accounts !== current.accounts) patch.accounts = next.accounts;
-  if (next.currentAccountId !== current.currentAccountId) {
-    patch.currentAccountId = next.currentAccountId;
-  }
-  if (next.wifiList !== current.wifiList) patch.wifiList = next.wifiList;
-  if (next.settings !== current.settings) patch.settings = next.settings;
-  return patch;
-}
-
 interface AppContextType {
-  // 配置
   config: AppConfig;
-  setConfig: (update: ConfigUpdate) => void;
-
-  // 网络状态
+  setConfig: (update: ConfigUpdate) => Promise<void>;
+  configurationState: 'loading' | 'saving' | 'syncing' | 'saved' | 'error';
+  configurationError: string | null;
+  retryConfigurationSync: () => Promise<void>;
   networkStatus: 'connected' | 'disconnected' | 'connecting';
   networkInfo: NetworkInfo;
+  authSnapshot: AuthSnapshot | null;
+  reconnectProgress: WifiReconnectProgress | null;
   ipAddress: string;
-
-  // 认证操作
   login: () => Promise<void>;
   logout: () => Promise<void>;
-
-  // 账户管理
+  resumeAutoAuth: () => Promise<void>;
   accounts: AccountConfig[];
   currentAccount: AccountConfig | null;
   addAccount: (account: Omit<AccountConfig, 'id'>) => Promise<AccountConfig>;
   updateAccount: (id: string, updates: Partial<AccountConfig>) => Promise<AccountConfig>;
   removeAccount: (id: string) => Promise<void>;
   switchAccount: (id: string) => Promise<void>;
-
-  // 日志
   logs: LogEntry[];
   addLog: (level: LogEntry['level'], message: string) => void;
   clearLogs: () => void;
-
-  // WiFi 权限
+  exportLogs: () => Promise<void>;
+  loadMoreLogs: () => Promise<void>;
   hasPermission: boolean;
   requestPermission: () => Promise<boolean>;
   isModuleAvailable: boolean;
-
-  // 权限引导（自动认证所需权限的状态与申请）
   permissionItems: PermissionItem[];
   requestAppPermission: (key: PermissionKey) => Promise<void>;
   runPermissionGuide: () => Promise<void>;
-
-  // 刷新网络信息（返回本次读取的最新值；模块不可用或读取失败时为 null）
   refreshNetworkInfo: () => Promise<NetworkInfo | null>;
-
-  // 服务引用（供高级用例使用）
   services: {
     authService: AuthService;
     configManager: ConfigManager;
@@ -102,10 +106,8 @@ interface AppContextType {
     logger: Logger;
   } | null;
 }
-
 const AppContext = createContext<AppContextType | undefined>(undefined);
-
-const defaultNetworkInfo: NetworkInfo = {
+const emptyNetwork: NetworkInfo = {
   wifiEnabled: false,
   connected: false,
   ssid: null,
@@ -113,377 +115,403 @@ const defaultNetworkInfo: NetworkInfo = {
   ipv6: null,
   mac: null,
 };
+const displayLog = (entry: PersistentLogEntry): LogEntry => ({
+  ...entry,
+  message: redactText(entry.message),
+  timestamp: new Date(entry.timestamp).toLocaleString(),
+});
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 服务引用
   const servicesRef = useRef<AppContextType['services']>(null);
-
-  // 配置状态
-  const [config, setConfigState] = useState<AppConfig>(() => createDefaultAppConfig());
-  const configRef = useRef<AppConfig>(config);
-  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
-
-  // 网络状态
-  const [networkStatus, setNetworkStatus] = useState<'connected' | 'disconnected' | 'connecting'>(
-    'disconnected'
-  );
-  const [networkInfo, setNetworkInfo] = useState<NetworkInfo>(defaultNetworkInfo);
+  const [config, setConfigState] = useState(createDefaultAppConfig);
+  const configRef = useRef(config);
+  const commitQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const pendingRetry = useRef<(() => Promise<unknown>) | null>(null);
+  const syncQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const [configurationState, setConfigurationState] =
+    useState<AppContextType['configurationState']>('loading');
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
+  const [networkStatus, setNetworkStatus] =
+    useState<AppContextType['networkStatus']>('disconnected');
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo>(emptyNetwork);
+  const networkRef = useRef(networkInfo);
+  const networkRequest = useRef(0);
+  const [authSnapshot, setAuthSnapshot] = useState<AuthSnapshot | null>(null);
+  const [reconnectProgress, setReconnectProgress] = useState<WifiReconnectProgress | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
-  const [servicesReady, setServicesReady] = useState(false);
-  const isModuleAvailable = isNativeModuleAvailable();
-
-  // 账户状态
+  const [ready, setReady] = useState(false);
   const [accounts, setAccounts] = useState<AccountConfig[]>([]);
   const [currentAccount, setCurrentAccount] = useState<AccountConfig | null>(null);
-
-  // 日志状态
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const mounted = useRef(true);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isModuleAvailable = isNativeModuleAvailable();
 
-  // 添加日志
-  const addLog = useCallback((level: LogEntry['level'], message: string) => {
-    const newLog: LogEntry = {
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: new Date().toLocaleTimeString(),
-      level,
-      message,
-    };
-    setLogs(prev => [newLog, ...prev].slice(0, 500)); // 最多保留 500 条
+  const receiveLog = useCallback((entry: PersistentLogEntry) => {
+    if (!mounted.current) return;
+    const value = displayLog(entry);
+    setLogs(previous => [value, ...previous.filter(log => log.id !== value.id)].slice(0, 500));
   }, []);
-
-  // 清空日志
+  const addLog = useCallback(
+    (level: LogEntry['level'], message: string) => {
+      const entry: PersistentLogEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        timestamp: Date.now(),
+        level,
+        message: redactText(message),
+        source: 'app',
+      };
+      receiveLog(entry);
+      appendPersistentLog(entry).catch(() => undefined);
+    },
+    [receiveLog]
+  );
   const clearLogs = useCallback(() => {
     setLogs([]);
+    clearPersistentLogs().catch(() => addLog('error', '日志清空失败，请重试'));
+  }, [addLog]);
+  const loadMoreLogs = useCallback(async () => {
+    const entries = await queryPersistentLogs(null, 500, logs.length);
+    setLogs(previous => {
+      const ids = new Set(previous.map(log => log.id));
+      return [...previous, ...entries.filter(entry => !ids.has(entry.id)).map(displayLog)];
+    });
+  }, [logs.length]);
+  const applyConfigState = useCallback((next: AppConfig) => {
+    if ((next.revision ?? 0) < (configRef.current.revision ?? 0)) return;
+    configRef.current = next;
+    setConfigState(next);
+    setAccounts(next.accounts);
+    setCurrentAccount(next.accounts.find(account => account.id === next.currentAccountId) ?? null);
   }, []);
+  const syncConfiguration = useCallback(
+    (snapshot: AppConfig): Promise<void> => {
+      const operation = syncQueue.current
+        .then(async () => {
+          if (!mounted.current) return;
+          setConfigurationState('syncing');
+          if (isAutoAuthAvailable() && !(await syncAutoAuthProfile(buildAutoAuthProfile(snapshot))))
+            throw new Error('后台未确认配置，请重试同步');
+          if (!mounted.current) return;
+          applyConfigState(snapshot);
+          setReady(true);
+          setConfigurationState('saved');
+          setConfigurationError(null);
+        })
+        .catch(error => {
+          if (mounted.current) {
+            setConfigurationState('error');
+            setConfigurationError(error instanceof Error ? error.message : '配置同步失败');
+          }
+          throw error;
+        });
+      syncQueue.current = operation.catch(() => undefined);
+      return operation;
+    },
+    [applyConfigState]
+  );
+  const retryConfigurationSync = useCallback(async () => {
+    const retry = pendingRetry.current;
+    if (retry) await retry();
+    else {
+      const latest = servicesRef.current?.configManager.getConfig();
+      if (latest) await syncConfiguration(latest);
+    }
+  }, [syncConfiguration]);
+  useEffect(() => {
+    if (configurationState !== 'error') return;
+    retryTimer.current = setTimeout(() => {
+      retryConfigurationSync().catch(() => undefined);
+    }, 5000);
+    return () => {
+      if (retryTimer.current) clearTimeout(retryTimer.current);
+    };
+  }, [configurationState, configurationError, retryConfigurationSync]);
 
-  const applyConfigState = useCallback((nextConfig: AppConfig) => {
-    configRef.current = nextConfig;
-    setConfigState(nextConfig);
-    setAccounts(nextConfig.accounts);
-    setCurrentAccount(
-      nextConfig.currentAccountId
-        ? (nextConfig.accounts.find(account => account.id === nextConfig.currentAccountId) ?? null)
-        : null
+  const commitAction = useCallback(
+    <T,>(action: () => Promise<T>): Promise<T> => {
+      const run = async (): Promise<T> => {
+        let persisted = false;
+        let value: T;
+        try {
+          setConfigurationState('saving');
+          value = await action();
+          persisted = true;
+          const snapshot = servicesRef.current?.configManager.getConfig();
+          if (!snapshot) throw new Error('服务未初始化');
+          pendingRetry.current = () => syncConfiguration(snapshot);
+          await syncConfiguration(snapshot);
+          pendingRetry.current = null;
+          return value;
+        } catch (error) {
+          if (!persisted) pendingRetry.current = () => commitAction(action);
+          setConfigurationState('error');
+          setConfigurationError(error instanceof Error ? error.message : '保存配置失败');
+          addLog('error', '配置未生效，请重试保存或同步');
+          throw error;
+        }
+      };
+      const operation = commitQueue.current.then(run);
+      commitQueue.current = operation.catch(() => undefined);
+      return operation;
+    },
+    [addLog, syncConfiguration]
+  );
+  const setConfig = useCallback(
+    (update: ConfigUpdate): Promise<void> =>
+      commitAction(async () => {
+        const manager = servicesRef.current?.configManager;
+        if (!manager) throw new Error('服务未初始化');
+        await manager.update(current => (typeof update === 'function' ? update(current) : update));
+      }),
+    [commitAction]
+  );
+  const syncConfigState = useCallback(async () => {
+    const latest = servicesRef.current?.configManager.getConfig();
+    if (latest) await syncConfiguration(latest);
+  }, [syncConfiguration]);
+  const applyAuthSnapshot = useCallback((snapshot: AuthSnapshot) => {
+    if (
+      snapshot.networkKey &&
+      networkRef.current.networkKey &&
+      snapshot.networkKey !== networkRef.current.networkKey
+    )
+      return;
+    setAuthSnapshot(snapshot);
+    setNetworkStatus(
+      snapshot.authenticating
+        ? 'connecting'
+        : snapshot.wifiConnected &&
+            (snapshot.requiresAuth ? snapshot.authenticated : snapshot.internetReachable)
+          ? 'connected'
+          : 'disconnected'
     );
   }, []);
+  const refreshNetworkInfo = useCallback(async (): Promise<NetworkInfo | null> => {
+    if (!isModuleAvailable) return null;
+    const request = ++networkRequest.current;
+    try {
+      const info = await getNetworkInfo();
+      const snapshot = isAutoAuthAvailable() ? await getAuthSnapshot() : null;
+      if (!mounted.current || request !== networkRequest.current) return null;
+      const changed =
+        networkRef.current.networkKey !== info.networkKey ||
+        networkRef.current.ssid !== info.ssid ||
+        networkRef.current.ipv4 !== info.ipv4;
+      networkRef.current = info;
+      setNetworkInfo(info);
+      if (snapshot) applyAuthSnapshot(snapshot);
+      else if (!info.connected || changed) setNetworkStatus('disconnected');
+      return info;
+    } catch {
+      addLog('warn', '网络信息刷新失败，请检查权限');
+      return null;
+    }
+  }, [addLog, applyAuthSnapshot, isModuleAvailable]);
 
-  // 初始化服务
   useEffect(() => {
-    let mounted = true;
-    let logger: Logger | null = null;
-
-    const initServices = async () => {
+    mounted.current = true;
+    let unsubscribe: (() => void) | undefined;
+    const subscription = onPersistentLog(receiveLog);
+    (async () => {
       try {
-        addLog('info', '正在初始化应用...');
-
-        // 创建服务
+        const history = await queryPersistentLogs();
+        if (mounted.current)
+          setLogs(previous => [
+            ...previous,
+            ...history.filter(entry => !previous.some(log => log.id === entry.id)).map(displayLog),
+          ]);
         const services = createMobileServices();
-        logger = services.logger;
-        const { configManager, authService, accountManager, wifiManager, networkDetector } =
-          services;
-
-        // 加载配置
-        await configManager.load();
-
-        if (!mounted) {
-          return;
+        servicesRef.current = services;
+        unsubscribe = services.logger.addListener(entry =>
+          addLog(
+            entry.level,
+            entry.data ? `${entry.message} ${JSON.stringify(entry.data)}` : entry.message
+          )
+        );
+        await services.configManager.load();
+        const native = isAutoAuthAvailable() ? await getAuthSnapshot() : null;
+        const loaded = services.configManager.getConfig()!;
+        if (
+          native?.paused &&
+          native.revision >= (loaded.revision ?? 0) &&
+          !loaded.settings.autoAuthPaused
+        ) {
+          await services.configManager.updateSettings({ autoAuthPaused: true });
         }
-
-        const loadedConfig = configManager.getConfig();
-        if (loadedConfig) {
-          applyConfigState(loadedConfig);
-        }
-
-        // 保存服务引用
-        servicesRef.current = {
-          authService,
-          configManager,
-          accountManager,
-          wifiManager,
-          networkDetector,
-          logger,
-        };
-        setServicesReady(true);
-
+        await syncConfiguration(services.configManager.getConfig()!);
+        if (!mounted.current) return;
+        setReady(true);
+        setHasPermission(await hasLocationPermission());
+        await refreshNetworkInfo();
         addLog('success', '配置加载完成');
-
-        // 检查权限并获取网络信息
-        const permission = await hasLocationPermission();
-        if (!mounted) {
-          return;
-        }
-        setHasPermission(permission);
-
-        if (isModuleAvailable) {
-          const info = await getNetworkInfo();
-          if (!mounted) {
-            return;
-          }
-          setNetworkInfo(info);
-          setNetworkStatus(info.connected ? 'connected' : 'disconnected');
-          if (info.connected && info.ssid) {
-            addLog('info', `已连接到 WiFi: ${info.ssid}`);
-          }
-          if (info.ipv4) {
-            addLog('info', `IP 地址: ${info.ipv4}`);
-          }
-        }
-
-        addLog('info', '应用初始化完成');
       } catch (error) {
         addLog('error', `初始化失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
-    };
-
-    initServices();
-
+    })();
     return () => {
-      mounted = false;
-      logger?.stopAutoCleanup();
+      mounted.current = false;
+      unsubscribe?.();
+      subscription?.remove();
+      servicesRef.current?.logger.stopAutoCleanup();
+      servicesRef.current = null;
     };
-  }, [addLog, applyConfigState, isModuleAvailable]);
-
-  // 刷新网络信息
-  const refreshNetworkInfo = useCallback(async (): Promise<NetworkInfo | null> => {
-    if (!isModuleAvailable) return null;
-
-    try {
-      const info = await getNetworkInfo();
-      setNetworkInfo(info);
-      setNetworkStatus(info.connected ? 'connected' : 'disconnected');
-      return info;
-    } catch (error) {
-      console.warn('刷新网络信息失败:', error);
-      return null;
-    }
-  }, [isModuleAvailable]);
-
-  // 请求位置权限
-  const requestPermission = useCallback(async (): Promise<boolean> => {
-    const granted = await requestLocationPermission();
-    setHasPermission(granted);
-    if (granted) {
-      addLog('success', '位置权限已授予');
-      await refreshNetworkInfo();
-    } else {
-      addLog('warn', '位置权限被拒绝');
-    }
-    return granted;
-  }, [addLog, refreshNetworkInfo]);
-
-  // 更新配置
-  const setConfig = useCallback(
-    (update: ConfigUpdate) => {
-      const current = configRef.current;
-      const nextConfig = typeof update === 'function' ? update(current) : update;
-      applyConfigState(nextConfig);
-
-      const configManager = servicesRef.current?.configManager;
-      if (!configManager) {
-        return;
-      }
-
-      const patch = getConfigPatch(current, nextConfig);
-      if (Object.keys(patch).length === 0) {
-        return;
-      }
-
-      persistenceQueueRef.current = persistenceQueueRef.current
-        .then(() => configManager.update(patch))
-        .then(
-          () => undefined,
-          error => {
-            addLog(
-              'error',
-              `保存配置失败: ${error instanceof Error ? error.message : String(error)}`
-            );
-          }
-        );
-    },
-    [addLog, applyConfigState]
-  );
-
-  // AccountManager 直接写入 ConfigManager；操作完成后同步同一份状态，避免 config/accounts 分叉。
-  const syncConfigState = useCallback(() => {
-    const latest = servicesRef.current?.configManager.getConfig();
-    if (!latest) {
-      return;
-    }
-
-    applyConfigState(latest);
-  }, [applyConfigState]);
+  }, [addLog, receiveLog, refreshNetworkInfo, syncConfiguration]);
 
   useEffect(() => {
-    if (!isAutoStartAvailable()) {
-      return;
-    }
-
-    setAutoStartEnabled(config.settings.autoLaunch).catch(() => undefined);
-  }, [config.settings.autoLaunch]);
+    if (!ready || !isModuleAvailable) return;
+    startWatching().catch(() => undefined);
+    const wifi = onWifiChanged(() => {
+      refreshNetworkInfo();
+    });
+    const nativeState = onAuthSnapshot(snapshot => {
+      if (snapshot.networkKey !== networkRef.current.networkKey) {
+        refreshNetworkInfo();
+      } else applyAuthSnapshot(snapshot);
+    });
+    const progress = onWifiReconnectProgress(setReconnectProgress);
+    getReconnectProgress().then(value => {
+      if (value) setReconnectProgress(value);
+    });
+    const appState = AppState.addEventListener('change', value => {
+      if (value === 'active') refreshNetworkInfo();
+    });
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') refreshNetworkInfo();
+    }, 30000);
+    return () => {
+      wifi?.remove();
+      nativeState?.remove();
+      progress?.remove();
+      appState.remove();
+      clearInterval(timer);
+      stopWatching().catch(() => undefined);
+    };
+  }, [ready, isModuleAvailable, refreshNetworkInfo, applyAuthSnapshot]);
 
   useEffect(() => {
-    if (!isBackgroundServiceAvailable()) {
-      return;
-    }
-
-    const syncBackgroundService = async () => {
+    if (ready && isAutoStartAvailable())
+      setAutoStartEnabled(config.settings.autoLaunch).catch(() => undefined);
+  }, [ready, config.settings.autoLaunch]);
+  useEffect(() => {
+    if (!ready || !isBackgroundServiceAvailable()) return;
+    (async () => {
       const shouldRun = config.settings.enableHeartbeat || config.settings.autoReconnect;
-      const running = await isBackgroundServiceRunning();
-
-      if (shouldRun) {
-        // 已运行时再次启动是幂等的，用于把新的检测间隔传给服务
-        await startBackgroundService(config.settings.heartbeatIntervalSeconds * 1000);
-        if (!running) {
-          addLog('info', '后台服务已启动');
-        }
-      } else if (running) {
-        await stopBackgroundService();
-        addLog('info', '后台服务已停止');
-      }
-    };
-
-    syncBackgroundService().catch(() => undefined);
+      if (shouldRun) await startBackgroundService(config.settings.heartbeatIntervalSeconds * 1000);
+      else if (await isBackgroundServiceRunning()) await stopBackgroundService();
+    })().catch(() => addLog('warn', '后台服务更新失败'));
   }, [
-    addLog,
+    ready,
     config.settings.autoReconnect,
     config.settings.enableHeartbeat,
     config.settings.heartbeatIntervalSeconds,
+    addLog,
   ]);
 
-  // 登录
+  const resumeAutoAuth = useCallback(async () => {
+    await setConfig(current => ({
+      ...current,
+      settings: { ...current.settings, autoAuthPaused: false },
+    }));
+  }, [setConfig]);
   const login = useCallback(async () => {
-    if (!servicesRef.current) {
+    const services = servicesRef.current;
+    if (!services) {
       addLog('error', '服务未初始化');
       return;
     }
-
-    const wifiConfig = networkInfo.ssid
-      ? config.wifiList.find(wifi => wifi.ssid === networkInfo.ssid)
-      : undefined;
-    const linkedAccounts =
-      wifiConfig?.linkedAccountIds
-        .map(id => config.accounts.find(account => account.id === id))
-        .filter((account): account is AccountConfig => account !== undefined) ?? [];
-    const accountsToLogin =
-      linkedAccounts.length > 0 ? linkedAccounts : currentAccount ? [currentAccount] : [];
-
-    if (accountsToLogin.length === 0) {
-      addLog('error', '请先选择账户');
-      return;
-    }
-
-    // 使用本次刷新的返回值：setState 要到下一次渲染才生效，闭包里的 networkInfo 仍是旧值
-    const latestInfo = (await refreshNetworkInfo()) ?? networkInfo;
-
-    if (!latestInfo.ipv4) {
-      addLog('error', '无法获取 IP 地址，请检查网络连接');
-      return;
-    }
-
-    addLog('info', `正在登录账户: ${accountsToLogin[0].username}...`);
-    setNetworkStatus('connecting');
-
     try {
-      const { authService } = servicesRef.current;
-      const primaryAccount = accountsToLogin[0];
-      authService.setServerUrl(primaryAccount.serverUrl);
-
-      // 单账号保留 3 次重试；关联多个账号时按配置顺序逐个尝试。
-      const result =
-        accountsToLogin.length === 1
-          ? await authService.loginWithRetry({
-              serverUrl: primaryAccount.serverUrl,
-              userAccount: primaryAccount.username,
-              userPassword: primaryAccount.password,
-              wlanUserIp: latestInfo.ipv4,
-              wlanUserIpv6: latestInfo.ipv6 || undefined,
-              wlanUserMac: latestInfo.mac || undefined,
-              isp: primaryAccount.isp,
-            })
-          : await authService.loginWithAccounts(accountsToLogin, {
-              wlanUserIp: latestInfo.ipv4,
-              wlanUserIpv6: latestInfo.ipv6 || undefined,
-              wlanUserMac: latestInfo.mac || undefined,
-            });
-
-      if (result.success) {
-        setNetworkStatus('connected');
-        addLog('success', `登录成功: ${result.message}`);
-      } else {
-        setNetworkStatus('disconnected');
-        addLog('error', `登录失败: ${result.message}`);
+      await resumeAutoAuth();
+      const info = (await refreshNetworkInfo()) ?? networkRef.current;
+      if (!info.ipv4 || !info.connected) {
+        addLog('error', '无法获取 IP 地址，请检查 WiFi 连接');
+        return;
       }
+      setNetworkStatus('connecting');
+      const selected = resolveLoginAccounts(services.configManager.getConfig()!, info.ssid);
+      if (!selected.length) {
+        setNetworkStatus('disconnected');
+        addLog('error', '请先选择账户');
+        return;
+      }
+      const result = isAutoAuthAvailable()
+        ? await nativeLogin()
+        : await services.authService.runExclusive(() =>
+            services.authService.loginWithAccounts(
+              selected,
+              {
+                wlanUserIp: info.ipv4!,
+                wlanUserIpv6: info.ipv6 || undefined,
+              },
+              { retrySingle: true }
+            )
+          );
+      if (!result) throw new Error('认证引擎未返回结果');
+      if (
+        networkRef.current.networkKey !== info.networkKey ||
+        networkRef.current.ssid !== info.ssid
+      )
+        return;
+      setNetworkStatus(result.success ? 'connected' : 'disconnected');
+      addLog(result.success ? 'success' : 'warn', result.message);
     } catch (error) {
       setNetworkStatus('disconnected');
-      addLog('error', `登录异常: ${error instanceof Error ? error.message : '未知错误'}`);
+      addLog('error', `登录失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-  }, [addLog, config.accounts, config.wifiList, currentAccount, networkInfo, refreshNetworkInfo]);
-
-  // 登出
+  }, [addLog, refreshNetworkInfo, resumeAutoAuth]);
   const logout = useCallback(async () => {
-    if (!servicesRef.current) {
-      addLog('error', '服务未初始化');
-      return;
-    }
-
-    addLog('info', '正在登出...');
-
+    const services = servicesRef.current;
+    if (!services) return;
     try {
-      const { authService } = servicesRef.current;
-      // 注销请求不依赖本机 IP（与参考实现一致），IP 仅用于日志
-      const result = await authService.logout(networkInfo.ipv4 || undefined);
-
-      if (result.success) {
-        setNetworkStatus('disconnected');
-        addLog('success', '登出成功');
-      } else {
-        addLog('warn', `登出失败: ${result.message}`);
-      }
+      await setConfig(current => ({
+        ...current,
+        settings: { ...current.settings, autoAuthPaused: true },
+      })).catch(() => addLog('warn', '配置同步待重试，先暂停原生认证'));
+      const result = isAutoAuthAvailable()
+        ? await nativeLogout()
+        : await services.authService.runExclusive(() =>
+            services.authService.logout(networkRef.current.ipv4 || undefined)
+          );
+      if (result?.success) setNetworkStatus('disconnected');
+      addLog(result?.success ? 'success' : 'warn', result?.message ?? '注销失败，自动认证保持暂停');
     } catch (error) {
-      addLog('error', `登出异常: ${error instanceof Error ? error.message : '未知错误'}`);
+      addLog('error', `注销失败: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-  }, [networkInfo.ipv4, addLog]);
-
-  // 自动认证：前台检查 + 配置同步给原生后台引擎
-  const markAuthenticated = useCallback(() => {
-    setNetworkStatus('connected');
-  }, []);
+  }, [addLog, setConfig]);
+  const requestPermission = useCallback(async () => {
+    const granted = await requestLocationPermission();
+    setHasPermission(granted);
+    if (granted) await refreshNetworkInfo();
+    return granted;
+  }, [refreshNetworkInfo]);
+  const onAuthenticated = useCallback(() => {
+    if (isAutoAuthAvailable()) refreshNetworkInfo();
+    else setNetworkStatus('connected');
+  }, [refreshNetworkInfo]);
   useAutoAuth({
     servicesRef,
     config,
     accounts,
     currentAccount,
-    ready: servicesReady,
+    ready,
     addLog,
-    onAuthenticated: markAuthenticated,
+    onAuthenticated,
+    syncManagedExternally: true,
   });
-
-  // 自动更新：配置加载完成后检查一次（12 小时内只查一次）
-  const autoUpdateEnabled = config.settings.autoUpdate;
   useEffect(() => {
-    if (!servicesReady || !autoUpdateEnabled) return;
-    autoCheckForUpdate()
-      .then(release => {
-        if (release) {
-          addLog('info', `发现新版本 ${release.version}`);
-        }
-      })
-      .catch(() => undefined);
-  }, [servicesReady, autoUpdateEnabled, addLog]);
-
-  // 权限引导：首次启动与开启自动重连时逐项申请；定位授予后立即刷新 SSID
-  const handleLocationGranted = useCallback(() => {
+    if (ready && config.settings.autoUpdate) autoCheckForUpdate().catch(() => undefined);
+  }, [ready, config.settings.autoUpdate]);
+  const onLocationGranted = useCallback(() => {
     setHasPermission(true);
-    refreshNetworkInfo().catch(() => undefined);
+    refreshNetworkInfo();
   }, [refreshNetworkInfo]);
-  const permissionGuide = usePermissionGuide({
-    ready: servicesReady,
+  const permissions = usePermissionGuide({
+    ready,
     autoAuthEnabled: config.settings.autoReconnect,
     addLog,
-    onLocationGranted: handleLocationGranted,
+    onLocationGranted,
   });
-
-  // 账户管理
-  const { addAccount, updateAccount, removeAccount, switchAccount } = useAccountActions({
+  const accountActions = useAccountActions({
     servicesRef,
     accounts,
     currentAccount,
@@ -491,35 +519,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCurrentAccount,
     addLog,
     syncConfigState,
+    commitAction,
   });
-  const ipAddress = networkInfo.ipv4 || '0.0.0.0';
 
   return (
     <AppContext.Provider
       value={{
         config,
         setConfig,
+        configurationState,
+        configurationError,
+        retryConfigurationSync,
         networkStatus,
         networkInfo,
-        ipAddress,
+        authSnapshot,
+        reconnectProgress,
+        ipAddress: networkInfo.ipv4 || '0.0.0.0',
         login,
         logout,
+        resumeAutoAuth,
         accounts,
         currentAccount,
-        addAccount,
-        updateAccount,
-        removeAccount,
-        switchAccount,
+        ...accountActions,
         logs,
         addLog,
         clearLogs,
+        exportLogs: exportPersistentLogs,
+        loadMoreLogs,
         hasPermission,
         requestPermission,
         isModuleAvailable,
         refreshNetworkInfo,
-        permissionItems: permissionGuide.items,
-        requestAppPermission: permissionGuide.request,
-        runPermissionGuide: permissionGuide.runGuide,
+        permissionItems: permissions.items,
+        requestAppPermission: permissions.request,
+        runPermissionGuide: permissions.runGuide,
         services: servicesRef.current,
       }}
     >
@@ -527,11 +560,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     </AppContext.Provider>
   );
 };
-
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within an AppProvider');
-  }
+  if (!context) throw new Error('useApp must be used within an AppProvider');
   return context;
 };

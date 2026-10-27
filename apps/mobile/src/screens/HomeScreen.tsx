@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, AppState } from 'react-native';
+import { resolveLoginAccounts } from '@repo/shared';
+import { AutoAuthStatus } from '../components/home/AutoAuthStatus';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, ScrollView } from 'react-native';
 import {
   useSharedValue,
   useAnimatedStyle,
@@ -11,7 +13,6 @@ import {
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
 import { GlassView } from '../components/GlassView';
-import * as WifiModule from '../native/WifiModule';
 
 import { WifiInfoCard } from '../components/wifi/WifiInfoCard';
 import {
@@ -21,13 +22,20 @@ import {
 } from '../components/home/HomeCards';
 import { styles } from '../components/home/homeScreenStyles';
 
+const infoCardStyle = { padding: 16, marginBottom: 16 };
 export const HomeScreen: React.FC = () => {
-  const { networkStatus, ipAddress, login, logout, config } = useApp();
+  const {
+    networkStatus,
+    ipAddress,
+    login,
+    logout,
+    config,
+    networkInfo: wifiInfo,
+    refreshNetworkInfo,
+  } = useApp();
   const { theme } = useTheme();
-  const [wifiInfo, setWifiInfo] = useState<WifiModule.NetworkInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
-  const fallbackTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Pulse animation for status badge
   const pulseScale = useSharedValue(1);
@@ -37,15 +45,9 @@ export const HomeScreen: React.FC = () => {
   const wifiConnected = wifiInfo?.connected ?? false;
   const wifiSSID = wifiInfo?.ssid || '';
 
-  // 加载WiFi信息
   const loadWifiInfo = useCallback(async () => {
-    try {
-      const info = await WifiModule.getNetworkInfo();
-      setWifiInfo(info);
-    } catch (error) {
-      console.error('Failed to load WiFi info:', error);
-    }
-  }, []);
+    await refreshNetworkInfo();
+  }, [refreshNetworkInfo]);
 
   // 手动刷新WiFi信息
   const handleRefresh = async () => {
@@ -69,40 +71,6 @@ export const HomeScreen: React.FC = () => {
       }, 1000);
     }
   };
-
-  // 原生 netmate:wifiChanged 事件驱动 + 30s 兜底轮询；后台态暂停
-  useEffect(() => {
-    WifiModule.startWatching().catch(() => undefined);
-    loadWifiInfo().catch(() => undefined);
-
-    const subscription = WifiModule.onWifiChanged(() => {
-      loadWifiInfo().catch(() => undefined);
-    });
-
-    const appStateSubscription = AppState.addEventListener('change', state => {
-      if (state === 'active') {
-        loadWifiInfo().catch(() => undefined);
-        if (!fallbackTimer.current) {
-          fallbackTimer.current = setInterval(loadWifiInfo, 30000);
-        }
-      } else if (fallbackTimer.current) {
-        clearInterval(fallbackTimer.current);
-        fallbackTimer.current = null;
-      }
-    });
-
-    fallbackTimer.current = setInterval(loadWifiInfo, 30000);
-
-    return () => {
-      subscription?.remove();
-      appStateSubscription.remove();
-      if (fallbackTimer.current) {
-        clearInterval(fallbackTimer.current);
-        fallbackTimer.current = null;
-      }
-      WifiModule.stopWatching().catch(() => undefined);
-    };
-  }, [loadWifiInfo]);
 
   useEffect(() => {
     if (networkStatus === 'connecting') {
@@ -154,8 +122,9 @@ export const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.pageTitle, { color: theme.colors.text }]}>运行状态</Text>
+          <AutoAuthStatus />
 
-          <GlassView style={styles.card}>
+          <GlassView style={infoCardStyle}>
             <View style={styles.warningCardContent}>
               <Text style={styles.warningIcon}>📡</Text>
               <Text style={[styles.warningTitle, { color: theme.colors.danger }]}>未连接 WiFi</Text>
@@ -194,9 +163,10 @@ export const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.pageTitle, { color: theme.colors.text }]}>运行状态</Text>
+          <AutoAuthStatus />
 
           {/* WiFi 基础信息 - 必须显示 */}
-          <GlassView style={styles.card}>
+          <GlassView style={infoCardStyle}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
             <WifiInfoCard
               wifiInfo={wifiInfo}
@@ -229,9 +199,10 @@ export const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.pageTitle, { color: theme.colors.text }]}>运行状态</Text>
+          <AutoAuthStatus />
 
           {/* WiFi 基础信息 */}
-          <GlassView style={styles.card}>
+          <GlassView style={infoCardStyle}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
             <WifiInfoCard
               wifiInfo={wifiInfo}
@@ -255,10 +226,7 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第四优先级：按关联顺序取第一个仍存在的账户；兼容旧版单字段配置。
-  const linkedAccountId =
-    wifiConfig.linkedAccountIds.find(id => config.accounts.some(account => account.id === id)) ??
-    wifiConfig.linkedAccountId;
-  const linkedAccount = config.accounts.find(account => account.id === linkedAccountId);
+  const linkedAccount = resolveLoginAccounts(config, wifiSSID)[0];
 
   if (!linkedAccount) {
     return (
@@ -269,9 +237,10 @@ export const HomeScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
         >
           <Text style={[styles.pageTitle, { color: theme.colors.text }]}>运行状态</Text>
+          <AutoAuthStatus />
 
           {/* WiFi 基础信息 */}
-          <GlassView style={styles.card}>
+          <GlassView style={infoCardStyle}>
             <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前 WiFi</Text>
             <WifiInfoCard
               wifiInfo={wifiInfo}
@@ -303,6 +272,7 @@ export const HomeScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[styles.pageTitle, { color: theme.colors.text }]}>运行状态</Text>
+        <AutoAuthStatus />
 
         <NetworkStatusCard
           networkStatus={networkStatus}

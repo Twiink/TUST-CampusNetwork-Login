@@ -10,7 +10,7 @@
 
 import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
-import type { AccountConfig, AppConfig } from '@repo/shared';
+import { resolveLoginAccounts, type AccountConfig, type AppConfig } from '@repo/shared';
 import type { MobileServices } from '../context/mobileServices';
 import { getNetworkInfo, onWifiChanged, startWatching, stopWatching } from '../native/WifiModule';
 import {
@@ -33,6 +33,8 @@ export interface UseAutoAuthOptions {
   currentAccount: AccountConfig | null;
   /** 服务与配置加载完成后才开始检查 */
   ready: boolean;
+  syncManagedExternally?: boolean;
+  onResult?: (result: AutoAuthResult) => void;
   addLog: (level: LogLevel, message: string) => void;
   onAuthenticated?: () => void;
 }
@@ -58,11 +60,13 @@ export function useAutoAuth({
   accounts,
   currentAccount,
   ready,
+  syncManagedExternally = false,
+  onResult,
   addLog,
   onAuthenticated,
 }: UseAutoAuthOptions): void {
   const nativeAvailable = isAutoAuthAvailable();
-  const enabled = config.settings.autoReconnect;
+  const enabled = config.settings.autoReconnect && !config.settings.autoAuthPaused;
   const intervalMs = Math.max(config.settings.heartbeatIntervalSeconds * 1000, MIN_INTERVAL_MS);
 
   // 回调放进 ref，避免每次渲染重建定时器与订阅
@@ -76,8 +80,8 @@ export function useAutoAuth({
 
   // 1. 配置同步给原生层（后台服务与 WorkManager 依赖这份快照）
   useEffect(() => {
-    if (!ready || !nativeAvailable) return;
-    const latest = servicesRef.current?.configManager.getConfig() ?? config;
+    if (!ready || !nativeAvailable || syncManagedExternally) return;
+    const latest = config;
     syncAutoAuthProfile(buildAutoAuthProfile(latest)).catch(error => {
       addLogRef.current(
         'warn',
@@ -85,17 +89,26 @@ export function useAutoAuth({
       );
     });
     jsStateRef.current = { lastLoginAt: 0, failures: 0 };
-  }, [ready, nativeAvailable, config, accounts, currentAccount, servicesRef]);
+  }, [
+    ready,
+    nativeAvailable,
+    config,
+    accounts,
+    currentAccount,
+    servicesRef,
+    syncManagedExternally,
+  ]);
 
   // 2. 原生结果（含后台服务、WorkManager 产生的）写入日志
   useEffect(() => {
     if (!nativeAvailable) return;
     const subscription = onAutoAuthResult(result => {
       addLogRef.current(result.success ? 'success' : 'warn', describeAutoAuthResult(result));
+      onResult?.(result);
       if (result.success) onAuthenticatedRef.current?.();
     });
     return () => subscription?.remove();
-  }, [nativeAvailable]);
+  }, [nativeAvailable, onResult]);
 
   // 启动时补出应用未运行期间的最近一次后台认证结果
   useEffect(() => {
@@ -125,12 +138,9 @@ export function useAutoAuth({
       const requirement = services.wifiManager.resolveAuthRequirement(info.ssid, info.ipv4);
       if (!requirement.requiresAuth) return;
 
-      const linked =
-        (info.ssid ? services.wifiManager.getWifiBySsid(info.ssid)?.linkedAccountIds : undefined)
-          ?.map(id => services.accountManager.getAccountById(id))
-          .filter((account): account is AccountConfig => account !== null) ?? [];
-      const current = services.accountManager.getCurrentAccount();
-      const loginAccounts = linked.length > 0 ? linked : current ? [current] : [];
+      const latest = services.configManager.getConfig();
+      if (!latest || latest.settings.autoAuthPaused || !latest.settings.autoReconnect) return;
+      const loginAccounts = resolveLoginAccounts(latest, info.ssid);
       if (loginAccounts.length === 0) return;
 
       if (await services.networkDetector.checkConnectivity()) {
@@ -150,9 +160,26 @@ export function useAutoAuth({
       state.lastLoginAt = Date.now();
 
       addLogRef.current('info', '检测到需要校园网认证，开始自动登录');
-      const result = await services.authService.loginWithAccounts(loginAccounts, {
-        wlanUserIp: info.ipv4,
-        wlanUserIpv6: info.ipv6 || undefined,
+      const result = await services.authService.runExclusive(async () => {
+        const current = services.configManager.getConfig();
+        const network = await getNetworkInfo();
+        if (
+          !current ||
+          current.settings.autoAuthPaused ||
+          !current.settings.autoReconnect ||
+          network.networkKey !== info.networkKey ||
+          network.ssid !== info.ssid
+        ) {
+          return { success: false, message: '网络或自动认证设置已改变', attempts: [] };
+        }
+        return services.authService.loginWithAccounts(
+          resolveLoginAccounts(current, info.ssid),
+          {
+            wlanUserIp: info.ipv4!,
+            wlanUserIpv6: info.ipv6 || undefined,
+          },
+          { shouldContinue: () => !services.configManager.getConfig()?.settings.autoAuthPaused }
+        );
       });
       if (result.success) {
         state.failures = 0;

@@ -12,3 +12,6 @@ export * from './ConfigManager';
 export * from './AccountManager';
 export * from './WifiManager';
 export * from './WifiAdapter';
+
+export * from './auth-accounts';
+export * from './config-edit';

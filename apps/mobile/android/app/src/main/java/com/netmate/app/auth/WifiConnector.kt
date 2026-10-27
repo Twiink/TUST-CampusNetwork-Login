@@ -21,6 +21,7 @@ object WifiConnector {
 
     /** 提交连接请求；返回系统是否接受（不代表已连上） */
     fun connect(context: Context, ssid: String, password: String?): Boolean {
+        WifiEnvironment.connectPort?.let { return it(context, ssid, password) }
         if (ssid.isBlank()) return false
         val wifiManager = wifiManager(context)
 
@@ -39,7 +40,7 @@ object WifiConnector {
 
         @Suppress("DEPRECATION")
         val wifiConfig = WifiConfiguration().apply {
-            SSID = "\"$ssid\""
+            SSID = "\"${ssid.replace("\\", "\\\\").replace("\"", "\\\"")}\""
             status = WifiConfiguration.Status.ENABLED
             priority = 40
             if (password.isNullOrBlank()) {
@@ -61,16 +62,19 @@ object WifiConnector {
         return true
     }
 
+    fun openSelection(context: Context, ssid: String, password: String?) {
+        if (Build.VERSION.SDK_INT < 29 || WifiEnvironment.connectPort != null) return
+        val intent = if (Build.VERSION.SDK_INT >= 30) {
+            val suggestion = WifiNetworkSuggestion.Builder().setSsid(ssid).apply { if (!password.isNullOrBlank()) setWpa2Passphrase(password) }.build()
+            android.content.Intent(android.provider.Settings.ACTION_WIFI_ADD_NETWORKS)
+                .putParcelableArrayListExtra(android.provider.Settings.EXTRA_WIFI_NETWORK_LIST, arrayListOf(suggestion))
+        } else android.content.Intent(android.provider.Settings.Panel.ACTION_WIFI)
+        context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
     fun state(context: Context): WifiState {
-        val wifiManager = wifiManager(context)
-        val connectivityManager =
-            context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = LocalAddresses.wifiNetworks(connectivityManager).firstOrNull { candidate ->
-            connectivityManager.getNetworkCapabilities(candidate)
-                ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-        }
-        val ssid = network?.let { AutoAuthEngine.readSsid(context, it) }
-        return WifiState(enabled = wifiManager.isWifiEnabled, connected = network != null, ssid = ssid)
+        val state = WifiEnvironment.snapshot(context)
+        return WifiState(state.enabled, state.connected, state.ssid)
     }
 
     private fun wifiManager(context: Context): WifiManager =

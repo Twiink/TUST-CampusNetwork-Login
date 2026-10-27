@@ -12,6 +12,8 @@ export interface DisplayLogEntry {
 }
 
 interface AppContextType {
+  configurationState: 'idle' | 'saving' | 'saved' | 'error';
+  configurationError: string | null;
   config: AppConfig | null;
   setConfig: (update: ConfigUpdate) => Promise<void>;
   networkStatus: ConnectionStatus;
@@ -54,7 +56,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     wifiSSID,
     setAuthenticated,
   } = useNetwork();
-  const { config, updateConfig, loading: configLoading } = useConfig();
+  const {
+    config,
+    updateConfig,
+    loading: configLoading,
+    saveState,
+    error: configurationError,
+  } = useConfig();
 
   // 计算连接状态
   const getConnectionStatus = useCallback((): ConnectionStatus => {
@@ -93,6 +101,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         settings: DEFAULT_APP_SETTINGS,
       },
       setConfig,
+      configurationState: saveState,
+      configurationError,
       networkStatus: getConnectionStatus(),
       status: networkStatusDetail,
       info: networkInfo,
@@ -110,6 +120,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }),
     [
       config,
+      saveState,
+      configurationError,
       setConfig,
       getConnectionStatus,
       networkStatusDetail,

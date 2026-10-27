@@ -31,7 +31,13 @@ vi.mock('../utils/dev-log', () => ({
   devLog: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 
-import { connectToNetwork, scanAvailableNetworks } from './wifi-switcher';
+import {
+  connectToNetwork,
+  scanAvailableNetworks,
+  buildWindowsWifiProfile,
+  waitForTargetNetwork,
+} from './wifi-switcher';
+import { existsSync, readFileSync } from 'node:fs';
 
 type ExecCallback = (
   error: ExecException | null,
@@ -131,11 +137,11 @@ describe('scanAvailableNetworks', () => {
     expect(networks).toEqual([{ ssid: 'NoSignal', signal: 0, security: '开放' }]);
   });
 
-  it('命令失败时返回空数组而非抛错', async () => {
+  it('扫描失败时提供可重试的错误', async () => {
     setPlatform('linux');
     mockExecError('nmcli not found');
 
-    await expect(scanAvailableNetworks()).resolves.toEqual([]);
+    await expect(scanAvailableNetworks()).rejects.toThrow('WiFi 扫描失败');
   });
 
   it('不支持的平台返回空数组', async () => {
@@ -203,21 +209,36 @@ describe('connectToNetwork', () => {
     expect(args).toEqual(['-setairportnetwork', 'en0', 'Home', 'pw']);
   });
 
-  it('Windows: profile 检查与连接均经 execFile，SSID 含特殊字符不注入', async () => {
+  it('Windows: 按参数传递特殊字符 SSID，并等待目标网络地址就绪', async () => {
     setPlatform('win32');
-
     const malicious = 'evil" & del /f';
-    execWindowsFileTextMock.mockResolvedValue(`接口名称 : WLAN\r\n配置文件 : ${malicious}`);
-    await expect(connectToNetwork(malicious)).resolves.toBe(true);
-
-    expect(execWindowsFileTextMock).toHaveBeenCalledWith(
-      'netsh',
-      ['wlan', 'show', 'profile', `name="${malicious}"`],
-      3000
+    execFileMock.mockImplementation(
+      (
+        _file: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (error: null, output: string, stderr: string) => void
+      ) => callback(null, '', '')
     );
-    const [file, args] = execFileMock.mock.calls[0];
-    expect(file).toBe('netsh');
-    expect(args).toEqual(['wlan', 'connect', `name="${malicious}"`]);
+    await expect(
+      connectToNetwork(malicious, '', 'Open', async () => ({
+        ssid: malicious,
+        connected: true,
+        ip: '10.1.2.3',
+      }))
+    ).resolves.toBe(true);
+    expect(execFileMock).toHaveBeenCalledWith(
+      'netsh',
+      expect.arrayContaining(['wlan', 'add', 'profile', 'user=current']),
+      expect.anything(),
+      expect.any(Function)
+    );
+    expect(execFileMock).toHaveBeenCalledWith(
+      'netsh',
+      expect.arrayContaining(['wlan', 'connect']),
+      expect.anything(),
+      expect.any(Function)
+    );
   });
 
   it('空 SSID 仍会发起连接（由上层守卫负责拦截）', async () => {
@@ -234,5 +255,60 @@ describe('connectToNetwork', () => {
     mockExecError('NetworkManager timeout');
 
     await expect(connectToNetwork('TUST-WIFI')).rejects.toThrow('连接失败');
+  });
+});
+
+describe('Windows profile and connection regressions', () => {
+  it('encodes special SSID bytes and XML password characters', () => {
+    const profile = buildWindowsWifiProfile('校园 & <wifi>', 'a<&"\'b', 'WPA2');
+    expect(profile.xml).toContain(Buffer.from('校园 & <wifi>').toString('hex'));
+    expect(profile.xml).toContain('校园 &amp; &lt;wifi&gt;');
+    expect(profile.xml).toContain('a&lt;&amp;&quot;&apos;b');
+    expect(buildWindowsWifiProfile('Open', '', '开放').xml).toContain(
+      '<authentication>open</authentication>'
+    );
+    expect(() => buildWindowsWifiProfile('Enterprise', 'secret', 'WPA2-企业')).toThrow('系统');
+  });
+  it.each([false, true])(
+    'cleans the credential file after completion or command error (failure=%s)',
+    async (fail) => {
+      setPlatform('win32');
+      execWindowsFileTextMock.mockResolvedValue('');
+      let credentialFile = '';
+      execFileMock.mockImplementation((_file, args, _options, callback) => {
+        if (args.includes('add')) {
+          credentialFile = args.find((arg: string) => arg.startsWith('filename=')).slice(9);
+          expect(readFileSync(credentialFile, 'utf8')).toContain('wifi-secret');
+        }
+        if (fail)
+          callback(Object.assign(new Error('password=wifi-secret'), { code: 5 }), {
+            stdout: '',
+            stderr: 'password=wifi-secret',
+          });
+        else callback(null, { stdout: '', stderr: '' });
+      });
+      const promise = connectToNetwork('New', 'wifi-secret', 'WPA2', async () => ({
+        ssid: 'New',
+        connected: true,
+        ip: '10.0.0.2',
+      }));
+      if (fail) await expect(promise).rejects.toThrow('系统错误 5');
+      else await expect(promise).resolves.toBe(true);
+      expect(credentialFile).not.toBe('');
+      expect(existsSync(credentialFile)).toBe(false);
+    }
+  );
+  it('waits through wrong SSID, disconnected and DHCP states before accepting target', async () => {
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({ connected: true, ssid: 'Other', ip: '10.0.0.2' })
+      .mockResolvedValueOnce({ connected: false, ssid: 'Target', ip: '10.0.0.2' })
+      .mockResolvedValueOnce({ connected: true, ssid: 'Target', ip: '169.254.1.2' })
+      .mockResolvedValueOnce({ connected: true, ssid: 'Target', ip: '0.0.0.0' })
+      .mockResolvedValue({ connected: true, ssid: 'Target', ip: '10.0.0.3' });
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    await expect(waitForTargetNetwork('Target', read, 3000, sleep)).resolves.toBe(true);
+    expect(read).toHaveBeenCalledTimes(5);
+    await expect(waitForTargetNetwork('Absent', read, 1000, sleep)).resolves.toBe(false);
   });
 });

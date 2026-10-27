@@ -47,6 +47,21 @@ pub fn network_info() -> Option<NativeNetworkInfo> {
     platform::network_info()
 }
 
+/// CoreWLAN scan runs outside the Electron main thread. Other platforms use their OS adapter.
+#[napi]
+pub async fn scan_wifi() -> Result<Vec<NativeWifiInfo>> {
+    #[cfg(target_os = "macos")]
+    {
+        napi::tokio::task::spawn_blocking(macos::scan_wifi)
+            .await
+            .map_err(|_| Error::from_reason("WiFi scan failed"))?
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(Error::from_reason("Native scan is unavailable on this platform"))
+    }
+}
+
 /// 注册网络变化回调；返回 false 表示当前平台不支持事件推送，TS 层继续兜底轮询。
 #[napi]
 pub fn watch_network(

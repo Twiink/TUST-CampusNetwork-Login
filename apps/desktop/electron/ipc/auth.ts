@@ -1,148 +1,48 @@
-/**
- * 认证相关 IPC 处理
- */
-
 import { ipcMain, BrowserWindow } from 'electron';
 import {
-  AuthService,
-  ConfigManager,
-  AccountManager,
-  createLogger,
-  LoginConfig,
-  LoginResult,
+  type AuthService,
+  type ConfigManager,
+  type AccountManager,
+  type NetworkDetector,
+  type Logger,
 } from '@repo/shared';
-import { resolveNetworkInfo } from '../services/network';
+import { manualLogin, manualLogout } from '../services/auth-session';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
 
-/**
- * 注册认证 IPC 处理器
- */
 export function registerAuthIPC(
-  authService: AuthService,
-  _configManager: ConfigManager,
-  accountManager: AccountManager,
-  logger: ReturnType<typeof createLogger>
+  auth: AuthService,
+  config: ConfigManager,
+  _accounts: AccountManager,
+  logger: Logger,
+  detector?: NetworkDetector
 ) {
-  /**
-   * 登录
-   */
-  ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (event): Promise<LoginResult> => {
-    logger.log('info', 'IPC请求：用户登录', { category: 'auth', source: 'IPC:Auth' });
-
+  ipcMain.handle(IPC_CHANNELS.AUTH_LOGIN, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'authenticating');
     try {
-      const currentAccount = accountManager.getCurrentAccount();
-      if (!currentAccount) {
-        logger.log('error', 'IPC错误：登录失败，未选择账户', {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-        return { success: false, message: '请先选择或添加账户' };
-      }
-
-      const networkInfo = await resolveNetworkInfo();
-      if (!networkInfo.ipv4) {
-        logger.log('error', 'IPC错误：登录失败，无法获取IP地址', {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-        return { success: false, message: '无法获取本机 IP 地址' };
-      }
-
-      logger.log('info', `IPC处理：开始登录`, {
-        category: 'auth',
-        source: 'IPC:Auth',
-        data: {
-          账户: currentAccount.username,
-          运营商: currentAccount.isp,
-          IP: networkInfo.ipv4,
-        },
-      });
-
-      // 通知渲染进程状态变化
-      const win = BrowserWindow.fromWebContents(event.sender);
-      win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'authenticating');
-      logger.debug('IPC事件：发送认证状态变化 - authenticating');
-
-      const loginConfig: LoginConfig = {
-        serverUrl: currentAccount.serverUrl,
-        userAccount: currentAccount.username,
-        userPassword: currentAccount.password,
-        wlanUserIp: networkInfo.ipv4,
-        wlanUserIpv6: networkInfo.ipv6 || undefined,
-        wlanUserMac: networkInfo.mac || undefined,
-        isp: currentAccount.isp,
-      };
-
-      authService.setServerUrl(currentAccount.serverUrl);
-      // 手动登录使用带重试封装（3 次、间隔 2 秒），对齐生产验证的参考实现
-      const result = await authService.loginWithRetry(loginConfig);
-
-      if (result.success) {
-        logger.log('success', `IPC响应：登录成功 - ${result.message}`, {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-        win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'authenticated');
-      } else {
-        logger.log('error', `IPC响应：登录失败 - ${result.message}`, {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-        win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'failed');
-      }
-
+      const result = await manualLogin(auth, config, detector);
+      win?.webContents.send(
+        IPC_EVENTS.AUTH_STATUS_CHANGED,
+        result.success ? 'authenticated' : 'failed'
+      );
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : '未知错误';
-      logger.log('error', `IPC异常：登录过程异常`, {
-        category: 'auth',
-        source: 'IPC:Auth',
-        data: { 错误: message },
-      });
-      return { success: false, message };
+      logger.error('手动认证失败', error);
+      win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'failed');
+      return { success: false, message: error instanceof Error ? error.message : '认证失败' };
     }
   });
-
-  /**
-   * 登出
-   */
   ipcMain.handle(IPC_CHANNELS.AUTH_LOGOUT, async (event) => {
-    logger.log('info', 'IPC请求：用户登出', { category: 'auth', source: 'IPC:Auth' });
-
     try {
-      // 登出不强制要求 IP（注销请求不依赖本机 IP），但仍尽力获取用于日志
-      const networkInfo = await resolveNetworkInfo();
-
-      logger.log('info', 'IPC处理：开始登出', {
-        category: 'auth',
-        source: 'IPC:Auth',
-        data: { IP: networkInfo.ipv4 },
-      });
-
-      const result = await authService.logout(networkInfo.ipv4 || undefined);
-
-      if (result.success) {
-        logger.log('success', 'IPC响应：登出成功', { category: 'auth', source: 'IPC:Auth' });
-        const win = BrowserWindow.fromWebContents(event.sender);
-        win?.webContents.send(IPC_EVENTS.AUTH_STATUS_CHANGED, 'idle');
-      } else {
-        logger.log('warn', `IPC响应：登出失败 - ${result.message}`, {
-          category: 'auth',
-          source: 'IPC:Auth',
-        });
-      }
-
+      const result = await manualLogout(auth, config, detector);
+      BrowserWindow.fromWebContents(event.sender)?.webContents.send(
+        IPC_EVENTS.AUTH_STATUS_CHANGED,
+        'idle'
+      );
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : '未知错误';
-      logger.log('error', `IPC异常：登出过程异常`, {
-        category: 'auth',
-        source: 'IPC:Auth',
-        data: { 错误: message },
-      });
-      return { success: false, message };
+      logger.error('注销失败，自动认证保持暂停', error);
+      return { success: false, message: error instanceof Error ? error.message : '注销失败' };
     }
   });
-
-  logger.log('info', '认证IPC处理器已注册', { category: 'system', source: 'IPC:Auth' });
 }

@@ -128,3 +128,11 @@ AGENTS.md
 /target/
 packages/native/*/netmate_native.*.node
 packages/native/*/*.node
+
+# Android release sources are code, not generated release output.
+!apps/mobile/android/app/src/release/
+!apps/mobile/android/app/src/release/**
+
+# Isolated E2E builds and diagnostics
+dist-e2e/
+.maestro/

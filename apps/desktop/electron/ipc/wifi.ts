@@ -45,7 +45,8 @@ export function registerWifiIPC(
             wifiConfigs.map((w) => ({
               ssid: w.ssid,
               password: w.password,
-              priority: w.priority || 10,
+              priority: w.priority ?? 10,
+              security: w.security,
             }))
           );
         }
@@ -76,7 +77,8 @@ export function registerWifiIPC(
             wifiConfigs.map((w) => ({
               ssid: w.ssid,
               password: w.password,
-              priority: w.priority || 10,
+              priority: w.priority ?? 10,
+              security: w.security,
             }))
           );
         }
@@ -104,7 +106,8 @@ export function registerWifiIPC(
           wifiConfigs.map((w) => ({
             ssid: w.ssid,
             password: w.password,
-            priority: w.priority || 10,
+            priority: w.priority ?? 10,
+            security: w.security,
           }))
         );
       }
@@ -149,9 +152,9 @@ export function registerWifiIPC(
     logger.info('IPC请求：扫描WiFi网络');
 
     try {
-      const networks = await scanAvailableNetworks();
+      const networks = await (wifiSwitcherService?.scan() ?? scanAvailableNetworks());
       logger.success(`WiFi扫描完成`, { 发现网络数: networks.length });
-      return networks;
+      return networks.map((network) => ({ ...network, signalStrength: network.signal }));
     } catch (error) {
       logger.error('WiFi扫描失败', {
         错误: error instanceof Error ? error.message : String(error),

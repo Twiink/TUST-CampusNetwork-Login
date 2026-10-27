@@ -1,0 +1,34 @@
+[
+  {
+    "isp": "campus",
+    "username": "20260001",
+    "password": "p &+中!'()~*",
+    "ipv4": "10.1.2.3",
+    "ipv6": null,
+    "url": "http://portal.test/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C0%2C20260001&user_password=p%20%26%2B%E4%B8%AD%21%27%28%29~%2A&wlan_user_ip=10.1.2.3&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303"
+  },
+  {
+    "isp": "cmcc",
+    "username": "20260001",
+    "password": "p &+中!'()~*",
+    "ipv4": "10.1.2.3",
+    "ipv6": "2001:db8::1",
+    "url": "http://portal.test/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C0%2C20260001%40cmcc&user_password=p%20%26%2B%E4%B8%AD%21%27%28%29~%2A&wlan_user_ip=10.1.2.3&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303&wlan_user_ipv6=2001%3Adb8%3A%3A1"
+  },
+  {
+    "isp": "cucc",
+    "username": "20260001",
+    "password": "p &+中!'()~*",
+    "ipv4": "10.1.2.3",
+    "ipv6": null,
+    "url": "http://portal.test/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C0%2C20260001%40unicom&user_password=p%20%26%2B%E4%B8%AD%21%27%28%29~%2A&wlan_user_ip=10.1.2.3&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303"
+  },
+  {
+    "isp": "ctcc",
+    "username": "20260001",
+    "password": "p &+中!'()~*",
+    "ipv4": "10.1.2.3",
+    "ipv6": "2001:db8::1",
+    "url": "http://portal.test/eportal/portal/login?callback=dr1005&login_method=1&user_account=%2C0%2C20260001%40telecom&user_password=p%20%26%2B%E4%B8%AD%21%27%28%29~%2A&wlan_user_ip=10.1.2.3&wlan_user_mac=000000000000&jsVersion=4.1.3&terminal_type=3&lang=zh-cn&v=9303&wlan_user_ipv6=2001%3Adb8%3A%3A1"
+  }
+]

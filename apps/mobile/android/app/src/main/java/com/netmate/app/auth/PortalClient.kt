@@ -44,7 +44,7 @@ class PortalClient(
 
         fun buildUserAccount(username: String, isp: String): String {
             // 学校只提供校园网与中国联通；其他取值按校园网处理（无后缀），与参考实现一致
-            val suffix = if (isp == "cucc") "@unicom" else ""
+            val suffix = when (isp) { "cucc" -> "@unicom"; "cmcc" -> "@cmcc"; "ctcc" -> "@telecom"; else -> "" }
             return ",0,$username$suffix"
         }
 
@@ -62,13 +62,13 @@ class PortalClient(
                 "user_account" to buildUserAccount(username, isp),
                 "user_password" to password,
                 "wlan_user_ip" to ipv4,
-                "wlan_user_ipv6" to (ipv6 ?: ""),
                 "wlan_user_mac" to "000000000000",
                 "jsVersion" to "4.1.3",
                 "terminal_type" to "3",
                 "lang" to "zh-cn",
                 "v" to "9303",
             )
+            if (!ipv6.isNullOrBlank()) params["wlan_user_ipv6"] = ipv6
             val query = params.entries.joinToString("&") { (key, value) -> "$key=${encode(value)}" }
             return "${serverUrl.trimEnd('/')}/eportal/portal/login?$query"
         }
@@ -78,7 +78,7 @@ class PortalClient(
 
         /** application/x-www-form-urlencoded 会把空格编码为 +，门户按 %20 解析，与 JS encodeURIComponent 对齐 */
         private fun encode(value: String): String =
-            URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+            URLEncoder.encode(value, "UTF-8").replace("+", "%20").replace("*", "%2A").replace("%7E", "~")
     }
 
     data class Credentials(
@@ -110,7 +110,7 @@ class PortalClient(
         }
     }
 
-    fun login(credentials: Credentials, ipv4: String, ipv6: String?, network: Network?): LoginOutcome {
+    fun login(credentials: Credentials, ipv4: String, ipv6: String?, network: Network?, shouldContinue: () -> Boolean = { true }): LoginOutcome {
         val url = buildLoginUrl(
             credentials.serverUrl.ifBlank { DEFAULT_SERVER_URL },
             credentials.username,
@@ -122,6 +122,7 @@ class PortalClient(
 
         var lastMessage = "登录失败"
         for (attempt in 1..MAX_ATTEMPTS) {
+            if (!shouldContinue()) return LoginOutcome(false, "认证已取消", attempt - 1)
             try {
                 val (_, body) = transport.get(url, network, REQUEST_TIMEOUT_MS, readBody = true)
                 if (isLoginSuccess(body)) {
@@ -130,13 +131,21 @@ class PortalClient(
                 }
                 lastMessage = extractMessage(body) ?: "登录失败: 响应中未找到成功标志"
             } catch (e: IOException) {
-                lastMessage = "登录请求失败: ${e.message ?: e.javaClass.simpleName}"
+                lastMessage = "登录请求失败，请检查 WiFi 连接"
             }
             if (attempt < MAX_ATTEMPTS) {
                 sleeper(RETRY_DELAY_MS)
             }
         }
         return LoginOutcome(false, lastMessage, MAX_ATTEMPTS)
+    }
+
+    fun logout(serverUrl: String, network: Network?): LoginOutcome {
+        return try {
+            val (code, body) = transport.get("${serverUrl.trimEnd('/')}/eportal/portal/logout", network, REQUEST_TIMEOUT_MS, true)
+            val success = code in 200..299 && Regex("\"result\"\\s*:\\s*1").containsMatchIn(body)
+            LoginOutcome(success, if (success) "注销成功" else "注销失败，请重试", 1)
+        } catch (_: IOException) { LoginOutcome(false, "注销请求失败，请检查 WiFi 连接", 1) }
     }
 
     /** 从 JSONP 响应中提取 msg 字段，仅用于提示，不参与成功判定 */

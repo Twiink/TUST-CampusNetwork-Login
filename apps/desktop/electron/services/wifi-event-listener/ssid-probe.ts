@@ -1,3 +1,4 @@
+import { runtimePorts } from '../../runtime-ports';
 /**
  * 轻量 SSID 探测：复用 wifi-detector 的 TTL 缓存，避免多个服务重复 spawn。
  */
@@ -10,6 +11,7 @@ export async function probeCurrentSsid(
   logger: Logger
 ): Promise<string | null> {
   try {
+    if (runtimePorts.wifi) return (await runtimePorts.wifi.getCurrentWifi())?.ssid ?? null;
     const status = await getCurrentWifiSSID();
     if (platform !== 'darwin' && platform !== 'win32' && platform !== 'linux') {
       logger.warn(`[WiFi检测] 不支持的平台: ${platform}`);

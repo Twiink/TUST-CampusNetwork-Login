@@ -2,6 +2,7 @@
  * 自动更新服务
  */
 
+import { runtimePorts } from '../runtime-ports';
 import { autoUpdater, UpdateInfo } from 'electron-updater';
 import { BrowserWindow } from 'electron';
 import { createLogger } from '@repo/shared';
@@ -35,6 +36,7 @@ export interface UpdateStatus {
  * 自动更新服务类
  */
 export class UpdaterService {
+  private updater = runtimePorts.updater ?? autoUpdater;
   private logger: ReturnType<typeof createLogger>;
   private callbacks: UpdateCallbacks;
   private status: UpdateStatus = {
@@ -58,12 +60,12 @@ export class UpdaterService {
    */
   private setupAutoUpdater(): void {
     // 不自动下载
-    autoUpdater.autoDownload = false;
+    this.updater.autoDownload = false;
     // 不自动安装退出时
-    autoUpdater.autoInstallOnAppQuit = true;
+    this.updater.autoInstallOnAppQuit = true;
 
     // 检查更新中
-    autoUpdater.on('checking-for-update', () => {
+    this.updater.on('checking-for-update', () => {
       this.status.checking = true;
       this.status.error = null;
       this.logger.info('正在检查更新...');
@@ -72,7 +74,7 @@ export class UpdaterService {
     });
 
     // 有更新可用
-    autoUpdater.on('update-available', (info) => {
+    this.updater.on('update-available', (info) => {
       this.status.checking = false;
       this.status.available = true;
       this.status.version = info.version;
@@ -82,7 +84,7 @@ export class UpdaterService {
     });
 
     // 没有更新
-    autoUpdater.on('update-not-available', (info) => {
+    this.updater.on('update-not-available', (info) => {
       this.status.checking = false;
       this.status.available = false;
       this.logger.info('当前已是最新版本');
@@ -91,7 +93,7 @@ export class UpdaterService {
     });
 
     // 下载进度
-    autoUpdater.on('download-progress', (progress) => {
+    this.updater.on('download-progress', (progress) => {
       this.status.downloading = true;
       this.status.progress = progress.percent;
       this.logger.debug(`下载进度: ${progress.percent.toFixed(1)}%`);
@@ -103,7 +105,7 @@ export class UpdaterService {
     });
 
     // 更新下载完成
-    autoUpdater.on('update-downloaded', (info) => {
+    this.updater.on('update-downloaded', (info) => {
       this.status.downloading = false;
       this.status.downloaded = true;
       this.status.progress = 100;
@@ -113,7 +115,7 @@ export class UpdaterService {
     });
 
     // 更新错误
-    autoUpdater.on('error', (error) => {
+    this.updater.on('error', (error) => {
       this.status.checking = false;
       this.status.downloading = false;
       this.status.error = error.message;
@@ -137,7 +139,7 @@ export class UpdaterService {
    */
   async checkForUpdates(): Promise<void> {
     try {
-      await autoUpdater.checkForUpdates();
+      await this.updater.checkForUpdates();
     } catch (error) {
       this.logger.error('检查更新失败', error);
       throw error;
@@ -155,7 +157,7 @@ export class UpdaterService {
     try {
       this.status.downloading = true;
       this.broadcastStatus();
-      await autoUpdater.downloadUpdate();
+      await this.updater.downloadUpdate();
     } catch (error) {
       this.status.downloading = false;
       this.logger.error('下载更新失败', error);
@@ -170,7 +172,7 @@ export class UpdaterService {
     if (!this.status.downloaded) {
       throw new Error('更新尚未下载完成');
     }
-    autoUpdater.quitAndInstall();
+    this.updater.quitAndInstall();
   }
 
   /**

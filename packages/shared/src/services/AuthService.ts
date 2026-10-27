@@ -26,10 +26,22 @@ import { ErrorCode, AppError } from '../constants/errors';
  * 认证服务类
  */
 export class AuthService {
+  private operationQueue: Promise<unknown> = Promise.resolve();
+  private lastSuccessfulServerUrl: string | null = null;
+  runExclusive<T>(operation: () => Promise<T>): Promise<T> {
+    const pending = this.operationQueue.then(operation);
+    this.operationQueue = pending.catch(() => undefined);
+    return pending;
+  }
+
   private serverUrl: string;
   private logger: Logger | null;
 
-  constructor(serverUrl: string = DEFAULT_SERVER_URL, logger?: Logger) {
+  constructor(
+    serverUrl: string = DEFAULT_SERVER_URL,
+    logger?: Logger,
+    private connectivityUrls: readonly string[] = DEFAULT_CONNECTIVITY_CHECK_URLS
+  ) {
     this.serverUrl = serverUrl;
     this.logger = logger || null;
   }
@@ -99,7 +111,7 @@ export class AuthService {
    * 构建登出 URL(委托 auth-protocol)
    */
   buildLogoutUrl(_wlanUserIp?: string): string {
-    return buildLogoutUrl(this.serverUrl);
+    return buildLogoutUrl(this.lastSuccessfulServerUrl || this.serverUrl);
   }
 
   /**
@@ -139,7 +151,7 @@ export class AuthService {
 
     try {
       const url = buildLoginUrl(config.serverUrl || this.serverUrl, config);
-      this.logger?.log('debug', `请求登录 URL: ${url.substring(0, 100)}...`, {
+      this.logger?.log('debug', '发送门户登录请求', {
         category: 'request',
         source: 'AuthService',
       });
@@ -148,6 +160,7 @@ export class AuthService {
       const result = this.parseLoginResponse(response.rawText);
 
       if (result.success) {
+        this.lastSuccessfulServerUrl = config.serverUrl || this.serverUrl;
         // 二次连通性校验：响应层成功后再确认是否真正联网。
         // 对齐参考实现的保守策略——连通性失败不推翻登录结果，仅在消息/日志标注。
         const reachable = options.verifyConnectivity !== false && (await this.verifyConnectivity());
@@ -198,7 +211,7 @@ export class AuthService {
    */
   private async verifyConnectivity(): Promise<boolean> {
     const results = await Promise.all(
-      DEFAULT_CONNECTIVITY_CHECK_URLS.map((url) =>
+      this.connectivityUrls.map((url) =>
         httpGet(url, { timeout: 3000 })
           .then((response) => response.status === 204)
           .catch(() => false)
@@ -260,7 +273,11 @@ export class AuthService {
   async loginWithAccounts(
     accounts: AccountConfig[],
     networkConfig: Omit<LoginConfig, 'serverUrl' | 'userAccount' | 'userPassword' | 'isp'>,
-    options: { verifyConnectivity?: boolean } = {}
+    options: {
+      verifyConnectivity?: boolean;
+      shouldContinue?: () => boolean;
+      retrySingle?: boolean;
+    } = {}
   ): Promise<MultiAccountLoginResult> {
     const attempts: MultiAccountLoginAttempt[] = [];
     const verifyConnectivity = options.verifyConnectivity ?? true;
@@ -274,16 +291,30 @@ export class AuthService {
     }
 
     for (const account of accounts) {
-      const result = await this.login(
-        {
-          ...networkConfig,
-          serverUrl: account.serverUrl,
-          userAccount: account.username,
-          userPassword: account.password,
-          isp: account.isp,
-        },
-        { verifyConnectivity }
-      );
+      if (options.shouldContinue && !options.shouldContinue())
+        return { success: false, message: '自动认证已暂停', attempts };
+      let result: LoginResult;
+      try {
+        result = await (
+          accounts.length === 1 && options.retrySingle
+            ? this.loginWithRetry.bind(this)
+            : this.login.bind(this)
+        )(
+          {
+            ...networkConfig,
+            serverUrl: account.serverUrl,
+            userAccount: account.username,
+            userPassword: account.password,
+            isp: account.isp,
+          },
+          { verifyConnectivity }
+        );
+      } catch (error) {
+        result = {
+          success: false,
+          message: error instanceof Error ? error.message : '认证请求失败',
+        };
+      }
 
       attempts.push({
         accountId: account.id,
@@ -326,15 +357,15 @@ export class AuthService {
     });
 
     try {
-      const url = buildLogoutUrl(this.serverUrl);
-      this.logger?.log('debug', `请求登出 URL: ${url}`, {
+      const url = buildLogoutUrl(this.lastSuccessfulServerUrl || this.serverUrl);
+      this.logger?.log('debug', '发送门户注销请求', {
         category: 'request',
         source: 'AuthService',
       });
 
       const response = await httpGet<string>(url, { timeout: 10000 });
       const body = response.rawText;
-      this.logger?.log('debug', `登出响应: ${body.substring(0, 200)}`, {
+      this.logger?.log('debug', '已收到门户注销响应', {
         category: 'request',
         source: 'AuthService',
       });
@@ -368,7 +399,7 @@ export class AuthService {
         this.logger?.log('warn', `登出失败: ${message}`, {
           category: 'auth',
           source: 'AuthService',
-          data: { IP: wlanUserIp || '未知', 响应: body.substring(0, 200) },
+          data: { IP: wlanUserIp || '未知', 响应: '门户未确认注销' },
         });
       }
 

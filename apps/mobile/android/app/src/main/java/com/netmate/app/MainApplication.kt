@@ -1,6 +1,7 @@
 package com.netmate.app
 
 import android.app.Application
+import com.netmate.app.logging.DiagnosticsPackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -21,6 +22,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // Packages that cannot be autolinked yet can be added manually here, for example:
           add(WifiPackage())
+          add(DiagnosticsPackage())
           add(BackgroundServicePackage())
           add(AutoStartPackage())
           add(AutoAuthPackage())
@@ -31,6 +33,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    PlatformRuntime.install(this)
     loadReactNative(this)
   }
 }

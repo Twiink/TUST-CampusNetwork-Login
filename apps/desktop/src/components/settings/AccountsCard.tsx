@@ -10,6 +10,7 @@ export const AccountsCard: React.FC<{
   setNewAccount: React.Dispatch<React.SetStateAction<NewAccountForm>>;
   accountError?: string | null;
   onAddAccount: () => void;
+  onEditAccount?: (id: string) => void;
   onRemoveAccount: (id: string) => void;
   onSwitchAccount: (id: string) => void;
 }> = ({
@@ -19,6 +20,7 @@ export const AccountsCard: React.FC<{
   setNewAccount,
   accountError,
   onAddAccount,
+  onEditAccount,
   onRemoveAccount,
   onSwitchAccount,
 }) => {
@@ -102,6 +104,14 @@ export const AccountsCard: React.FC<{
                     ) : (
                       '使用此账号'
                     )}
+                  </button>
+                  <button
+                    className="btn"
+                    type="button"
+                    aria-label={`编辑账号 ${acc.username}`}
+                    onClick={() => onEditAccount?.(acc.id)}
+                  >
+                    编辑
                   </button>
                   <button
                     className="btn btn-danger"

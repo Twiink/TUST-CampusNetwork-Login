@@ -12,3 +12,5 @@ apps/desktop/test-results/
 apps/desktop/playwright-report/
 
 apps/desktop/release/
+
+dist-e2e/

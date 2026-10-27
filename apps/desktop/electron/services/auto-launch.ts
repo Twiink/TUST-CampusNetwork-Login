@@ -2,6 +2,7 @@
  * 开机自启服务
  */
 
+import { runtimePorts } from '../runtime-ports';
 import AutoLaunch from 'auto-launch';
 import { app } from 'electron';
 
@@ -9,14 +10,16 @@ import { app } from 'electron';
  * 开机自启服务类
  */
 export class AutoLaunchService {
-  private autoLauncher: AutoLaunch;
+  private autoLauncher: Pick<AutoLaunch, 'isEnabled' | 'enable' | 'disable'>;
 
   constructor() {
-    this.autoLauncher = new AutoLaunch({
-      name: 'NetMate',
-      path: app.getPath('exe'),
-      isHidden: true, // 隐藏启动（最小化到托盘）
-    });
+    this.autoLauncher =
+      runtimePorts.autoLaunch ??
+      new AutoLaunch({
+        name: 'NetMate',
+        path: app.getPath('exe'),
+        isHidden: true, // 隐藏启动（最小化到托盘）
+      });
   }
 
   /**

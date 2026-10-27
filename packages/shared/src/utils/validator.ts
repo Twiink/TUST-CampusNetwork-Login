@@ -175,6 +175,7 @@ export function normalizeAppSettings(settings?: unknown): AppSettings {
       typeof raw.autoReconnect === 'boolean'
         ? raw.autoReconnect
         : DEFAULT_APP_SETTINGS.autoReconnect,
+    autoAuthPaused: raw.autoAuthPaused === true,
     wifiReconnectRetries:
       toFiniteNumber(raw.wifiReconnectRetries) ??
       toFiniteNumber(raw.maxRetries) ??
@@ -443,6 +444,8 @@ export function normalizeAppConfig(config: Partial<AppConfig> = {}): AppConfig {
 
   return {
     accounts,
+    version: 2,
+    revision: Math.max(0, Math.floor(Number(config.revision) || 0)),
     currentAccountId,
     wifiList,
     settings: normalizeAppSettings(config.settings),

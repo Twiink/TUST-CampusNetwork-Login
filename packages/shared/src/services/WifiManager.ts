@@ -124,140 +124,53 @@ export class WifiManager {
     return candidates[0] || null;
   }
 
-  private assertConfigLoaded() {
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('WiFi配置操作失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    return config;
-  }
-
-  /**
-   * 添加 WiFi 配置
-   */
   async addWifi(wifi: Omit<WifiConfig, 'id'> & { id?: string }): Promise<WifiConfig> {
-    this.logger?.info('添加WiFi配置', {
-      SSID: wifi.ssid,
-      优先级: wifi.priority,
-      自动连接: wifi.autoConnect ? '是' : '否',
-    });
-
-    const newWifi: WifiConfig = {
+    const next: WifiConfig = {
       ...createDefaultWifiConfig(),
       ...wifi,
       linkedAccountIds: [...wifi.linkedAccountIds],
       id: wifi.id || generateId(),
     };
-
-    const validation = validateWifiConfig(newWifi);
-    if (!validation.valid) {
-      this.logger?.error('添加WiFi配置失败：验证失败', {
-        错误: validation.errors.join('; '),
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
-    }
-
-    const config = this.assertConfigLoaded();
-    const exists = config.wifiList.find((item) => sameFingerprint(item, newWifi));
-    if (exists) {
-      this.logger?.error('添加WiFi配置失败：该WiFi已存在', {
-        SSID: newWifi.ssid,
-        安全类型: newWifi.security || '未知',
-        BSSID: newWifi.bssid || '无',
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 配置已存在');
-    }
-
-    const updatedWifiList = [...config.wifiList, newWifi].sort(compareWifiPriority);
-    await this.configManager.update({ wifiList: updatedWifiList });
-
-    this.logger?.success('WiFi配置添加成功', {
-      WiFi_ID: newWifi.id,
-      SSID: newWifi.ssid,
-      WiFi总数: updatedWifiList.length,
+    const config = await this.configManager.update((current) => {
+      this.checkWifi(next);
+      if (current.wifiList.some((w) => sameFingerprint(w, next) || w.id === next.id))
+        throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 配置已存在');
+      return { wifiList: [...current.wifiList, next].sort(compareWifiPriority) };
     });
-
-    return newWifi;
+    this.logger?.success('WiFi配置添加成功', { SSID: next.ssid });
+    return config.wifiList.find((w) => w.id === next.id)!;
   }
 
-  /**
-   * 更新 WiFi 配置
-   */
+  private checkWifi(wifi: WifiConfig): void {
+    const result = validateWifiConfig(wifi);
+    if (!result.valid) throw new AppError(ErrorCode.INVALID_PARAMS, result.errors.join('; '));
+  }
+
   async updateWifi(id: string, updates: Partial<Omit<WifiConfig, 'id'>>): Promise<WifiConfig> {
-    this.logger?.info('更新WiFi配置', {
-      WiFi_ID: id,
-      更新字段: Object.keys(updates).join(', '),
+    const config = await this.configManager.update((current) => {
+      const previous = current.wifiList.find((w) => w.id === id);
+      if (!previous) throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
+      const next = {
+        ...previous,
+        ...updates,
+        linkedAccountIds: [...(updates.linkedAccountIds ?? previous.linkedAccountIds)],
+        id,
+      };
+      this.checkWifi(next);
+      if (current.wifiList.some((w) => w.id !== id && sameFingerprint(w, next)))
+        throw new AppError(ErrorCode.INVALID_PARAMS, '存在相同指纹的 WiFi 配置');
+      return {
+        wifiList: current.wifiList.map((w) => (w.id === id ? next : w)).sort(compareWifiPriority),
+      };
     });
-
-    const config = this.assertConfigLoaded();
-    const index = config.wifiList.findIndex((wifi) => wifi.id === id);
-    if (index === -1) {
-      this.logger?.error('更新WiFi配置失败：配置不存在', { WiFi_ID: id });
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
-    }
-
-    const updatedWifi: WifiConfig = {
-      ...config.wifiList[index],
-      ...updates,
-      linkedAccountIds: updates.linkedAccountIds
-        ? [...updates.linkedAccountIds]
-        : config.wifiList[index].linkedAccountIds,
-      id,
-    };
-
-    const validation = validateWifiConfig(updatedWifi);
-    if (!validation.valid) {
-      this.logger?.error('更新WiFi配置失败：验证失败', {
-        WiFi_ID: id,
-        错误: validation.errors.join('; '),
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
-    }
-
-    const duplicate = config.wifiList.find(
-      (wifi) => wifi.id !== id && sameFingerprint(wifi, updatedWifi)
-    );
-    if (duplicate) {
-      throw new AppError(ErrorCode.INVALID_PARAMS, '存在相同指纹的 WiFi 配置');
-    }
-
-    const updatedWifiList = [...config.wifiList];
-    updatedWifiList[index] = updatedWifi;
-    updatedWifiList.sort(compareWifiPriority);
-
-    await this.configManager.update({ wifiList: updatedWifiList });
-
-    this.logger?.success('WiFi配置更新成功', {
-      WiFi_ID: id,
-      SSID: updatedWifi.ssid,
-    });
-
-    return updatedWifi;
+    return config.wifiList.find((w) => w.id === id)!;
   }
 
-  /**
-   * 删除 WiFi 配置
-   */
   async removeWifi(id: string): Promise<void> {
-    this.logger?.info('删除WiFi配置', { WiFi_ID: id });
-
-    const config = this.assertConfigLoaded();
-    const wifiToRemove = config.wifiList.find((wifi) => wifi.id === id);
-    const updatedWifiList = config.wifiList.filter((wifi) => wifi.id !== id);
-
-    if (updatedWifiList.length === config.wifiList.length) {
-      this.logger?.error('删除WiFi配置失败：配置不存在', { WiFi_ID: id });
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
-    }
-
-    await this.configManager.update({ wifiList: updatedWifiList });
-
-    this.logger?.success('WiFi配置删除成功', {
-      WiFi_ID: id,
-      SSID: wifiToRemove?.ssid || '未知',
-      剩余WiFi数: updatedWifiList.length,
+    await this.configManager.update((current) => {
+      if (!current.wifiList.some((w) => w.id === id))
+        throw new AppError(ErrorCode.CONFIG_NOT_FOUND, 'WiFi 配置不存在');
+      return { wifiList: current.wifiList.filter((w) => w.id !== id) };
     });
   }
 

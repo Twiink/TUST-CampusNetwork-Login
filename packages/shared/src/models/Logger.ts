@@ -11,6 +11,7 @@ import {
   LogOptions,
   SystemInfo,
 } from '../types/log';
+import { redact, redactText } from '../utils/redact';
 import { generateId } from '../utils/validator';
 import { formatLogLine, formatSystemInfoText } from './log-format';
 
@@ -87,9 +88,9 @@ export class Logger {
     return {
       id: generateId(),
       level,
-      message,
+      message: redactText(message),
       timestamp: new Date(),
-      data,
+      data: redact(data),
       category: category || 'general',
       source,
     };

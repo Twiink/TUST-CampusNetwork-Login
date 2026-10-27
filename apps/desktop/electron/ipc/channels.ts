@@ -75,6 +75,7 @@ export const IPC_CHANNELS = {
  * IPC 事件名称 (从主进程推送到渲染进程)
  */
 export const IPC_EVENTS = {
+  CONFIG_CHANGED: 'event:config:changed',
   // 网络状态变化
   NETWORK_STATUS_CHANGED: 'event:network:statusChanged',
   // 网络状态加载中

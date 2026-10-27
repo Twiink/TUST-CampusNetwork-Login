@@ -40,6 +40,8 @@ describe('buildAutoAuthProfile', () => {
 
     expect(profile).toEqual({
       enabled: true,
+      revision: 0,
+      authPaused: false,
       currentAccountId: 'a1',
       accounts: [
         { id: 'a1', username: '23103421', password: 'pw1', isp: 'campus', serverUrl: '' },
@@ -123,6 +125,9 @@ describe('useAutoAuth', () => {
       message: '登录成功',
       attempts: [],
     });
+    jest
+      .mocked(NativeModules.WifiModule.getNetworkInfo)
+      .mockResolvedValue({ connected: true, ssid: 'TUST-5G', ipv4: '10.0.0.2', ipv6: null });
     const linkedAccount = baseConfig.accounts[1];
     const servicesRef = {
       current: {
@@ -142,7 +147,10 @@ describe('useAutoAuth', () => {
           getCurrentAccount: jest.fn().mockReturnValue(baseConfig.accounts[0]),
         },
         networkDetector: { checkConnectivity: jest.fn().mockResolvedValue(false) },
-        authService: { loginWithAccounts },
+        authService: {
+          loginWithAccounts,
+          runExclusive: (action: () => Promise<unknown>) => action(),
+        },
       } as unknown as MobileServices,
     };
     const addLog = jest.fn();
@@ -162,10 +170,14 @@ describe('useAutoAuth', () => {
 
     await waitFor(() => expect(loginWithAccounts).toHaveBeenCalledTimes(1));
     // 优先使用 WiFi 关联账号序列；IP 取自原生 getNetworkInfo（jest.setup 中为 10.0.0.2）
-    expect(loginWithAccounts).toHaveBeenCalledWith([linkedAccount], {
-      wlanUserIp: '10.0.0.2',
-      wlanUserIpv6: undefined,
-    });
+    expect(loginWithAccounts).toHaveBeenCalledWith(
+      [linkedAccount],
+      {
+        wlanUserIp: '10.0.0.2',
+        wlanUserIpv6: undefined,
+      },
+      { shouldContinue: expect.any(Function) }
+    );
     await waitFor(() => expect(onAuthenticated).toHaveBeenCalled());
     expect(addLog).toHaveBeenCalledWith('success', '自动认证成功: 登录成功');
     unmount();
@@ -186,7 +198,10 @@ describe('useAutoAuth', () => {
           getCurrentAccount: jest.fn().mockReturnValue(baseConfig.accounts[0]),
         },
         networkDetector: { checkConnectivity },
-        authService: { loginWithAccounts },
+        authService: {
+          loginWithAccounts,
+          runExclusive: (action: () => Promise<unknown>) => action(),
+        },
       } as unknown as MobileServices,
     };
 

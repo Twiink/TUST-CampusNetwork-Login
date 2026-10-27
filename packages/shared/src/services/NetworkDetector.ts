@@ -27,6 +27,9 @@ export type { NetworkDetectorOptions, LatencyTarget };
  * 联网探测服务类
  */
 export class NetworkDetector {
+  async isWifiEnabled(): Promise<boolean> {
+    return (await this.wifiAdapter?.isWifiEnabled?.()) ?? true;
+  }
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private isPolling = false;
   private tickInFlight = false;
@@ -150,12 +153,11 @@ export class NetworkDetector {
     const connected = connectedResult.status === 'fulfilled' ? connectedResult.value : false;
     const wifiDetails = wifiResult.status === 'fulfilled' ? wifiResult.value : null;
 
-    if (!connected || !wifiDetails) {
+    if (!wifiDetails) {
       const status: NetworkStatus = {
         connected,
         authenticated: connected,
-        wifiConnected: wifiDetails?.connected ?? false,
-        ssid: wifiDetails?.ssid,
+        wifiConnected: false,
       };
       this.logger?.debug('网络状态检测完成', {
         网络连接: connected ? '在线' : '离线',
@@ -165,7 +167,7 @@ export class NetworkDetector {
     }
 
     // 适配器已带延迟时直接复用；只有缺少延迟才额外探测。
-    const latency = wifiDetails.latency ?? (await this.measureLatency());
+    const latency = wifiDetails.latency ?? (connected ? await this.measureLatency() : undefined);
     const status: NetworkStatus = {
       connected,
       authenticated: connected,
@@ -189,7 +191,7 @@ export class NetworkDetector {
       网络连接: '在线',
       SSID: status.ssid || '未知',
       信号强度: status.signalStrength,
-      延迟: `${latency.value}ms`,
+      延迟: latency ? `${latency.value}ms` : '未探测',
     });
     return status;
   }
@@ -222,7 +224,7 @@ export class NetworkDetector {
           SSID: result.ssid,
           信号强度: `${result.signalStrength}%`,
           连接速度: `${result.linkSpeed}Mbps`,
-          延迟: `${latency.value}ms`,
+          延迟: latency ? `${latency.value}ms` : '未探测',
         });
         return result;
       }

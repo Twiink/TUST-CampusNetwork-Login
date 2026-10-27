@@ -43,7 +43,7 @@ export function buildLoginUrl(serverUrl: string, config: LoginConfig): string {
   const resolvedServerUrl = config.serverUrl || serverUrl;
   const queryString = buildQueryString(params);
 
-  return `${resolvedServerUrl}/eportal/portal/login?${queryString}`;
+  return `${resolvedServerUrl.replace(/\/$/, '')}/eportal/portal/login?${queryString}`;
 }
 
 /**
@@ -52,7 +52,7 @@ export function buildLoginUrl(serverUrl: string, config: LoginConfig): string {
  * @param _wlanUserIp 仅用于日志（参考实现的注销请求不依赖本机 IP）
  */
 export function buildLogoutUrl(serverUrl: string): string {
-  return `${serverUrl}/eportal/portal/logout`;
+  return `${serverUrl.replace(/\/$/, '')}/eportal/portal/logout`;
 }
 
 /**

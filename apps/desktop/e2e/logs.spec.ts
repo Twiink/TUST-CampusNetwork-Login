@@ -5,21 +5,21 @@ test('日志页按级别筛选日志', async ({ appWindow: window }) => {
   await openPage(window, '运行日志');
 
   // 初始展示全部级别
-  await expect(window.getByText('心跳检测正常')).toBeVisible();
-  await expect(window.getByText('登录成功')).toBeVisible();
-  await expect(window.getByText('WiFi 信号较弱')).toBeVisible();
+  await expect(window.getByText('核心服务初始化完成')).toBeVisible();
+  await expect(window.getByText('配置加载完成')).toBeVisible();
+  await expect(window.getByText('网络检测服务初始化完成')).toBeVisible();
 
   // 切换到「警告」级别后仅剩 warn 条目
-  await window.getByRole('button', { name: '警告' }).click();
+  await window.getByRole('button', { name: '成功' }).click();
 
-  await expect(window.getByText('WiFi 信号较弱')).toBeVisible();
-  await expect(window.getByText('心跳检测正常')).toHaveCount(0);
-  await expect(window.getByText('登录成功')).toHaveCount(0);
+  await expect(window.getByText('网络检测服务初始化完成')).toHaveCount(0);
+  await expect(window.getByText('核心服务初始化完成')).toHaveCount(0);
+  await expect(window.getByText('配置加载完成')).toHaveCount(0);
 });
 
 test('清除日志后展示空态并禁用导出', async ({ appWindow: window }) => {
   await openPage(window, '运行日志');
-  await expect(window.getByText('心跳检测正常')).toBeVisible();
+  await expect(window.getByText('核心服务初始化完成')).toBeVisible();
 
   await window.getByRole('button', { name: '清除日志' }).click();
 

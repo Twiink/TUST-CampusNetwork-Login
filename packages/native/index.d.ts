@@ -19,4 +19,5 @@ export interface NativeNetworkInfo {
 
 export declare function currentWifi(): NativeWifiInfo | null;
 export declare function networkInfo(): NativeNetworkInfo | null;
+export declare function scanWifi(): Promise<NativeWifiInfo[]>;
 export declare function watchNetwork(callback: () => void): boolean;

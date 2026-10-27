@@ -158,14 +158,13 @@ describe('Home', () => {
     expect(screen.getByRole('button', { name: '立即连接' })).toBeTruthy();
   });
 
-  it('认证 WiFi 无关联账号时提示配置账号', () => {
+  it('认证 WiFi 无有效关联账号时使用当前账号', () => {
     const config = makeConfig();
     config.wifiList[0].linkedAccountIds = [];
     config.wifiList[0].linkedAccountId = undefined;
     renderHome({}, config);
 
-    expect(screen.getByText('未配置账户')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '立即连接' })).toBeNull();
+    expect(screen.getByRole('button', { name: '立即连接' })).toBeTruthy();
   });
 
   it('断线、在线和认证中分别提供正确操作状态', () => {

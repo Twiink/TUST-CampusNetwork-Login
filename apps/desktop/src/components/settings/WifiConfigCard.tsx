@@ -10,6 +10,7 @@ export const WifiConfigCard: React.FC<{
   setNewWifi: React.Dispatch<React.SetStateAction<NewWifiForm>>;
   wifiError?: string | null;
   onAddWifi: () => void;
+  onEditWifi?: (id: string) => void;
   onRemoveWifi: (id: string) => void;
   onToggleAutoConnect: (id: string) => void;
 }> = ({
@@ -19,6 +20,7 @@ export const WifiConfigCard: React.FC<{
   setNewWifi,
   wifiError,
   onAddWifi,
+  onEditWifi,
   onRemoveWifi,
   onToggleAutoConnect,
 }) => {
@@ -177,6 +179,14 @@ export const WifiConfigCard: React.FC<{
                       }
                     >
                       <RefreshCw size={14} />
+                    </button>
+                    <button
+                      className="btn"
+                      type="button"
+                      aria-label={`编辑 WiFi ${wifi.ssid}`}
+                      onClick={() => onEditWifi?.(wifi.id)}
+                    >
+                      编辑
                     </button>
                     <button
                       className="btn btn-danger"

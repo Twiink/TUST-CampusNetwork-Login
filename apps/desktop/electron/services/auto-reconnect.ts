@@ -11,6 +11,8 @@ import {
   createRetryPolicy,
   createLogger,
   AccountConfig,
+  resolveLoginAccounts,
+  type ConfigManager,
 } from '@repo/shared';
 import { resolveNetworkInfo } from './network';
 
@@ -73,7 +75,8 @@ export class AutoReconnectService {
     logger: ReturnType<typeof createLogger>,
     options: Partial<AutoReconnectOptions> = {},
     callbacks: AutoReconnectCallbacks = {},
-    wifiManager?: WifiManager
+    wifiManager?: WifiManager,
+    private configManager?: ConfigManager
   ) {
     this.authService = authService;
     this.accountManager = accountManager;
@@ -120,7 +123,7 @@ export class AutoReconnectService {
     });
 
     // 如果未启用自动重连，或者正在重连中，则跳过
-    if (!this.options.enabled) {
+    if (!this.options.enabled || this.configManager?.getSettings().autoAuthPaused) {
       this.logger.debug('自动重连已禁用，跳过检测');
       this.lastStatus = status;
       return;
@@ -197,31 +200,20 @@ export class AutoReconnectService {
    * 尝试重连
    */
   private async attemptReconnect(): Promise<void> {
-    let loginAccounts: AccountConfig[] = [];
-    const currentAccount = this.accountManager.getCurrentAccount();
-    if (currentAccount) {
-      loginAccounts = [currentAccount];
-    }
-
-    if (this.lastStatus?.ssid && this.wifiManager) {
-      const wifiConfig = this.wifiManager.getWifiBySsid(this.lastStatus.ssid);
-      if (wifiConfig?.linkedAccountIds.length) {
-        const linkedAccounts = wifiConfig.linkedAccountIds
-          .map((accountId) => this.accountManager.getAccountById(accountId))
-          .filter((account): account is AccountConfig => account !== null);
-
-        if (linkedAccounts.length > 0) {
-          this.logger.info('使用 WiFi 关联账号序列进行重连', {
-            WiFi: this.lastStatus.ssid,
-            关联账号数: linkedAccounts.length,
-            首选账号: linkedAccounts[0].username,
-          });
-          loginAccounts = linkedAccounts;
-        } else {
-          this.logger.warn('WiFi 关联账号不存在，回退到当前账号', {
-            linkedAccountIds: wifiConfig.linkedAccountIds.join(', '),
-          });
-        }
+    const config = this.configManager?.getConfig();
+    let loginAccounts: AccountConfig[] = config
+      ? resolveLoginAccounts(config, this.lastStatus?.ssid)
+      : [];
+    if (!config) {
+      const linked = this.lastStatus?.ssid
+        ? (this.wifiManager?.getWifiBySsid(this.lastStatus.ssid)?.linkedAccountIds ?? [])
+        : [];
+      loginAccounts = linked
+        .map((id) => this.accountManager.getAccountById(id))
+        .filter((a): a is AccountConfig => !!a);
+      if (!loginAccounts.length) {
+        const current = this.accountManager.getCurrentAccount();
+        if (current) loginAccounts = [current];
       }
     }
 
@@ -259,6 +251,8 @@ export class AutoReconnectService {
 
     try {
       await retryPolicy.execute(async () => {
+        if (!this.options.enabled || this.configManager?.getSettings().autoAuthPaused)
+          return { success: false };
         this.logger.debug('获取网络信息');
         const networkInfo = await resolveNetworkInfo();
         if (!networkInfo.ipv4) {
@@ -272,11 +266,20 @@ export class AutoReconnectService {
           MAC: networkInfo.mac || '无',
         });
 
-        const result = await this.authService.loginWithAccounts(loginAccounts, {
-          wlanUserIp: networkInfo.ipv4,
-          wlanUserIpv6: networkInfo.ipv6 || undefined,
-          wlanUserMac: networkInfo.mac || undefined,
-        });
+        const result = await this.authService.runExclusive(() =>
+          this.authService.loginWithAccounts(
+            loginAccounts,
+            {
+              wlanUserIp: networkInfo.ipv4!,
+              wlanUserIpv6: networkInfo.ipv6 || undefined,
+              wlanUserMac: networkInfo.mac || undefined,
+            },
+            {
+              shouldContinue: () =>
+                this.options.enabled && !this.configManager?.getSettings().autoAuthPaused,
+            }
+          )
+        );
 
         if (!result.success) {
           this.logger.warn('登录请求失败', { 消息: result.message });
@@ -291,6 +294,7 @@ export class AutoReconnectService {
         return result;
       });
 
+      if (!this.options.enabled || this.configManager?.getSettings().autoAuthPaused) return;
       this.logger.log('success', '===== 自动重连成功 =====', {
         category: 'network',
         source: 'AutoReconnect',
@@ -394,7 +398,8 @@ export function createAutoReconnectService(
   logger: ReturnType<typeof createLogger>,
   options?: Partial<AutoReconnectOptions>,
   callbacks?: AutoReconnectCallbacks,
-  wifiManager?: WifiManager
+  wifiManager?: WifiManager,
+  configManager?: ConfigManager
 ): AutoReconnectService {
   return new AutoReconnectService(
     authService,
@@ -402,6 +407,7 @@ export function createAutoReconnectService(
     logger,
     options,
     callbacks,
-    wifiManager
+    wifiManager,
+    configManager
   );
 }

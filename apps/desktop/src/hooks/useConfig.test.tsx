@@ -7,8 +7,12 @@ describe('useConfig', () => {
   const initial = createDefaultAppConfig();
 
   beforeEach(() => {
-    vi.mocked(window.electronAPI.config.get).mockResolvedValue(initial);
-    vi.mocked(window.electronAPI.config.set).mockResolvedValue(true);
+    let stored = initial;
+    vi.mocked(window.electronAPI.config.get).mockImplementation(async () => stored);
+    vi.mocked(window.electronAPI.config.set).mockImplementation(async (next) => {
+      stored = next;
+      return true;
+    });
     vi.mocked(window.electronAPI.config.reset).mockResolvedValue(initial);
   });
 

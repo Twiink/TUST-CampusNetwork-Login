@@ -49,7 +49,10 @@ function createService(
       attempts: [],
     }
   );
-  const authService = { loginWithAccounts } as never;
+  const authService = {
+    loginWithAccounts,
+    runExclusive: <T>(action: () => Promise<T>) => action(),
+  } as never;
 
   const currentAccount =
     overrides.currentAccount === undefined

@@ -26,6 +26,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   heartbeatIntervalSeconds: 30,
   heartbeatFailureThreshold: 3,
   autoReconnect: true,
+  autoAuthPaused: false,
   wifiReconnectRetries: 3,
   wifiReconnectCooldownMinutes: 5,
   startupAutoConnect: false,

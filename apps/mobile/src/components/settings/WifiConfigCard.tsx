@@ -15,8 +15,22 @@ export const WifiConfigCard: React.FC<{
   setNewWifi: React.Dispatch<React.SetStateAction<NewWifiForm>>;
   error?: string | null;
   onAddWifi: () => void;
+  onEditWifi?: (id: string) => void;
+  onConnectWifi?: (id: string) => void;
+  onToggleAutoConnect?: (id: string) => void;
   onRemoveWifi: (id: string) => void;
-}> = ({ wifiList, accounts, newWifi, setNewWifi, error, onAddWifi, onRemoveWifi }) => {
+}> = ({
+  wifiList,
+  accounts,
+  newWifi,
+  setNewWifi,
+  error,
+  onAddWifi,
+  onRemoveWifi,
+  onEditWifi,
+  onConnectWifi,
+  onToggleAutoConnect,
+}) => {
   const { theme } = useTheme();
   return (
     <GlassView style={styles.card}>
@@ -115,6 +129,27 @@ export const WifiConfigCard: React.FC<{
                     </Text>
                   )}
                 </View>
+                <View>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`编辑 WiFi ${wifi.ssid}`}
+                    onPress={() => onEditWifi?.(wifi.id)}
+                  >
+                    <Text style={{ color: theme.colors.text }}>编辑</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityRole="button"
+                    accessibilityLabel={`连接 WiFi ${wifi.ssid}`}
+                    onPress={() => onConnectWifi?.(wifi.id)}
+                  >
+                    <Text style={{ color: theme.colors.text }}>连接</Text>
+                  </TouchableOpacity>
+                  <Switch
+                    accessibilityLabel={`自动连接 ${wifi.ssid}`}
+                    value={wifi.autoConnect}
+                    onValueChange={() => onToggleAutoConnect?.(wifi.id)}
+                  />
+                </View>
                 <TouchableOpacity
                   style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                   onPress={() => onRemoveWifi(wifi.id)}
@@ -142,6 +177,8 @@ export const WifiConfigCard: React.FC<{
               color: theme.colors.text,
             },
           ]}
+          testID="add-ssid"
+          accessibilityLabel="add-ssid"
           value={newWifi.ssid}
           onChangeText={t => setNewWifi({ ...newWifi, ssid: t })}
           placeholder="请输入 WiFi 名称"
@@ -160,6 +197,8 @@ export const WifiConfigCard: React.FC<{
               color: theme.colors.text,
             },
           ]}
+          testID="add-wifi-password"
+          accessibilityLabel="add-wifi-password"
           value={newWifi.password}
           onChangeText={t => setNewWifi({ ...newWifi, password: t })}
           placeholder="请输入 WiFi 密码（可选）"

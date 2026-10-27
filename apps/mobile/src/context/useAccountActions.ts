@@ -13,8 +13,9 @@ interface UseAccountActionsOptions {
   setAccounts: React.Dispatch<React.SetStateAction<AccountConfig[]>>;
   setCurrentAccount: React.Dispatch<React.SetStateAction<AccountConfig | null>>;
   addLog: (level: 'info' | 'success' | 'warn' | 'error', message: string) => void;
-  /** 账户管理器已经把变更持久化到 ConfigManager，这里只同步 React 状态。 */
-  syncConfigState?: () => void;
+  commitAction?: <T>(action: () => Promise<T>) => Promise<T>;
+  /** 等待后台确认后再发布状态。 */
+  syncConfigState?: () => void | Promise<void>;
 }
 
 export function useAccountActions({
@@ -25,27 +26,38 @@ export function useAccountActions({
   setCurrentAccount,
   addLog,
   syncConfigState,
+  commitAction,
 }: UseAccountActionsOptions) {
+  const commit = useCallback(
+    async <T>(action: () => Promise<T>): Promise<T> => {
+      if (commitAction) return commitAction(action);
+      const result = await action();
+      await syncConfigState?.();
+      return result;
+    },
+    [commitAction, syncConfigState]
+  );
   const addAccount = useCallback(
     async (account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
       if (!servicesRef.current) {
         throw new Error('服务未初始化');
       }
 
-      const newAccount = await servicesRef.current.accountManager.addAccount(account);
-      setAccounts(prev => [...prev, newAccount]);
+      const newAccount = await commit(() =>
+        servicesRef.current!.accountManager.addAccount(account)
+      );
+      if (!commitAction) setAccounts(prev => [...prev, newAccount]);
 
       // 如果是第一个账户，自动设为当前账户
-      if (accounts.length === 0) {
-        await servicesRef.current.accountManager.switchAccount(newAccount.id);
+      if (!commitAction && accounts.length === 0) {
+        await commit(() => servicesRef.current!.accountManager.switchAccount(newAccount.id));
         setCurrentAccount(newAccount);
       }
 
-      syncConfigState?.();
       addLog('success', `添加账户: ${newAccount.username}`);
       return newAccount;
     },
-    [accounts.length, addLog, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
+    [accounts.length, addLog, servicesRef, setAccounts, setCurrentAccount, commit, commitAction]
   );
 
   const updateAccount = useCallback(
@@ -54,18 +66,19 @@ export function useAccountActions({
         throw new Error('服务未初始化');
       }
 
-      const updated = await servicesRef.current.accountManager.updateAccount(id, updates);
-      setAccounts(prev => prev.map(a => (a.id === id ? updated : a)));
+      const updated = await commit(() =>
+        servicesRef.current!.accountManager.updateAccount(id, updates)
+      );
+      if (!commitAction) setAccounts(prev => prev.map(a => (a.id === id ? updated : a)));
 
-      if (currentAccount?.id === id) {
+      if (!commitAction && currentAccount?.id === id) {
         setCurrentAccount(updated);
       }
 
-      syncConfigState?.();
       addLog('info', `更新账户: ${updated.username}`);
       return updated;
     },
-    [addLog, currentAccount?.id, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
+    [addLog, currentAccount?.id, servicesRef, setAccounts, setCurrentAccount, commit, commitAction]
   );
 
   const removeAccount = useCallback(
@@ -75,14 +88,15 @@ export function useAccountActions({
       }
 
       const account = servicesRef.current.accountManager.getAccountById(id);
-      await servicesRef.current.accountManager.removeAccount(id);
-      setAccounts(prev => prev.filter(a => a.id !== id));
-      setCurrentAccount(servicesRef.current.accountManager.getCurrentAccount());
+      await commit(() => servicesRef.current!.accountManager.removeAccount(id));
+      if (!commitAction) {
+        setAccounts(prev => prev.filter(a => a.id !== id));
+        setCurrentAccount(servicesRef.current.accountManager.getCurrentAccount());
+      }
 
-      syncConfigState?.();
       addLog('warn', `删除账户: ${account?.username || id}`);
     },
-    [addLog, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
+    [addLog, servicesRef, setAccounts, setCurrentAccount, commit, commitAction]
   );
 
   const switchAccount = useCallback(
@@ -91,14 +105,13 @@ export function useAccountActions({
         throw new Error('服务未初始化');
       }
 
-      await servicesRef.current.accountManager.switchAccount(id);
+      await commit(() => servicesRef.current!.accountManager.switchAccount(id));
       const account = servicesRef.current.accountManager.getAccountById(id);
-      setCurrentAccount(account);
+      if (!commitAction) setCurrentAccount(account);
 
-      syncConfigState?.();
       addLog('info', `切换到账户: ${account?.username || id}`);
     },
-    [addLog, servicesRef, setCurrentAccount, syncConfigState]
+    [addLog, servicesRef, setCurrentAccount, commit, commitAction]
   );
 
   return { addAccount, updateAccount, removeAccount, switchAccount };

@@ -98,7 +98,8 @@ export async function executeAutoReconnect(
     wifiManager.getWifiConfigs().map((w) => ({
       ssid: w.ssid,
       password: w.password,
-      priority: w.priority || 10,
+      priority: w.priority ?? 10,
+      security: w.security,
     }))
   );
 
@@ -203,7 +204,8 @@ export async function executeStartupAutoConnect(
     wifiManager.getWifiConfigs().map((w) => ({
       ssid: w.ssid,
       password: w.password,
-      priority: w.priority || 10,
+      priority: w.priority ?? 10,
+      security: w.security,
     }))
   );
   try {

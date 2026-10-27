@@ -246,11 +246,13 @@ describe('NetworkDetector', () => {
       vi.fn().mockResolvedValue(createFetchResponse(200, '<html>portal</html>'))
     );
 
-    await expect(detector.getCurrentWifiStatus()).resolves.toEqual({
+    await expect(detector.getCurrentWifiStatus()).resolves.toMatchObject({
       connected: false,
       authenticated: false,
       wifiConnected: true,
       ssid: 'TUST-WIFI',
+      ip: '10.1.2.3',
+      gateway: '10.1.0.1',
     });
   });
 

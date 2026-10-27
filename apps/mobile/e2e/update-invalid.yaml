@@ -1,0 +1,11 @@
+appId: com.netmate.app.e2e
+---
+- launchApp
+- tapOn: '配置设置'
+- scrollUntilVisible: { element: '检查更新', direction: DOWN }
+- tapOn: '检查更新'
+- tapOn: '下载更新'
+- extendedWaitUntil:
+    visible: 'APK 签名不匹配'
+    timeout: 90000
+- assertVisible: '重试下载'

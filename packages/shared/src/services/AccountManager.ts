@@ -1,7 +1,3 @@
-/**
- * 账户管理服务
- */
-
 import { AccountConfig } from '../types/config';
 import {
   validateAccountConfig,
@@ -13,286 +9,115 @@ import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
 import type { Logger } from '../models/Logger';
 
-/**
- * 账户管理服务类
- */
 export class AccountManager {
-  private logger: Logger | null;
-
   constructor(
     private configManager: ConfigManager,
-    logger?: Logger
-  ) {
-    this.logger = logger || null;
-  }
-
-  /**
-   * 获取所有账户
-   */
+    private logger?: Logger
+  ) {}
   getAccounts(): AccountConfig[] {
-    const config = this.configManager.getConfig();
-    return config?.accounts || [];
+    return this.configManager.getConfig()?.accounts ?? [];
   }
-
-  /**
-   * 获取当前账户
-   */
-  getCurrentAccount(): AccountConfig | null {
-    const config = this.configManager.getConfig();
-    if (!config || !config.currentAccountId) {
-      return null;
-    }
-    return config.accounts.find((a) => a.id === config.currentAccountId) || null;
-  }
-
-  /**
-   * 获取当前账户 ID
-   */
   getCurrentAccountId(): string | null {
-    const config = this.configManager.getConfig();
-    return config?.currentAccountId || null;
+    return this.configManager.getConfig()?.currentAccountId ?? null;
   }
-
-  /**
-   * 根据 ID 获取账户
-   */
   getAccountById(id: string): AccountConfig | null {
-    const accounts = this.getAccounts();
-    return accounts.find((a) => a.id === id) || null;
+    return this.getAccounts().find((a) => a.id === id) ?? null;
+  }
+  getCurrentAccount(): AccountConfig | null {
+    return this.getAccountById(this.getCurrentAccountId() ?? '');
+  }
+  getAccountCount(): number {
+    return this.getAccounts().length;
+  }
+  hasAccounts(): boolean {
+    return this.getAccountCount() > 0;
   }
 
-  /**
-   * 添加账户
-   */
-  async addAccount(account: Omit<AccountConfig, 'id'> & { id?: string }): Promise<AccountConfig> {
-    this.logger?.info('添加新账户', {
-      用户名: account.username,
-      运营商: account.isp,
-      服务器: account.serverUrl,
-    });
+  private assertLoaded(): void {
+    if (!this.configManager.getConfig())
+      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
+  }
 
-    const username = account.username.trim();
-    const newAccount: AccountConfig = {
+  private checked(account: AccountConfig): AccountConfig {
+    const next = {
+      ...account,
+      username: account.username.trim(),
+      name: account.name.trim() || account.username.trim(),
+      serverUrl: account.serverUrl.trim(),
+    };
+    const result = validateAccountConfig(next);
+    if (!result.valid) throw new AppError(ErrorCode.INVALID_PARAMS, result.errors.join('; '));
+    return next;
+  }
+
+  async addAccount(account: Omit<AccountConfig, 'id'> & { id?: string }): Promise<AccountConfig> {
+    this.assertLoaded();
+    const next = this.checked({
       ...createDefaultAccountConfig(),
       ...account,
       id: account.id?.trim() || generateId(),
-      name: account.name.trim() || username,
-      username,
-      serverUrl: account.serverUrl.trim(),
-    };
-
-    const validation = validateAccountConfig(newAccount);
-    if (!validation.valid) {
-      this.logger?.error('添加账户失败：验证失败', {
-        错误: validation.errors.join('; '),
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
-    }
-
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('添加账户失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    // 检查是否已存在相同用户名的账户
-    const exists = config.accounts.find((a) => a.username === newAccount.username);
-    if (exists) {
-      this.logger?.error('添加账户失败：该用户名已存在', {
-        用户名: newAccount.username,
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
-    }
-
-    const updatedAccounts = [...config.accounts, newAccount];
-
-    // 如果是第一个账户，自动设为当前账户
-    const currentAccountId = config.currentAccountId || newAccount.id;
-    const isFirstAccount = !config.currentAccountId;
-
-    await this.configManager.update({
-      accounts: updatedAccounts,
-      currentAccountId,
     });
-
-    this.logger?.success('账户添加成功', {
-      账户ID: newAccount.id,
-      用户名: newAccount.username,
-      是否首个账户: isFirstAccount ? '是' : '否',
-      是否设为当前账户: isFirstAccount ? '是' : '否',
-      账户总数: updatedAccounts.length,
+    await this.configManager.update((current) => {
+      if (current.accounts.some((a) => a.username === next.username || a.id === next.id))
+        throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
+      return {
+        accounts: [...current.accounts, next],
+        currentAccountId: current.currentAccountId || next.id,
+      };
     });
-
-    return newAccount;
+    this.logger?.success('账户添加成功', { 账户ID: next.id });
+    return next;
   }
 
-  /**
-   * 更新账户
-   */
   async updateAccount(
     id: string,
     updates: Partial<Omit<AccountConfig, 'id'>>
   ): Promise<AccountConfig> {
-    this.logger?.info('更新账户', {
-      账户ID: id,
-      更新字段: Object.keys(updates).join(', '),
+    this.assertLoaded();
+    const result = await this.configManager.update((current) => {
+      const previous = current.accounts.find((a) => a.id === id);
+      if (!previous) throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
+      const next = this.checked({ ...previous, ...updates, id });
+      if (current.accounts.some((a) => a.id !== id && a.username === next.username))
+        throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
+      return { accounts: current.accounts.map((a) => (a.id === id ? next : a)) };
     });
-
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('更新账户失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    const index = config.accounts.findIndex((a) => a.id === id);
-    if (index === -1) {
-      this.logger?.error('更新账户失败：账户不存在', { 账户ID: id });
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
-    }
-
-    const updatedAccount: AccountConfig = {
-      ...config.accounts[index],
-      ...updates,
-      id, // 确保 ID 不变
-    };
-    updatedAccount.username = updatedAccount.username.trim();
-    updatedAccount.name = updatedAccount.name.trim() || updatedAccount.username;
-    updatedAccount.serverUrl = updatedAccount.serverUrl.trim();
-
-    const duplicate = config.accounts.find(
-      (account) => account.id !== id && account.username === updatedAccount.username
-    );
-    if (duplicate) {
-      this.logger?.error('更新账户失败：该用户名已存在', {
-        用户名: updatedAccount.username,
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
-    }
-
-    const validation = validateAccountConfig(updatedAccount);
-    if (!validation.valid) {
-      this.logger?.error('更新账户失败：验证失败', {
-        账户ID: id,
-        错误: validation.errors.join('; '),
-      });
-      throw new AppError(ErrorCode.INVALID_PARAMS, validation.errors.join('; '));
-    }
-
-    const updatedAccounts = [...config.accounts];
-    updatedAccounts[index] = updatedAccount;
-
-    await this.configManager.update({ accounts: updatedAccounts });
-
-    this.logger?.success('账户更新成功', {
-      账户ID: id,
-      用户名: updatedAccount.username,
-    });
-
-    return updatedAccount;
+    this.logger?.info('账户更新成功', { 账户ID: id });
+    return result.accounts.find((a) => a.id === id)!;
   }
 
-  /**
-   * 删除账户
-   */
   async removeAccount(id: string): Promise<void> {
-    this.logger?.info('删除账户', { 账户ID: id });
-
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('删除账户失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    const accountToRemove = config.accounts.find((a) => a.id === id);
-    const updatedAccounts = config.accounts.filter((a) => a.id !== id);
-
-    if (updatedAccounts.length === config.accounts.length) {
-      this.logger?.error('删除账户失败：账户不存在', { 账户ID: id });
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
-    }
-
-    // 如果删除的是当前账户，切换到第一个账户
-    let currentAccountId = config.currentAccountId;
-    const isCurrentAccount = currentAccountId === id;
-    if (isCurrentAccount) {
-      currentAccountId = updatedAccounts.length > 0 ? updatedAccounts[0].id : null;
-    }
-
-    // 保留 WiFi 配置，但移除对已删除账号的引用；剩下无关联账号时由界面提示重新关联。
-    const updatedWifiList = config.wifiList.map((wifi) => {
-      if (!wifi.linkedAccountIds.includes(id) && wifi.linkedAccountId !== id) {
-        return wifi;
-      }
-
-      return normalizeWifiConfig({
-        ...wifi,
-        linkedAccountIds: wifi.linkedAccountIds.filter((accountId) => accountId !== id),
-        linkedAccountId: undefined,
-      });
+    this.assertLoaded();
+    await this.configManager.update((current) => {
+      if (!current.accounts.some((a) => a.id === id))
+        throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
+      const accounts = current.accounts.filter((a) => a.id !== id);
+      return {
+        accounts,
+        currentAccountId:
+          current.currentAccountId === id ? (accounts[0]?.id ?? null) : current.currentAccountId,
+        wifiList: current.wifiList.map((w) =>
+          normalizeWifiConfig({
+            ...w,
+            linkedAccountIds: w.linkedAccountIds.filter((a) => a !== id),
+            linkedAccountId: undefined,
+          })
+        ),
+      };
     });
-
-    await this.configManager.update({
-      accounts: updatedAccounts,
-      currentAccountId,
-      wifiList: updatedWifiList,
-    });
-
-    this.logger?.success('账户删除成功', {
-      账户ID: id,
-      用户名: accountToRemove?.username || '未知',
-      是否为当前账户: isCurrentAccount ? '是' : '否',
-      新当前账户: currentAccountId || '无',
-      剩余账户数: updatedAccounts.length,
-    });
+    this.logger?.info('账户删除成功', { 账户ID: id });
   }
 
-  /**
-   * 切换当前账户
-   */
   async switchAccount(id: string): Promise<AccountConfig> {
-    this.logger?.info('切换当前账户', { 目标账户ID: id });
-
-    const config = this.configManager.getConfig();
-    if (!config) {
-      this.logger?.error('切换账户失败：配置未加载');
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '配置未加载');
-    }
-
-    const account = config.accounts.find((a) => a.id === id);
-    if (!account) {
-      this.logger?.error('切换账户失败：账户不存在', { 账户ID: id });
-      throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
-    }
-
-    await this.configManager.update({ currentAccountId: id });
-
-    this.logger?.success('账户切换成功', {
-      新账户ID: id,
-      用户名: account.username,
-      运营商: account.isp,
+    this.assertLoaded();
+    const config = await this.configManager.update((current) => {
+      if (!current.accounts.some((a) => a.id === id))
+        throw new AppError(ErrorCode.CONFIG_NOT_FOUND, '账户不存在');
+      return { currentAccountId: id };
     });
-
-    return account;
-  }
-
-  /**
-   * 获取账户数量
-   */
-  getAccountCount(): number {
-    return this.getAccounts().length;
-  }
-
-  /**
-   * 检查是否有账户
-   */
-  hasAccounts(): boolean {
-    return this.getAccountCount() > 0;
+    return config.accounts.find((a) => a.id === id)!;
   }
 }
-
-/**
- * 创建账户管理服务实例
- */
 export function createAccountManager(
   configManager: ConfigManager,
   logger?: Logger

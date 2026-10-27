@@ -33,7 +33,9 @@ object AutoAuthStore {
     fun saveProfile(context: Context, json: String): AutoAuthProfile {
         // 先解析校验，非法 JSON 不落盘
         val profile = AutoAuthProfile.fromJson(json)
-        prefs(context).edit().putString(KEY_PROFILE, encrypt(json)).apply()
+        val previous = loadProfile(context)
+        require(previous == null || profile.revision >= previous.revision) { "Stale configuration revision" }
+        check(prefs(context).edit().putString(KEY_PROFILE, encrypt(json)).commit()) { "Configuration persistence failed" }
         cachedProfile = profile
         return profile
     }
@@ -50,6 +52,24 @@ object AutoAuthStore {
             null
         }
     }
+
+    @Synchronized fun pause(context: Context) {
+        val stored = prefs(context).getString(KEY_PROFILE, null) ?: return
+        val previous = loadProfile(context) ?: return
+        if (previous.authPaused) return
+        val json = JSONObject(decrypt(stored)).put("authPaused", true).put("revision", previous.revision + 1).toString()
+        saveProfile(context, json)
+    }
+    @Synchronized fun resume(context: Context) {
+        val previous = loadProfile(context) ?: return
+        if (!previous.authPaused) return
+        val json = JSONObject(decrypt(prefs(context).getString(KEY_PROFILE, null)!!)).put("authPaused", false).put("revision", previous.revision + 1)
+        saveProfile(context, json.toString())
+    }
+    fun saveSession(context: Context, server: String) { prefs(context).edit().putString("session_server", server).commit() }
+    fun sessionServer(context: Context): String? = prefs(context).getString("session_server", null)
+    fun pendingSsid(context: Context): String? = prefs(context).getString("pending_wifi", null)
+    fun savePendingSsid(context: Context, ssid: String?) { prefs(context).edit().putString("pending_wifi", ssid).apply() }
 
     fun saveLastResult(context: Context, result: AutoAuthResult) {
         prefs(context).edit().putString(KEY_LAST_RESULT, result.toJson().toString()).apply()
@@ -114,6 +134,7 @@ data class AutoAuthResult(
     val username: String?,
     val attempts: Int,
     val timestamp: Long,
+    val networkKey: String? = null,
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("success", success)
@@ -122,6 +143,7 @@ data class AutoAuthResult(
         .put("username", username ?: JSONObject.NULL)
         .put("attempts", attempts)
         .put("timestamp", timestamp)
+        .put("networkKey", networkKey ?: JSONObject.NULL)
 
     companion object {
         fun fromJson(json: JSONObject) = AutoAuthResult(
@@ -131,6 +153,7 @@ data class AutoAuthResult(
             username = if (json.isNull("username")) null else json.optString("username"),
             attempts = json.optInt("attempts", 0),
             timestamp = json.getLong("timestamp"),
+            networkKey = if (json.isNull("networkKey")) null else json.optString("networkKey"),
         )
     }
 }

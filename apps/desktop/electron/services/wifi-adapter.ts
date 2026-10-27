@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 /**
  * 桌面端 WiFi 适配器实现
  * 支持 Windows、macOS 和 Linux
@@ -68,7 +69,9 @@ function hasAnyNetworkValue(info: NetworkInfo | NativeNetworkSnapshot | null): b
 function normalizeMac(mac?: string | null): string | undefined {
   if (!mac) return undefined;
   const normalized = mac.replace(/[:-]/g, '').toLowerCase();
-  return normalized && normalized !== '000000000000' ? normalized : undefined;
+  return /^[0-9a-f]{12}$/.test(normalized) && normalized !== '000000000000'
+    ? normalized
+    : undefined;
 }
 
 function loadNativeModule() {
@@ -236,6 +239,10 @@ export class DesktopWifiAdapter implements WifiAdapter {
   /**
    * 获取网络配置信息
    */
+  async isWifiEnabled(): Promise<boolean> {
+    return (await import('./wifi-switcher')).isWifiRadioEnabled();
+  }
+
   async getNetworkInfo(): Promise<NetworkInfo> {
     const now = Date.now();
     if (now - this.networkSnapshotAt < NETWORK_INTERFACE_TTL_MS) {
@@ -249,14 +256,43 @@ export class DesktopWifiAdapter implements WifiAdapter {
       const native = loadNativeModule();
       const nativeInfo: NativeNetworkSnapshot | null = native?.networkInfo?.() ?? null;
       if (hasAnyNetworkValue(nativeInfo) && nativeInfo) {
-        return {
-          ipv4: nativeInfo.ipv4 || undefined,
-          ipv6: nativeInfo.ipv6 || undefined,
+        const snapshot: NetworkInfo = {
+          ipv4:
+            typeof nativeInfo.ipv4 === 'string' && isIP(nativeInfo.ipv4) == 4
+              ? nativeInfo.ipv4
+              : undefined,
+          ipv6:
+            typeof nativeInfo.ipv6 === 'string' && isIP(nativeInfo.ipv6) == 6
+              ? nativeInfo.ipv6
+              : undefined,
           mac: normalizeMac(nativeInfo.mac),
-          gateway: nativeInfo.gateway || undefined,
-          dns: nativeInfo.dns?.filter(Boolean) ?? undefined,
-          subnetMask: nativeInfo.subnetMask || undefined,
+          gateway:
+            typeof nativeInfo.gateway === 'string' && isIP(nativeInfo.gateway) == 4
+              ? nativeInfo.gateway
+              : undefined,
+          dns: Array.isArray(nativeInfo.dns)
+            ? nativeInfo.dns.filter((value) => typeof value === 'string' && isIP(value) !== 0)
+            : undefined,
+          subnetMask:
+            typeof nativeInfo.subnetMask === 'string' && isIP(nativeInfo.subnetMask) == 4
+              ? nativeInfo.subnetMask
+              : undefined,
         };
+        if (
+          !snapshot.ipv4 ||
+          !snapshot.gateway ||
+          !snapshot.subnetMask ||
+          !snapshot.mac ||
+          !snapshot.dns?.length
+        ) {
+          const fallback = await this.resolveFallbackNetworkInfo();
+          for (const key of ['ipv4', 'ipv6', 'mac', 'gateway', 'subnetMask', 'dns'] as const) {
+            if (!snapshot[key] || (Array.isArray(snapshot[key]) && !snapshot[key]?.length)) {
+              Object.assign(snapshot, { [key]: fallback[key] });
+            }
+          }
+        }
+        return snapshot;
       }
       return this.resolveFallbackNetworkInfo();
     })();

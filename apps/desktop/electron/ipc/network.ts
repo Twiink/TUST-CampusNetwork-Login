@@ -1,3 +1,4 @@
+import { runtimePorts } from '../runtime-ports';
 /**
  * 网络相关 IPC 处理
  */
@@ -43,7 +44,7 @@ export function registerNetworkIPC(
    * 获取网络信息 (IP/MAC)
    */
   ipcMain.handle(IPC_CHANNELS.NETWORK_INFO, async () => {
-    const info = getNetworkInfo();
+    const info = runtimePorts.wifi ? await runtimePorts.wifi.getNetworkInfo() : getNetworkInfo();
     return info;
   });
 
@@ -67,7 +68,9 @@ export function registerNetworkIPC(
    */
   ipcMain.handle(IPC_CHANNELS.WIFI_CURRENT_SSID, async () => {
     try {
-      const wifi = await getCurrentWifiSSID();
+      const wifi = runtimePorts.wifi
+        ? await runtimePorts.wifi.getCurrentWifi()
+        : await getCurrentWifiSSID();
       return wifi;
     } catch (error) {
       logger.error('IPC错误：获取WiFi SSID失败', {
@@ -82,7 +85,12 @@ export function registerNetworkIPC(
    */
   ipcMain.handle(IPC_CHANNELS.WIFI_FULL_INFO, async () => {
     try {
-      const fullInfo = await getFullNetworkInfo();
+      const fullInfo = runtimePorts.wifi
+        ? {
+            ...(await runtimePorts.wifi.getNetworkInfo()),
+            wifi: await runtimePorts.wifi.getCurrentWifi(),
+          }
+        : await getFullNetworkInfo();
       return fullInfo;
     } catch (error) {
       logger.error('IPC错误：获取完整网络信息失败', {

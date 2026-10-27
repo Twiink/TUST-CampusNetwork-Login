@@ -11,7 +11,7 @@ describe('createElectronLaunchOptions', () => {
     expect(options.args).toEqual([
       '--no-sandbox',
       '--disable-dev-shm-usage',
-      path.join('/tmp/netmate/e2e', 'electron-main.mjs'),
+      path.join('/tmp/netmate', 'dist-e2e', 'e2e-main.js'),
     ]);
     expect(options.cwd).toBe(path.join('/tmp/netmate/e2e', '..'));
     expect(options.env.NETMATE_E2E).toBe('1');
@@ -21,7 +21,7 @@ describe('createElectronLaunchOptions', () => {
   it('当不是 Linux 且未处于 CI 时不应附加无沙箱参数', () => {
     const options = createElectronLaunchOptions('/tmp/netmate/e2e', 'darwin', {});
 
-    expect(options.args).toEqual([path.join('/tmp/netmate/e2e', 'electron-main.mjs')]);
+    expect(options.args).toEqual([path.join('/tmp/netmate', 'dist-e2e', 'e2e-main.js')]);
     expect(options.env.NETMATE_E2E).toBe('1');
     expect(options.env.ELECTRON_DISABLE_SANDBOX).toBeUndefined();
   });

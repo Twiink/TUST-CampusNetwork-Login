@@ -124,6 +124,7 @@ class BackgroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        AutoAuthEngine.stopReconnect(this)
         stopEverything()
         AutoAuthEngine.removeListener(resultListener)
         super.onDestroy()
@@ -244,9 +245,9 @@ class BackgroundService : Service() {
         connectivityManager.registerNetworkCallback(request, callback)
         networkCallback = callback
 
-        val activeNetwork = connectivityManager.activeNetwork
-        wifiConnected = connectivityManager.getNetworkCapabilities(activeNetwork)
-            ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val snapshot = com.netmate.app.auth.WifiEnvironment.snapshot(this)
+        wifiConnected = snapshot.connected
+        currentSsid = snapshot.ssid
         refreshNotification()
     }
 

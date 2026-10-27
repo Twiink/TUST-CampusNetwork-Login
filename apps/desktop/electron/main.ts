@@ -1,14 +1,16 @@
+import { existsSync } from 'node:fs';
+import { runtimePorts } from './runtime-ports';
 import { app, BrowserWindow, powerMonitor } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { resolveNetworkInfo } from './services/network';
+import { manualLogin, manualLogout } from './services/auth-session';
 import { createTrayService, TrayService } from './services/tray';
 import { createAutoReconnectService, AutoReconnectService } from './services/auto-reconnect';
 import { createAutoLaunchService, AutoLaunchService } from './services/auto-launch';
 import { createNotificationService, NotificationService } from './services/notification';
 import { createUpdaterService, UpdaterService } from './services/updater';
-import { createWifiSwitcherService, WifiSwitcherService } from './services/wifi-switcher';
+import { WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
 import type { FileLogger } from './services/file-logger';
 import type { AppConfig, AppSettings } from '@repo/shared';
@@ -48,7 +50,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : RENDERER_DIST;
 
-const IS_E2E_TEST = process.env['NETMATE_E2E'] === '1';
+const IS_E2E_TEST = runtimePorts.headlessShell === true;
 
 // WiFi SSID 轮询间隔：前台正常检测，后台（隐藏到托盘）降频以减少常驻 CPU/进程开销
 const WIFI_CHECK_INTERVAL_FOREGROUND = 5000;
@@ -67,6 +69,7 @@ let fileLogger: FileLogger | null = null;
 let forceQuit = false;
 let createWindow: (() => BrowserWindow) | null = null;
 let destroyHiddenWindowTimer: ReturnType<typeof setTimeout> | null = null;
+let appliedWifiConfig = '';
 let appliedSettings: AppSettings | null = null;
 
 function heartbeatIntervalMs(settings: AppSettings): number {
@@ -86,15 +89,29 @@ function applyConfigChange(config: AppConfig): void {
   notificationService?.setEventSettings(settings.notificationSettings);
 
   autoReconnectService?.setOptions({
-    enabled: settings.autoReconnect,
+    enabled: settings.autoReconnect && !settings.autoAuthPaused,
     failureThreshold: settings.heartbeatFailureThreshold,
   });
 
   wifiSwitcherService?.setConfiguredNetworks(
-    config.wifiList.map((w) => ({ ssid: w.ssid, password: w.password, priority: w.priority || 10 }))
+    config.wifiList.map((w) => ({
+      ssid: w.ssid,
+      password: w.password,
+      priority: w.priority ?? 10,
+      security: w.security,
+    }))
   );
   // 新 WiFi/新密码/新冷却设置可以立即尝试
-  wifiEventListener?.resetCooldown();
+  const wifiKey = JSON.stringify([
+    settings.autoReconnect,
+    settings.wifiReconnectRetries,
+    settings.wifiReconnectCooldownMinutes,
+    config.wifiList,
+  ]);
+  if (wifiKey !== appliedWifiConfig) {
+    appliedWifiConfig = wifiKey;
+    wifiEventListener?.resetCooldown();
+  }
 
   if (previous && previous.autoLaunch !== settings.autoLaunch && autoLaunchService) {
     const toggle = settings.autoLaunch ? autoLaunchService.enable() : autoLaunchService.disable();
@@ -212,25 +229,34 @@ app.whenReady().then(async () => {
     // macOS: 设置 Dock 图标（开发模式下必需）
     if (process.platform === 'darwin') {
       const dockIconPath = path.join(process.env.APP_ROOT!, 'build', 'png', '512x512.png');
-      app.dock?.setIcon(dockIconPath);
+      if (existsSync(dockIconPath)) app.dock?.setIcon(dockIconPath);
       devLog.info('[Main] Dock icon set to:', dockIconPath);
     }
 
     // 初始化服务
     const initialized = await initAppServices();
     services = initialized;
+    services.configManager.subscribe((config) => {
+      applyConfigChange(config);
+      for (const window of BrowserWindow.getAllWindows())
+        window.webContents.send('event:config:changed', config);
+    });
     fileLogger = initialized.fileLogger;
     void services;
 
     // 创建 WiFi 切换服务
-    wifiSwitcherService = createWifiSwitcherService();
+    wifiSwitcherService = new WifiSwitcherService({
+      scan: runtimePorts.scan,
+      connect: runtimePorts.connect,
+    });
     // 配置已知网络列表（包含密码和优先级）
     const wifiConfigs = services.wifiManager.getWifiConfigs();
     wifiSwitcherService.setConfiguredNetworks(
       wifiConfigs.map((w) => ({
         ssid: w.ssid,
         password: w.password,
-        priority: w.priority || 10,
+        priority: w.priority ?? 10,
+        security: w.security,
       }))
     );
 
@@ -278,7 +304,7 @@ app.whenReady().then(async () => {
       services.accountManager,
       services.logger,
       {
-        enabled: settings.autoReconnect,
+        enabled: settings.autoReconnect && !settings.autoAuthPaused,
         maxRetries: 3,
         initialDelay: 2000,
         maxDelay: 30000,
@@ -341,7 +367,8 @@ app.whenReady().then(async () => {
           });
         },
       },
-      services.wifiManager
+      services.wifiManager,
+      services.configManager
     );
 
     // 挂起恢复后路由/DHCP 可能刚变化，立即做一次轻量检测，不等完整心跳周期。
@@ -421,63 +448,28 @@ app.whenReady().then(async () => {
     win = createWindow();
 
     if (IS_E2E_TEST) {
-      services.logger.info('E2E 测试模式已启用，跳过托盘与 WiFi 事件监听初始化');
+      services.logger.info('E2E 测试模式已启用，使用受控系统边界');
     } else {
       // 创建托盘服务
       trayService = createTrayService(iconDir, {
         onLogin: async () => {
-          // 获取当前账户并登录
-          const currentAccount = services?.accountManager.getCurrentAccount();
-          if (currentAccount && services) {
-            const networkInfo = await resolveNetworkInfo();
-            if (!networkInfo.ipv4) {
-              services.logger.error('托盘登录失败：无法获取 IP 地址');
-              return;
-            }
-
-            trayService?.setStatus('connecting');
-            try {
-              services.authService.setServerUrl(currentAccount.serverUrl);
-              // 托盘登录使用带重试封装（3 次、间隔 2 秒），对齐生产验证的参考实现
-              const result = await services.authService.loginWithRetry({
-                serverUrl: currentAccount.serverUrl,
-                userAccount: currentAccount.username,
-                userPassword: currentAccount.password,
-                wlanUserIp: networkInfo.ipv4,
-                wlanUserIpv6: networkInfo.ipv6 || undefined,
-                wlanUserMac: networkInfo.mac || undefined,
-                isp: currentAccount.isp,
-              });
-              if (result.success) {
-                trayService?.setStatus('connected');
-                services.logger.info('托盘登录成功');
-              } else {
-                trayService?.setStatus('disconnected');
-                services.logger.error(`托盘登录失败: ${result.message}`);
-              }
-            } catch (error) {
-              trayService?.setStatus('disconnected');
-              services.logger.error('托盘登录异常', error);
-            }
-          }
+          if (!services) return;
+          trayService?.setStatus('connecting');
+          const result = await manualLogin(
+            services.authService,
+            services.configManager,
+            services.networkDetector
+          ).catch((error) => ({ success: false, message: String(error) }));
+          trayService?.setStatus(result.success ? 'connected' : 'disconnected');
         },
         onLogout: async () => {
-          if (services) {
-            // 注销请求不依赖本机 IP，获取仅用于日志
-            const networkInfo = await resolveNetworkInfo();
-
-            try {
-              const result = await services.authService.logout(networkInfo.ipv4 || undefined);
-              if (result.success) {
-                trayService?.setStatus('disconnected');
-                services.logger.info('托盘登出成功');
-              } else {
-                services.logger.error(`托盘登出失败: ${result.message}`);
-              }
-            } catch (error) {
-              services.logger.error('托盘登出异常', error);
-            }
-          }
+          if (!services) return;
+          await manualLogout(
+            services.authService,
+            services.configManager,
+            services.networkDetector
+          ).catch((error) => services?.logger.error('托盘注销失败', error));
+          trayService?.setStatus('disconnected');
         },
         onShowWindow: () => {
           showWindowFromTray();
@@ -493,24 +485,23 @@ app.whenReady().then(async () => {
       } else {
         services.logger.warn('托盘服务初始化失败，将继续在无托盘模式下运行');
       }
-
-      // 创建并启动 WiFi 事件监听器
-      // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连；
-      // 同时接入认证重连服务，WiFi 连接/切换后立即认证（快速路径）
-      wifiEventListener = createWifiEventListener({
-        networkDetector: services.networkDetector,
-        logger: services.logger,
-        window: win,
-        checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台检测 SSID 变化，隐藏到托盘后自动降频
-        wifiManager: services.wifiManager,
-        wifiSwitcherService: wifiSwitcherService,
-        configManager: services.configManager,
-        autoReconnectService: autoReconnectService ?? undefined,
-        notify: (kind, body) => notificationService?.notifyEvent(kind, body),
-      });
-      wifiEventListener.start();
-      services.logger.info('WiFi 事件监听器已启动，检测间隔: 1秒（支持自动重连）');
     }
+    // 创建并启动 WiFi 事件监听器
+    // 监听系统 WiFi 连接/断开事件，自动触发网络状态更新和重连；
+    // 同时接入认证重连服务，WiFi 连接/切换后立即认证（快速路径）
+    wifiEventListener = createWifiEventListener({
+      networkDetector: services.networkDetector,
+      logger: services.logger,
+      window: win,
+      checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台检测 SSID 变化，隐藏到托盘后自动降频
+      wifiManager: services.wifiManager,
+      wifiSwitcherService: wifiSwitcherService,
+      configManager: services.configManager,
+      autoReconnectService: autoReconnectService ?? undefined,
+      notify: (kind, body) => notificationService?.notifyEvent(kind, body),
+    });
+    wifiEventListener.start();
+    services.logger.info('WiFi 事件监听器已启动');
 
     services.logger.log('success', '===== 应用初始化完成 =====', {
       category: 'system',

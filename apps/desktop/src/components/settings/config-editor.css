@@ -1,0 +1,58 @@
+.config-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 24px;
+  color: var(--text-primary);
+  background: var(--bg-color, #fff);
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 20%);
+}
+.config-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.config-dialog h2 {
+  margin: 0 0 24px;
+}
+.config-dialog label,
+.config-dialog legend {
+  display: block;
+  margin: 16px 0 8px;
+}
+.config-dialog .editor-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.config-dialog fieldset {
+  margin-top: 16px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: 8px;
+  padding: 12px;
+}
+.config-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+.config-dialog li {
+  margin-block: 8px;
+}
+.config-dialog li button {
+  margin-inline-start: 8px;
+}
+.nearby-list {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+}
+.nearby-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--border-color, #cbd5e1);
+}

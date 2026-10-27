@@ -1,6 +1,11 @@
+import { UpdateCard } from '../components/settings/UpdateCard';
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../context/AppContext';
+import { ConfigEditor, type EditingTarget } from '../components/settings/ConfigEditor';
+import { NearbyWifi } from '../components/settings/NearbyWifi';
+import { connectToWifi, openWifiSettings } from '../native/WifiModule';
+import { Pressable } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import {
   AccountConfig,
@@ -21,6 +26,7 @@ import {
 } from '../components/settings/shared';
 
 const styles = StyleSheet.create({
+  saveState: { paddingHorizontal: 16 },
   container: {
     flex: 1,
   },
@@ -39,7 +45,18 @@ const styles = StyleSheet.create({
 });
 
 export const SettingsScreen: React.FC = () => {
-  const { config, setConfig, permissionItems, requestAppPermission, runPermissionGuide } = useApp();
+  const {
+    config,
+    setConfig,
+    permissionItems,
+    requestAppPermission,
+    runPermissionGuide,
+    configurationState,
+    configurationError,
+    retryConfigurationSync,
+    addLog,
+  } = useApp();
+  const [editing, setEditing] = useState<EditingTarget | null>(null);
   const { theme } = useTheme();
 
   const [newAccount, setNewAccount] = useState<NewAccountForm>(DEFAULT_NEW_ACCOUNT);
@@ -47,7 +64,16 @@ export const SettingsScreen: React.FC = () => {
   const [accountError, setAccountError] = useState<string | null>(null);
   const [wifiError, setWifiError] = useState<string | null>(null);
 
-  const handleAddAccount = () => {
+  const saveConfig = async (update: Parameters<typeof setConfig>[0]): Promise<boolean> => {
+    try {
+      await setConfig(update);
+      return true;
+    } catch (error) {
+      addLog?.('error', error instanceof Error ? error.message : '保存失败，请重试');
+      return false;
+    }
+  };
+  const handleAddAccount = async () => {
     const username = newAccount.username.trim();
     if (!username || !newAccount.password) {
       setAccountError('请输入用户名和密码');
@@ -73,16 +99,16 @@ export const SettingsScreen: React.FC = () => {
     }
 
     setAccountError(null);
-    setConfig(current => ({
+    const saved = await saveConfig(current => ({
       ...current,
       accounts: [...current.accounts, account],
       currentAccountId: current.currentAccountId || account.id,
     }));
-    setNewAccount(DEFAULT_NEW_ACCOUNT);
+    if (saved) setNewAccount(DEFAULT_NEW_ACCOUNT);
   };
 
   const handleRemoveAccount = (id: string) => {
-    setConfig(current => {
+    saveConfig(current => {
       const updatedAccounts = current.accounts.filter(account => account.id !== id);
       const updatedWifiList = current.wifiList.map(wifi => {
         const linkedAccountIds = wifi.linkedAccountIds.filter(accountId => accountId !== id);
@@ -107,7 +133,7 @@ export const SettingsScreen: React.FC = () => {
     });
   };
 
-  const handleAddWifi = () => {
+  const handleAddWifi = async () => {
     const ssid = newWifi.ssid.trim();
     if (!ssid) {
       setWifiError('请输入 WiFi 名称');
@@ -127,7 +153,9 @@ export const SettingsScreen: React.FC = () => {
       id: generateId(),
       ssid,
       password: newWifi.password,
-      autoConnect: true,
+      autoConnect: newWifi.autoConnect ?? true,
+      security: newWifi.security,
+      bssid: newWifi.bssid,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountIds,
       linkedAccountId: linkedAccountIds[0],
@@ -141,22 +169,22 @@ export const SettingsScreen: React.FC = () => {
     }
 
     setWifiError(null);
-    setConfig(current => ({
+    const saved = await saveConfig(current => ({
       ...current,
       wifiList: [...current.wifiList, wifi],
     }));
-    setNewWifi(DEFAULT_NEW_WIFI);
+    if (saved) setNewWifi(DEFAULT_NEW_WIFI);
   };
 
   const handleRemoveWifi = (id: string) => {
-    setConfig(current => ({
+    saveConfig(current => ({
       ...current,
       wifiList: current.wifiList.filter(wifi => wifi.id !== id),
     }));
   };
 
   const toggleSetting = (key: string, value: boolean | number) => {
-    setConfig(current => ({
+    saveConfig(current => ({
       ...current,
       settings: { ...current.settings, [key]: value },
     }));
@@ -166,7 +194,7 @@ export const SettingsScreen: React.FC = () => {
     key: keyof typeof config.settings.notificationSettings,
     value: boolean
   ) => {
-    setConfig(current => ({
+    saveConfig(current => ({
       ...current,
       settings: {
         ...current.settings,
@@ -179,11 +207,19 @@ export const SettingsScreen: React.FC = () => {
   };
 
   const handleSwitchAccount = (id: string) => {
-    setConfig(current => ({ ...current, currentAccountId: id }));
+    saveConfig(current => ({ ...current, currentAccountId: id }));
   };
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.bg }]}>
+      {configurationState === 'saved' ? (
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.saveState, { color: theme.colors.textSecondary }]}
+        >
+          配置已保存并同步
+        </Text>
+      ) : null}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
@@ -192,12 +228,45 @@ export const SettingsScreen: React.FC = () => {
         {/* Page Title */}
         <Text style={[styles.pageTitle, { color: theme.colors.text }]}>配置设置</Text>
 
+        {configurationState === 'saving' || configurationState === 'syncing' ? (
+          <Text accessibilityLiveRegion="polite">正在保存并同步后台…</Text>
+        ) : null}
+        {configurationError ? (
+          <View>
+            <Text accessibilityRole="alert">{configurationError}</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                retryConfigurationSync().catch(() => undefined);
+              }}
+            >
+              <Text style={{ color: theme.colors.text }}>重试配置同步</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {config.settings.autoAuthPaused ? (
+          <View>
+            <Text style={{ color: theme.colors.text }}>自动认证已暂停</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                saveConfig(current => ({
+                  ...current,
+                  settings: { ...current.settings, autoAuthPaused: false },
+                }))
+              }
+            >
+              <Text style={{ color: theme.colors.text }}>恢复自动认证</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <GeneralSettingsCard
           settings={config.settings}
           onToggleSetting={toggleSetting}
           onToggleNotificationSetting={toggleNotificationSetting}
         />
 
+        <UpdateCard />
         <PermissionsCard
           items={permissionItems}
           onRequest={item => {
@@ -208,7 +277,20 @@ export const SettingsScreen: React.FC = () => {
           }}
         />
 
+        <NearbyWifi
+          config={config}
+          onSelect={network =>
+            setNewWifi(current => ({
+              ...current,
+              ssid: network.ssid ?? '',
+              security: network.security ?? undefined,
+              bssid: network.bssid ?? undefined,
+            }))
+          }
+          onEdit={id => setEditing({ kind: 'wifi', id })}
+        />
         <AccountsCard
+          onEditAccount={id => setEditing({ kind: 'account', id })}
           accounts={config.accounts}
           currentAccountId={config.currentAccountId}
           newAccount={newAccount}
@@ -220,6 +302,27 @@ export const SettingsScreen: React.FC = () => {
         />
 
         <WifiConfigCard
+          onEditWifi={id => setEditing({ kind: 'wifi', id })}
+          onToggleAutoConnect={id => {
+            saveConfig(current => ({
+              ...current,
+              wifiList: current.wifiList.map(wifi =>
+                wifi.id === id ? { ...wifi, autoConnect: !wifi.autoConnect } : wifi
+              ),
+            }));
+          }}
+          onConnectWifi={id => {
+            const wifi = config.wifiList.find(item => item.id === id);
+            if (!wifi) return;
+            addLog?.('info', `正在连接 ${wifi.ssid}，请确认系统 WiFi 授权`);
+            connectToWifi(wifi.ssid, wifi.password)
+              .then(success => {
+                if (!success) return openWifiSettings();
+              })
+              .catch(error =>
+                addLog?.('warn', error instanceof Error ? error.message : 'WiFi 连接失败')
+              );
+          }}
           wifiList={config.wifiList}
           accounts={config.accounts}
           newWifi={newWifi}
@@ -228,6 +331,15 @@ export const SettingsScreen: React.FC = () => {
           onAddWifi={handleAddWifi}
           onRemoveWifi={handleRemoveWifi}
         />
+        {editing ? (
+          <ConfigEditor
+            key={`${editing.kind}-${editing.id}`}
+            config={config}
+            target={editing}
+            onSave={setConfig}
+            onClose={() => setEditing(null)}
+          />
+        ) : null}
       </ScrollView>
     </View>
   );

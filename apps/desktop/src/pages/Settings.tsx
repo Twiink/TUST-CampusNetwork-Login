@@ -7,6 +7,8 @@ import {
   type AccountConfig,
   type WifiConfig,
 } from '@repo/shared';
+import { ConfigEditor, type EditingTarget } from '../components/settings/ConfigEditor';
+import { NearbyWifi } from '../components/settings/NearbyWifi';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
@@ -19,7 +21,8 @@ import {
 } from '../components/settings/shared';
 
 export const Settings: React.FC = () => {
-  const { config, setConfig } = useApp();
+  const { config, setConfig, configurationState, configurationError } = useApp();
+  const [editing, setEditing] = useState<EditingTarget | null>(null);
   const [newAccount, setNewAccount] = useState<NewAccountForm>(DEFAULT_NEW_ACCOUNT);
   const [newWifi, setNewWifi] = useState<NewWifiForm>(DEFAULT_NEW_WIFI);
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -126,6 +129,7 @@ export const Settings: React.FC = () => {
       id: generateId(),
       ssid,
       password: newWifi.password,
+      security: newWifi.security,
       autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountIds:
@@ -210,9 +214,14 @@ export const Settings: React.FC = () => {
         配置设置
       </h1>
 
-      {saveError && (
+      {configurationState === 'saving' || configurationState === 'saved' ? (
+        <div className="card" role="status" aria-live="polite">
+          {configurationState === 'saving' ? '正在保存配置…' : '配置已保存并生效'}
+        </div>
+      ) : null}
+      {(saveError || configurationError) && (
         <div className="card" role="alert" style={{ color: 'var(--error-color)' }}>
-          {saveError}
+          {saveError || configurationError}
         </div>
       )}
 
@@ -226,7 +235,30 @@ export const Settings: React.FC = () => {
             settings={config.settings}
             onSettingChange={(key, value) => void handleSettingChange(key, value)}
           />
+          {config.settings.autoAuthPaused ? (
+            <div className="card">
+              <p>自动认证已暂停</p>
+              <button
+                className="btn btn-primary"
+                onClick={() => void handleSettingChange('autoAuthPaused', false)}
+              >
+                恢复自动认证
+              </button>
+            </div>
+          ) : null}
+          <NearbyWifi
+            config={config}
+            onSelect={(network) =>
+              setNewWifi((current) => ({
+                ...current,
+                ssid: network.ssid,
+                security: network.security,
+              }))
+            }
+            onEdit={(id) => setEditing({ kind: 'wifi', id })}
+          />
           <AccountsCard
+            onEditAccount={(id) => setEditing({ kind: 'account', id })}
             accounts={config.accounts}
             currentAccountId={config.currentAccountId}
             newAccount={newAccount}
@@ -237,6 +269,7 @@ export const Settings: React.FC = () => {
             onSwitchAccount={(id) => void handleSwitchAccount(id)}
           />
           <WifiConfigCard
+            onEditWifi={(id) => setEditing({ kind: 'wifi', id })}
             wifiList={config.wifiList}
             accounts={config.accounts}
             newWifi={newWifi}
@@ -246,6 +279,15 @@ export const Settings: React.FC = () => {
             onRemoveWifi={(id) => void handleRemoveWifi(id)}
             onToggleAutoConnect={(id) => void handleToggleWifiAutoConnect(id)}
           />
+          {editing ? (
+            <ConfigEditor
+              key={`${editing.kind}-${editing.id}`}
+              config={config}
+              target={editing}
+              onSave={setConfig}
+              onClose={() => setEditing(null)}
+            />
+          ) : null}
         </>
       )}
     </div>

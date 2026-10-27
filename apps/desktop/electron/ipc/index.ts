@@ -55,7 +55,7 @@ export function registerAllIPC(
   const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
     services;
 
-  registerAuthIPC(authService, configManager, accountManager, logger);
+  registerAuthIPC(authService, configManager, accountManager, logger, networkDetector);
   registerAppIPC(logger);
   registerConfigIPC(configManager, logger, onConfigChanged);
   registerAccountIPC(accountManager, logger);
