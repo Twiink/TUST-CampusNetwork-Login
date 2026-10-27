@@ -41,6 +41,7 @@ export function editWifi(
     id,
     linkedAccountIds,
     linkedAccountId: linkedAccountIds[0],
+    security: clearPassword ? 'Open' : (draft.security ?? previous.security),
     password: clearPassword ? '' : password || previous.password,
   };
   if (
@@ -54,6 +55,8 @@ export function editWifi(
   )
     throw new Error('该 WiFi 配置已存在');
   const validation = validateWifiConfig(wifi);
+  if (!Number.isInteger(wifi.priority) || wifi.priority < 1 || wifi.priority > 99)
+    throw new Error('优先级请输入 1–99 的整数');
   if (!validation.valid) throw new Error(validation.errors.join('；'));
   return { ...config, wifiList: config.wifiList.map((w) => (w.id === id ? wifi : w)) };
 }

@@ -22,7 +22,8 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
     override fun getName() = "NetMateUpdater"
     override fun getConstants(): Map<String, Any> = com.netmate.app.PlatformRuntime.constants
     private var verificationKey: String? = null
-    private var verificationError: String? = null
+    private data class Verification(val error: String? = null, val installed: Boolean = false)
+    private var verification = Verification()
     override fun invalidate() { executor.shutdownNow(); super.invalidate() }
     private val downloads get() = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     private val prefs get() = context.getSharedPreferences("netmate_updates", Context.MODE_PRIVATE)
@@ -36,6 +37,7 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
         require(uri.scheme == "https" || (BuildConfig.BUILD_TYPE == "e2e" && uri.scheme == "http"))
         require(uri.userInfo == null && !uri.host.isNullOrBlank())
         cancelDownload()
+        check(prefs.edit().remove("installedVersionCode").commit())
         val relative = "updates/netmate-${System.currentTimeMillis()}.apk"
         val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), relative)
         file.parentFile?.mkdirs()
@@ -54,7 +56,9 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
         val state = state()
         require(state.optString("state") == "downloaded")
         val file = File(prefs.getString("file", "")!!)
-        verify(file)?.let { throw IllegalArgumentException(it) }
+        val checked = verify(file)
+        checked.error?.let { throw IllegalArgumentException(it) }
+        check(!checked.installed)
         if (Build.VERSION.SDK_INT >= 26 && !context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             return@task "permission-required"
@@ -65,7 +69,7 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
         "installer-opened"
     }
     private fun cancelDownload() {
-        verificationKey = null; verificationError = null
+        verificationKey = null; verification = Verification()
         val id = prefs.getLong("id", -1)
         if (id >= 0) downloads.remove(id)
         prefs.getString("file", null)?.let { File(it).delete() }
@@ -74,6 +78,7 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
     private fun state(): JSONObject {
         val result = JSONObject().put("state", "idle").put("progress", 0).put("version", prefs.getString("version", null) ?: JSONObject.NULL)
             .put("installAllowed", Build.VERSION.SDK_INT < 26 || context.packageManager.canRequestPackageInstalls())
+        if (prefs.getInt("installedVersionCode", -1) == BuildConfig.VERSION_CODE) result.put("message", "更新已安装")
         val id = prefs.getLong("id", -1)
         if (id < 0) return result
         downloads.query(DownloadManager.Query().setFilterById(id)).use { cursor ->
@@ -87,11 +92,16 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
                     val file = File(prefs.getString("file", "")!!)
                     val key = "$id:${file.length()}:${file.lastModified()}"
                     if (verificationKey != key) {
-                        verificationError = verify(file)
+                        verification = verify(file)
                         verificationKey = key
                     }
-                    val error = verificationError
-                    if (error != null) result.put("state", "failed").put("error", error)
+                    val checked = verification
+                    if (checked.installed) {
+                        cancelDownload()
+                        check(prefs.edit().putInt("installedVersionCode", BuildConfig.VERSION_CODE).commit())
+                        result.put("state", "idle").put("progress", 0).put("message", "更新已安装")
+                    }
+                    else if (checked.error != null) result.put("state", "failed").put("error", checked.error)
                     else result.put("state", "downloaded").put("progress", 100)
                 }
                 DownloadManager.STATUS_FAILED -> result.put("state", "failed").put("error", "下载失败，请重试")
@@ -102,16 +112,17 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
         return result
     }
     @Suppress("DEPRECATION")
-    private fun verify(file: File): String? {
-        if (!file.isFile) return "下载文件不存在，请重试"
+    private fun verify(file: File): Verification {
+        if (!file.isFile) return Verification("下载文件不存在，请重试")
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
-        val candidate = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return "APK 文件无效"
+        val candidate = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return Verification("APK 文件无效")
         val expected = prefs.getString("version", null)?.removePrefix("v")
-        if (expected != null && candidate.versionName?.substringBefore('-') != expected) return "APK 版本与更新信息不匹配"
+        if (expected != null && candidate.versionName?.substringBefore('-') != expected) return Verification("APK 版本与更新信息不匹配")
         val installed = context.packageManager.getPackageInfo(context.packageName, flags)
+        if (ApkPolicy.isInstalled(identity(installed), identity(candidate))) return Verification(installed = true)
         val error = ApkPolicy.validate(identity(installed), identity(candidate))
         if (error != null) NetMateLogs.log(context, "warn", error, "update")
-        return error
+        return Verification(error)
     }
     @Suppress("DEPRECATION")
     private fun identity(info: PackageInfo): ApkPolicy.Identity {

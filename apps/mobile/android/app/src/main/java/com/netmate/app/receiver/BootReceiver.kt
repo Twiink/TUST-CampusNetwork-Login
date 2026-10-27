@@ -4,7 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.util.Log
+import com.netmate.app.logging.NetMateLogs
 import com.netmate.app.auth.AutoAuthStore
 import com.netmate.app.auth.AutoAuthWorker
 import com.netmate.app.service.BackgroundService
@@ -14,15 +14,11 @@ import com.netmate.app.service.BackgroundService
  */
 class BootReceiver : BroadcastReceiver() {
 
-    companion object {
-        private const val TAG = "BootReceiver"
-    }
-
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
             intent.action == "android.intent.action.QUICKBOOT_POWERON") {
 
-            Log.d(TAG, "Boot completed, checking if should start service...")
+            NetMateLogs.log(context, "debug", "开机完成，检查后台服务配置", "boot")
 
             // 自动认证的 WorkManager 兜底不依赖开机自启开关，只要开启了自动认证就恢复
             if (AutoAuthStore.loadProfile(context)?.enabled == true) {
@@ -34,7 +30,7 @@ class BootReceiver : BroadcastReceiver() {
             val autoStartEnabled = prefs.getBoolean("auto_start_on_boot", false)
 
             if (autoStartEnabled) {
-                Log.d(TAG, "Auto-start enabled, starting background service...")
+                NetMateLogs.log(context, "info", "开机自启已启用，启动后台服务", "boot")
 
                 val serviceIntent = Intent(context, BackgroundService::class.java).apply {
                     action = BackgroundService.ACTION_START
@@ -48,10 +44,10 @@ class BootReceiver : BroadcastReceiver() {
                     }
                 } catch (e: Exception) {
                     // 部分系统/厂商限制开机拉起前台服务；此时由 WorkManager 兜底，用户打开应用后服务会再次启动
-                    Log.w(TAG, "Failed to start background service on boot", e)
+                    NetMateLogs.log(context, "warn", "系统未允许开机启动后台服务，已保留周期任务兜底", "boot")
                 }
             } else {
-                Log.d(TAG, "Auto-start disabled, skipping service start")
+                NetMateLogs.log(context, "debug", "开机自启已关闭", "boot")
             }
         }
     }

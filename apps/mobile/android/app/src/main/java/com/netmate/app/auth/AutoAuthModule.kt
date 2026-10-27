@@ -69,7 +69,7 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             }
             promise.resolve(true)
         } catch (e: Exception) {
-            promise.reject("AUTO_AUTH_ERROR", "Failed to sync auto-auth profile: ${e.message}", e)
+            promise.reject("AUTO_AUTH_ERROR", "配置未能同步到后台，请重试保存或重新打开应用")
         }
     }
 
@@ -81,7 +81,7 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             try {
                 promise.resolve(future.get()?.toWritableMap())
             } catch (e: Exception) {
-                promise.reject("AUTO_AUTH_ERROR", "Auto-auth check failed: ${e.message}", e)
+                promise.reject("AUTO_AUTH_ERROR", "认证检查失败，请确认 WiFi 与网络权限")
             }
         }.start()
     }

@@ -239,7 +239,7 @@ jobs:
           ANDROID_VERSION_NAME: '1.0.1'
         run: |
           chmod +x gradlew
-          ./gradlew :app:testDebugUnitTest :app:assembleE2e :app:assembleE2eAndroidTest -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
+          ./gradlew :app:testDebugUnitTest :app:compileReleaseKotlin :app:assembleE2e :app:assembleE2eAndroidTest -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
           mkdir -p ../../../android-e2e-apks
           cp app/build/outputs/apk/e2e/app-e2e.apk ../../../android-e2e-apks/base.apk
           cp app/build/outputs/apk/androidTest/e2e/app-e2e-androidTest.apk ../../../android-e2e-apks/test.apk

@@ -30,9 +30,9 @@
 
 ## 已执行验证
 
-本机未执行任何 E2E。已通过共享 115 项、桌面 184 项、移动 78 项单元/组件测试；Android JVM 27 项通过、无跳过；全工作区类型检查、lint 和 format 通过。桌面 E2E 专用构建、Android debug/e2e/release Kotlin 编译均通过。
+本机未执行任何 E2E。已通过共享 115 项、桌面 184 项、移动 78 项单元/组件测试；Android JVM 29 项通过、无跳过；全工作区类型检查、lint 和 format 通过。桌面 E2E 专用构建、Android debug/e2e/release Kotlin 编译均通过。
 
-首轮远程 CI 的质量门禁、网络模拟、Windows/Linux 原生构建通过。三个桌面平台均通过 24/25 个真实业务 E2E，离线场景暴露 null 快照问题；macOS 原生编译缺少 Foundation 集合遍历特性；Android 全新环境缺少 shared 构建产物。上述问题已修复，等待下一轮矩阵确认。Android 模拟器因构建失败尚未执行，不能把跳过视为通过。
+第二轮远程 CI：[40477762851](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40477762851)。Windows/macOS/Linux 各 25/25 个真实业务 E2E、三平台构建、Darwin 专属原生测试、质量门禁与网络模拟均通过。API 28/36 的原生集成各 2/2 通过，Maestro 首次进入配置页失败；已补充标签可访问性、首次权限引导处理和完整诊断输出，等待下一轮确认。新增的第三项原生集成覆盖重复断线与单任务退避。
 
 最终验收需所有 job 与每个平台 E2E 成功，并保留对应 Actions 链接及 artifact；本文件将据实际结果更新。
 

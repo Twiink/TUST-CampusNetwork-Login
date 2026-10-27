@@ -49,7 +49,11 @@ export function AutoAuthStatus() {
               ? '等待下一轮重连'
               : progress.status === 'awaiting-system'
                 ? '请在系统 WiFi 中确认连接'
-                : `WiFi 重连：${progress.status}`}
+                : progress.status === 'connecting'
+                  ? '正在连接 WiFi'
+                  : progress.status === 'success'
+                    ? 'WiFi 已连接'
+                    : 'WiFi 连接失败'}
           </Text>
           <Text style={{ color: theme.colors.textSecondary }}>
             {progress.ssid} {progress.attempt ? `${progress.attempt}/${progress.maxAttempts}` : ''}

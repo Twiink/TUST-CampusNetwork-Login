@@ -1,6 +1,14 @@
 appId: com.netmate.app.e2e
 ---
 - launchApp
+- extendedWaitUntil:
+    visible: '配置设置|跳过|暂不'
+    timeout: 30000
+- repeat:
+    while:
+      visible: '跳过|暂不'
+    commands:
+      - tapOn: '跳过|暂不'
 - tapOn: '配置设置'
 - scrollUntilVisible:
     element: { id: 'auto-reconnect' }
@@ -30,6 +38,13 @@ appId: com.netmate.app.e2e
     direction: UP
 - tapOn: '编辑账号 accept'
 - assertVisible: { id: 'edit-username' }
+- tapOn: { id: 'edit-username' }
+- eraseText
+- inputText: 'accept-edited'
+- hideKeyboard
+- scrollUntilVisible:
+    element: { id: 'save-edit' }
+    direction: DOWN
 - tapOn: { id: 'save-edit' }
 - tapOn: '运行状态'
 - tapOn: '立即连接'

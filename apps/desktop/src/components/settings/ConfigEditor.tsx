@@ -117,7 +117,7 @@ export function ConfigEditor({
               className="form-control"
               type="number"
               min="1"
-              max="100"
+              max="99"
               required
               value={data.priority}
               onChange={(e) => change({ priority: Number(e.target.value) })}

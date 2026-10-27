@@ -9,7 +9,15 @@ E2E_ARTIFACTS="$PWD/test-results/android"
 mkdir -p "$E2E_ARTIFACTS"
 node apps/mobile/e2e/portal.mjs "$PWD/android-e2e-apks" >"$E2E_ARTIFACTS/portal.log" 2>&1 &
 PORTAL_PID=$!
-trap 'adb logcat -d > "$E2E_ARTIFACTS/logcat.txt"; curl -fsS http://127.0.0.1:38081/evidence > "$E2E_ARTIFACTS/portal-evidence.json" || true; kill "$PORTAL_PID" || true' EXIT
+capture() {
+  adb exec-out screencap -p > "$E2E_ARTIFACTS/final-screen.png" || true
+  adb shell uiautomator dump /sdcard/netmate-hierarchy.xml || true
+  adb pull /sdcard/netmate-hierarchy.xml "$E2E_ARTIFACTS/final-hierarchy.xml" || true
+  adb logcat -d > "$E2E_ARTIFACTS/logcat.txt" || true
+  curl -fsS http://127.0.0.1:38081/evidence > "$E2E_ARTIFACTS/portal-evidence.json" || true
+  kill "$PORTAL_PID" || true
+}
+trap capture EXIT
 for attempt in {1..30}; do
   if curl -fsS http://127.0.0.1:38081/radio >/dev/null; then break; fi
   sleep 1
@@ -19,7 +27,8 @@ adb install -r android-e2e-apks/test.apk
 adb shell am instrument -w -r com.netmate.app.e2e.test/androidx.test.runner.AndroidJUnitRunner | tee "$E2E_ARTIFACTS/instrumentation.txt"
 node - "$E2E_ARTIFACTS/instrumentation.txt" <<'JS'
 const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
-if (!/OK \([2-9]\d* tests?\)/.test(text) || /FAILURES|INSTRUMENTATION_FAILED/.test(text)) throw new Error('Native integration tests did not pass');
+const count = /OK \((\d+) tests?\)/.exec(text);
+if (!count || Number(count[1]) < 3 || /FAILURES|INSTRUMENTATION_FAILED|INSTRUMENTATION_STATUS_CODE:\s*-[34]/.test(text)) throw new Error('Native integration tests are missing, failed or skipped');
 JS
 adb shell am force-stop com.netmate.app.e2e
 adb shell pm clear com.netmate.app.e2e
@@ -33,7 +42,7 @@ fi
 adb shell dumpsys deviceidle whitelist +com.netmate.app.e2e
 adb shell settings put secure location_mode 3
 run_flow() {
-  maestro test --format junit --output "$E2E_ARTIFACTS/$1.xml" --debug-output "$E2E_ARTIFACTS/$1" "apps/mobile/e2e/$1.yaml"
+  maestro test --format junit --output "$E2E_ARTIFACTS/$1.xml" --debug-output "$E2E_ARTIFACTS/$1" --test-output-dir "$E2E_ARTIFACTS/$1" "apps/mobile/e2e/$1.yaml"
   python3 - "$E2E_ARTIFACTS/$1.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
 root = ET.parse(sys.argv[1]).getroot()

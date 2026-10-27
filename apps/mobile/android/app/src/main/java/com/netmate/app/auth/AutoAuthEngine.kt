@@ -67,11 +67,12 @@ object AutoAuthEngine {
         statusListeners.forEach { try { it(state) } catch (_: Exception) {} }
     }
     private fun emit(context: Context, result: AutoAuthResult): AutoAuthResult {
-        AutoAuthStore.saveLastResult(context, result)
-        NetMateLogs.log(context, if (result.success) "success" else "warn", result.message, "auth")
-        listeners.forEach { try { it(result) } catch (_: Exception) {} }
+        val safe = result.copy(message = com.netmate.app.logging.LogJournal.safe(result.message))
+        AutoAuthStore.saveLastResult(context, safe)
+        NetMateLogs.log(context, if (safe.success) "success" else "warn", safe.message, "auth")
+        listeners.forEach { try { it(safe) } catch (_: Exception) {} }
         publishStatus(context)
-        return result
+        return safe
     }
     fun checkAsync(context: Context, trigger: String): Future<AutoAuthResult?> = executor.submit<AutoAuthResult?> {
         try { check(context.applicationContext, trigger) }
@@ -100,6 +101,7 @@ object AutoAuthEngine {
         if (observedKey != wifi.key) { observedKey = wifi.key; wasOnline = false; offlineStreak = 0; failures = 0; lastLoginAt = 0 }
         if (!wifi.connected) {
             authenticatedKey = null
+            internetKey = null
             publishStatus(context)
             val pending = AutoAuthStore.pendingSsid(context)
             if (stored.enabled && pending != null && retryTask == null) reconnect(context, pending, trigger)
@@ -115,7 +117,8 @@ object AutoAuthEngine {
             publishStatus(context)
             return if (manual) emit(context, AutoAuthResult(true, "当前 WiFi 已联网", trigger, null, 0, System.currentTimeMillis(), wifi.key)) else null
         }
-        authenticatedKey = null
+        // A failed Internet probe alone cannot invalidate a successful portal response.
+        if (wifi.captive || loggedOutKey == wifi.key) authenticatedKey = null
         publishStatus(context)
         if ((!stored.enabled || stored.authPaused) && !manual) return null
         if (trigger == "status") return null
@@ -150,7 +153,7 @@ object AutoAuthEngine {
                 AutoAuthStore.saveSession(context, account!!.serverUrl)
                 if (wasOnline) EventNotifier.notify(context, EventNotifier.Kind.AUTH_RECOVERED, "校园网认证已恢复", "已重新登录认证门户")
                 wasOnline = true
-            } else { failures += 1 }
+            } else { failures += 1; authenticatedKey = null }
             return emit(context, AutoAuthResult(outcome.success, outcome.message, trigger, account?.username, outcome.attempts, System.currentTimeMillis(), wifi.key))
         } finally { authenticating = false; publishStatus(context) }
     }
@@ -165,6 +168,8 @@ object AutoAuthEngine {
         }
     }
     private fun reconnect(context: Context, ssid: String?, trigger: String) {
+        // Foreground and service callbacks may report the same loss. Keep the scheduled round.
+        if (retryTask?.isDone == false) return
         val profile = AutoAuthStore.loadProfile(context) ?: return
         if (!profile.enabled || !WifiEnvironment.snapshot(context).enabled || profile.autoConnectWifis.isEmpty() || (ssid != null && profile.autoConnectWifis.none { it.ssid == ssid })) {
             retryTask?.cancel(false); retryTask = null; AutoAuthStore.savePendingSsid(context, null)

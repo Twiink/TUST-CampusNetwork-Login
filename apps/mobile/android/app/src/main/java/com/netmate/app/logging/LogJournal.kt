@@ -14,8 +14,10 @@ class LogJournal(
 ) {
     companion object {
         fun safe(text: String): String = text
-            .replace(Regex("(?i)((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\\s*[=:]\\s*)(?:\\\"[^\\\"\\n]*\\\"|'[^'\\n]*'|[^\\s&\\n]+)"), "$1[REDACTED]")
-            .replace(Regex("(?i)(\\b(?:password|passwd|psk)\\s+)(?:\\\"[^\\\"\\n]*\\\"|'[^'\\n]*'|[^\\s\\n]+)"), "$1[REDACTED]")
+            .replace(Regex("""(?i)https?://[^\s<>"']*/eportal/portal/(?:login|logout)(?:\?[^\s<>"']*)?"""), "[门户请求地址]")
+            .replace(Regex("""(?i)((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\s*["']?\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s&\n]+)"""), "$1[REDACTED]")
+            .replace(Regex("""(?i)(\b(?:password|passwd|psk)\s+)(?:"[^"\n]*"|'[^'\n]*'|[^\s\n]+)"""), "$1[REDACTED]")
+            .replace(Regex("""(?i)(https?://)[^\s/@]+:[^\s/@]+@"""), "$1[REDACTED]@")
     }
     private var lastPrunedAt = Long.MIN_VALUE
     private fun file(index: Int = 0) = File(directory, if (index == 0) "netmate.log" else "netmate.$index.log")

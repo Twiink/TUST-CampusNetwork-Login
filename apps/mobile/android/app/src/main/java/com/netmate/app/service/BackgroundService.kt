@@ -108,6 +108,7 @@ class BackgroundService : Service() {
 
         startInForeground(createNotification())
         isRunning = true
+        com.netmate.app.logging.NetMateLogs.log(this, "info", "后台服务已启动", "service")
 
         startNetworkWatch()
         handler.removeCallbacks(periodicCheck)
@@ -131,6 +132,7 @@ class BackgroundService : Service() {
     }
 
     private fun stopEverything() {
+        com.netmate.app.logging.NetMateLogs.log(this, "info", "后台服务已停止", "service")
         handler.removeCallbacks(periodicCheck)
         handler.removeCallbacks(networkEventCheck)
         stopNetworkWatch()

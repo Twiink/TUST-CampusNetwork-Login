@@ -96,6 +96,10 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
     >
       <View style={styles.container}>
         <TouchableOpacity
+          testID="tab-home"
+          accessibilityRole="tab"
+          accessibilityLabel="运行状态"
+          accessibilityState={{ selected: activeTab === 'home' }}
           style={styles.tabItem}
           onPress={() => onTabChange('home')}
           activeOpacity={0.7}
@@ -120,6 +124,10 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="tab-settings"
+          accessibilityRole="tab"
+          accessibilityLabel="配置设置"
+          accessibilityState={{ selected: activeTab === 'settings' }}
           style={styles.tabItem}
           onPress={() => onTabChange('settings')}
           activeOpacity={0.7}
@@ -144,6 +152,10 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="tab-logs"
+          accessibilityRole="tab"
+          accessibilityLabel="运行日志"
+          accessibilityState={{ selected: activeTab === 'logs' }}
           style={styles.tabItem}
           onPress={() => onTabChange('logs')}
           activeOpacity={0.7}

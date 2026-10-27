@@ -19,3 +19,4 @@ appId: com.netmate.app.e2e
 - tapOn: '配置设置'
 - scrollUntilVisible: { element: '当前版本 1.0.2-e2e', direction: DOWN }
 - assertVisible: '当前版本 1.0.2-e2e'
+- extendedWaitUntil: { visible: '更新已安装', timeout: 15000 }

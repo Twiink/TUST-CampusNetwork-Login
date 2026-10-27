@@ -16,4 +16,11 @@ class ApkPolicyTest {
     @Test fun nextReleaseUniversalCodeExceedsPreviousAbiVariants() {
         for (abi in 0..4) assertTrue((1002 * 10) > (1001 * 10 + abi))
     }
+    @Test fun completedUpgradeRequiresSamePackageVersionAndSigningIdentity() {
+        assertTrue(ApkPolicy.isInstalled(installed, installed.copy()))
+        assertFalse(ApkPolicy.isInstalled(installed, installed.copy(version = 10020)))
+        assertFalse(ApkPolicy.isInstalled(installed, installed.copy(packageName = "other")))
+        assertFalse(ApkPolicy.isInstalled(installed, installed.copy(signers = setOf("untrusted"))))
+        assertFalse(ApkPolicy.isInstalled(installed.copy(signers = emptySet()), installed.copy(signers = emptySet())))
+    }
 }

@@ -5,6 +5,10 @@ import org.junit.Test
 import java.nio.file.Files
 
 class LogJournalTest {
+    @Test fun removesPortalUrlsJsonSecretsAndEmbeddedCredentials() {
+        val redacted = LogJournal.safe("http://portal.test/eportal/portal/login?user_password=url-secret {\"password\":\"json secret\"} http://user:basic-secret@host.test/")
+        listOf("url-secret", "json secret", "basic-secret", "/eportal/portal/login").forEach { assertFalse(redacted.contains(it)) }
+    }
     @Test fun redactsRotatesRestoresFiltersAndClears() {
         val directory = Files.createTempDirectory("netmate-logs").toFile()
         try {

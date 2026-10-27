@@ -4,6 +4,10 @@ package com.netmate.app.update
 internal object ApkPolicy {
     data class Identity(val packageName: String, val version: Long, val signers: Set<String>, val history: Set<String> = signers)
 
+    fun isInstalled(installed: Identity, candidate: Identity): Boolean =
+        candidate.packageName == installed.packageName && candidate.version == installed.version &&
+            installed.signers.isNotEmpty() && candidate.signers == installed.signers
+
     fun validate(installed: Identity, candidate: Identity): String? = when {
         candidate.packageName != installed.packageName -> "APK 包名不匹配"
         candidate.version <= installed.version -> "APK 版本必须高于当前版本"

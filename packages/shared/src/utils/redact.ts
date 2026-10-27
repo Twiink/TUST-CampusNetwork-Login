@@ -4,7 +4,11 @@ const secretKey =
 export function redactText(value: string): string {
   return value
     .replace(
-      /((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s&\n]+)/gi,
+      /https?:\/\/[^\s<>"']*\/eportal\/portal\/(?:login|logout)(?:\?[^\s<>"']*)?/gi,
+      '[门户请求地址]'
+    )
+    .replace(
+      /((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\s*["']?\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s&\n]+)/gi,
       '$1[REDACTED]'
     )
     .replace(/(\b(?:password|passwd|psk)\s+)(?:"[^"\n]*"|'[^'\n]*'|[^\s\n]+)/gi, '$1[REDACTED]')

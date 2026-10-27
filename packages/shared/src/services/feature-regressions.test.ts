@@ -155,7 +155,13 @@ describe('审查回归：配置、认证与脱敏', () => {
     });
     expect(edited.wifiList[0].linkedAccountIds).toEqual(['a1']);
     const open = editWifi(edited, 'w1', { ...wifi, ssid: 'Renamed', password: '' }, '', true);
-    expect(open.wifiList[0]).toMatchObject({ id: 'w1', password: '', linkedAccountIds: ['a1'] });
+    expect(open.wifiList[0]).toMatchObject({
+      id: 'w1',
+      password: '',
+      security: 'Open',
+      linkedAccountIds: ['a1'],
+    });
+    expect(() => editWifi(edited, 'w1', { priority: 100 })).toThrow('1–99');
     expect(moveLinkedAccount(['a1', 'a2'], 'a2', -1)).toEqual(['a2', 'a1']);
   });
 
@@ -167,13 +173,23 @@ describe('审查回归：配置、认证与脱敏', () => {
       nested: { password: 'nested-secret' },
       error: new Error('netsh password=error-secret'),
     });
+    logger.error('http://portal.test/eportal/portal/login?user_password=url-secret');
+    logger.error('{"password":"json secret"}');
     for (const value of [
       JSON.stringify(logger.getLogs()),
       JSON.stringify(listener.mock.calls),
       logger.exportAsText(),
       logger.exportAsJson(),
     ]) {
-      for (const secret of ['wifi-secret', 'portal-secret', 'nested-secret', 'error-secret'])
+      for (const secret of [
+        'wifi-secret',
+        'portal-secret',
+        'nested-secret',
+        'error-secret',
+        'url-secret',
+        'json secret',
+        '/eportal/portal/login',
+      ])
         expect(value).not.toContain(secret);
     }
     logger.stopAutoCleanup();
