@@ -1,9 +1,15 @@
 appId: com.netmate.app.e2e
 ---
 - launchApp
-- tapOn: '配置设置'
+- tapOn: { id: 'tab-settings' }
 - scrollUntilVisible: { element: '检查更新', direction: DOWN, timeout: 60000, speed: 80 }
 - tapOn: '检查更新'
+- scrollUntilVisible:
+    element: '下载更新'
+    direction: DOWN
+    timeout: 15000
+    speed: 80
+    centerElement: true
 - tapOn: '下载更新'
 - extendedWaitUntil:
     visible: 'APK 签名不匹配'

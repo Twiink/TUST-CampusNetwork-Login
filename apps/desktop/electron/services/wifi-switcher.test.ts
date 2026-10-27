@@ -268,6 +268,28 @@ describe('Windows profile and connection regressions', () => {
       '<authentication>open</authentication>'
     );
     expect(() => buildWindowsWifiProfile('Enterprise', 'secret', 'WPA2-企业')).toThrow('系统');
+    expect(() => buildWindowsWifiProfile('Personal', '', 'WPA2')).toThrow('密码');
+  });
+  it('reuses a managed system profile when the app password is cleared', async () => {
+    setPlatform('win32');
+    const name = buildWindowsWifiProfile('Saved', 'fake-password', 'WPA2').name;
+    execWindowsFileTextMock.mockImplementation(async (_file, args) =>
+      args.includes(`name=${name}`) ? `Profile: ${name}` : ''
+    );
+    await expect(
+      connectToNetwork('Saved', '', 'WPA2', async () => ({
+        connected: true,
+        ssid: 'Saved',
+        ip: '10.0.0.2',
+      }))
+    ).resolves.toBe(true);
+    expect(execFileMock).toHaveBeenCalledWith(
+      'netsh',
+      ['wlan', 'connect', `name=${name}`, 'ssid=Saved'],
+      expect.anything(),
+      expect.any(Function)
+    );
+    expect(execFileMock.mock.calls.some(([, args]) => args.includes('add'))).toBe(false);
   });
   it.each([false, true])(
     'cleans the credential file after completion or command error (failure=%s)',

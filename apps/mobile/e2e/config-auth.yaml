@@ -9,7 +9,7 @@ appId: com.netmate.app.e2e
       visible: '跳过|暂不'
     commands:
       - tapOn: '跳过|暂不'
-- tapOn: '配置设置'
+- tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     timeout: 60000
     speed: 80
@@ -24,6 +24,11 @@ appId: com.netmate.app.e2e
     element: { id: 'scan-wifi' }
     direction: UP
 - tapOn: { id: 'scan-wifi' }
+- scrollUntilVisible:
+    element: '选择网络 TUST-WIFI'
+    direction: DOWN
+    timeout: 60000
+    speed: 80
 - tapOn: '选择网络 TUST-WIFI'
 - scrollUntilVisible:
     timeout: 60000
@@ -31,6 +36,11 @@ appId: com.netmate.app.e2e
     element: '选择账号 reject'
     direction: DOWN
 - tapOn: '选择账号 reject'
+- scrollUntilVisible:
+    element: '选择账号 accept'
+    direction: DOWN
+    timeout: 60000
+    speed: 80
 - tapOn: '选择账号 accept'
 - scrollUntilVisible:
     timeout: 60000
@@ -58,19 +68,29 @@ appId: com.netmate.app.e2e
     element: { id: 'save-edit' }
     direction: DOWN
 - tapOn: { id: 'save-edit' }
-- tapOn: '运行状态'
+- tapOn: { id: 'tab-home' }
+- scrollUntilVisible:
+    element: '立即连接'
+    direction: DOWN
+    timeout: 60000
+    speed: 80
 - tapOn: '立即连接'
 - extendedWaitUntil:
     visible: '断开连接'
     timeout: 25000
 - tapOn: '断开连接'
+- scrollUntilVisible:
+    element: '自动认证已暂停'
+    direction: UP
+    timeout: 60000
+    speed: 80
 - assertVisible: '自动认证已暂停'
 - stopApp
 - launchApp
 - assertVisible: '自动认证已暂停'
 - tapOn: '恢复自动认证'
 - assertNotVisible: '自动认证已暂停'
-- tapOn: '配置设置'
+- tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     timeout: 60000
     speed: 80
@@ -95,8 +115,13 @@ appId: com.netmate.app.e2e
     element: { id: 'auto-reconnect' }
     direction: UP
 - tapOn: { id: 'auto-reconnect' }
-- tapOn: '运行日志'
+- repeat:
+    while:
+      visible: '跳过|暂不'
+    commands:
+      - tapOn: '跳过|暂不'
+- tapOn: { id: 'tab-logs' }
 - assertVisible: '导出日志'
 - tapOn: '导出日志'
 - back
-- tapOn: '运行状态'
+- tapOn: { id: 'tab-home' }

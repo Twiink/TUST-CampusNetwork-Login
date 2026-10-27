@@ -30,11 +30,13 @@
 
 ## 已执行验证
 
-本机未执行任何 E2E。已通过共享 115 项、桌面 184 项、移动 81 项单元/组件测试；Android JVM 29 项通过、无跳过；全工作区类型检查、lint 和 format 通过。桌面 E2E 专用构建、Android debug/e2e/release Kotlin 编译均通过。
+本机未执行任何 E2E。已通过共享 115 项、桌面 185 项、移动 81 项单元/组件测试；Android JVM 29 项通过、无跳过；全工作区类型检查、lint 和 format 通过。桌面 E2E 专用构建、Android debug/e2e/release Kotlin 编译均通过。
 
 第二轮远程 CI：[40477762851](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40477762851)。Windows/macOS/Linux 各 25/25 个真实业务 E2E、三平台构建、Darwin 专属原生测试、质量门禁与网络模拟均通过。API 28/36 的原生集成各 2/2 通过，Maestro 首次进入配置页失败；已补充标签可访问性、首次权限引导处理和完整诊断输出，等待下一轮确认。新增的第三项原生集成覆盖重复断线与单任务退避。
 
 第三轮远程 CI：[40480090444](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40480090444)。三平台桌面 E2E、构建及质量门禁继续通过，API 28/36 原生集成均 3/3 通过。Maestro 已进入配置页，长表单滚动超时；已依据截图修复底部导航覆盖内容并调整滚动等待。另补齐 Android 12+ 定位联合申请、13+ 附近设备权限、拒绝后重试测试及账号/WiFi 完整增删改流程，等待下一轮矩阵。
+
+第四轮远程 CI：[40482212908](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40482212908)。三平台桌面及原生构建继续通过。Android 首轮有 ADB 临时离线；重跑后确认 API 28 密码输入框被键盘遮挡、API 36 连续添加账号时滚动方向错误。已补充收起键盘、逐控件滚动与表单位置恢复；下一轮将确认后续认证、重连和更新流程。
 
 最终验收需所有 job 与每个平台 E2E 成功，并保留对应 Actions 链接及 artifact；本文件将据实际结果更新。
 

@@ -24,6 +24,7 @@ const wifi = {
   id: 'w1',
   ssid: 'TUST-WIFI',
   password: 'keep-wifi',
+  security: 'WPA2',
   priority: 10,
   autoConnect: true,
   requiresAuth: true,
@@ -154,19 +155,23 @@ describe('审查回归：配置、认证与脱敏', () => {
       username: 'changed',
     });
     expect(edited.wifiList[0].linkedAccountIds).toEqual(['a1']);
-    const open = editWifi(edited, 'w1', { ...wifi, ssid: 'Renamed', password: '' }, '', true);
-    expect(open.wifiList[0]).toMatchObject({
+    const cleared = editWifi(edited, 'w1', { ...wifi, ssid: 'Renamed', password: '' }, '', true);
+    expect(cleared.wifiList[0]).toMatchObject({
       id: 'w1',
       password: '',
-      security: 'Open',
+      security: 'WPA2',
       linkedAccountIds: ['a1'],
     });
     expect(() => editWifi(edited, 'w1', { priority: 100 })).toThrow('1–99');
-    expect(editWifi(open, 'w1', {}, 'new-wifi-password').wifiList[0]).toMatchObject({
+    expect(editWifi(cleared, 'w1', {}, 'new-wifi-password').wifiList[0]).toMatchObject({
       id: 'w1',
       security: 'WPA2',
       password: 'new-wifi-password',
       linkedAccountIds: ['a1'],
+    });
+    expect(editWifi(edited, 'w1', { security: 'Enterprise' }, '', true).wifiList[0]).toMatchObject({
+      password: '',
+      security: 'Enterprise',
     });
     expect(moveLinkedAccount(['a1', 'a2'], 'a2', -1)).toEqual(['a2', 'a1']);
   });

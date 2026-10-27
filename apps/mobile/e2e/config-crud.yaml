@@ -27,6 +27,11 @@ appId: com.netmate.app.e2e
 - assertNotVisible: '删除账号 temporary-edited'
 - scrollUntilVisible: { element: { id: 'scan-wifi' }, direction: UP, timeout: 60000, speed: 80 }
 - tapOn: { id: 'scan-wifi' }
+- scrollUntilVisible:
+    element: '选择网络 Nearby-WIFI'
+    direction: DOWN
+    timeout: 60000
+    speed: 80
 - tapOn: '选择网络 Nearby-WIFI'
 - scrollUntilVisible:
     { element: { id: 'add-wifi-password' }, direction: DOWN, timeout: 60000, speed: 80 }
@@ -46,9 +51,15 @@ appId: com.netmate.app.e2e
 - hideKeyboard
 - scrollUntilVisible: { element: { id: 'save-edit' }, direction: DOWN, timeout: 60000, speed: 80 }
 - tapOn: { id: 'save-edit' }
+- scrollUntilVisible:
+    { element: '自动连接 Nearby-edited', direction: UP, timeout: 60000, speed: 80 }
+- tapOn: '自动连接 Nearby-edited'
 - stopApp
 - launchApp
 - tapOn: { id: 'tab-settings' }
+- scrollUntilVisible:
+    { element: '自动连接 Nearby-edited', direction: DOWN, timeout: 60000, speed: 80 }
+- assertVisible: { text: '自动连接 Nearby-edited', checked: false }
 - scrollUntilVisible:
     { element: '删除 WiFi Nearby-edited', direction: DOWN, timeout: 60000, speed: 80 }
 - tapOn: '删除 WiFi Nearby-edited'

@@ -241,13 +241,17 @@ const xml = (text: string) =>
     /[<>&"']/g,
     (char) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[char]!
   );
+const windowsProfileName = (ssid: string) =>
+  `NetMate-${createHash('sha256').update(ssid).digest('hex').slice(0, 16)}`;
 export function buildWindowsWifiProfile(
   ssid: string,
   password: string,
   security = ''
 ): { name: string; xml: string } {
   if (/enterprise|eap|企业/i.test(security)) throw new Error('企业认证网络请使用系统已保存的配置');
-  const name = `NetMate-${createHash('sha256').update(ssid).digest('hex').slice(0, 16)}`;
+  if (!password && /WPA|SAE|personal|个人/i.test(security))
+    throw new Error('安全网络需要密码或系统已保存的配置');
+  const name = windowsProfileName(ssid);
   const authentication = !password ? 'open' : /WPA3|SAE/i.test(security) ? 'WPA3SAE' : 'WPA2PSK';
   const sharedKey = password
     ? `<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>${xml(password)}</keyMaterial></sharedKey>`
@@ -276,16 +280,22 @@ async function connectWindowsInternal(
   try {
     let profileName = ssid;
     let existing = false;
-    try {
-      existing = (
-        await execWindowsFileText('netsh', ['wlan', 'show', 'profile', `name=${ssid}`], 3000)
-      ).includes(ssid);
-    } catch {
-      /* New network. */
+    for (const candidate of [ssid, windowsProfileName(ssid)]) {
+      try {
+        existing = (
+          await execWindowsFileText('netsh', ['wlan', 'show', 'profile', `name=${candidate}`], 3000)
+        ).includes(candidate);
+        if (existing) {
+          profileName = candidate;
+          break;
+        }
+      } catch {
+        /* Try the next profile name. */
+      }
     }
     if (/enterprise|eap|企业|WEP/i.test(security ?? '')) {
       if (!existing) throw new Error('需要系统已保存的网络配置');
-    } else if (!existing || password !== undefined) {
+    } else if (!existing || Boolean(password)) {
       const profile = buildWindowsWifiProfile(ssid, password ?? '', security);
       temporaryDirectory = await mkdtemp(path.join(tmpdir(), 'netmate-wlan-'));
       const file = path.join(temporaryDirectory, 'profile.xml');

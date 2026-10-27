@@ -4,12 +4,12 @@ appId: com.netmate.app.e2e
 - extendedWaitUntil:
     visible: '断开连接'
     timeout: 60000
-- tapOn: '配置设置'
+- tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
     timeout: 60000
     speed: 80
     element: '连接 WiFi TUST-WIFI'
     direction: DOWN
 - tapOn: '连接 WiFi TUST-WIFI'
-- tapOn: '运行状态'
+- tapOn: { id: 'tab-home' }
 - assertVisible: '.*WiFi 已关联.*'

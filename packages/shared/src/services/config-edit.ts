@@ -49,9 +49,7 @@ export function editWifi(
     id,
     linkedAccountIds,
     linkedAccountId: linkedAccountIds[0],
-    security: clearPassword
-      ? 'Open'
-      : resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
+    security: resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
     password: nextPassword,
   };
   if (

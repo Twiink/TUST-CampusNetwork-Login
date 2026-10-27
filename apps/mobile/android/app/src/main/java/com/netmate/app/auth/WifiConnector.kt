@@ -21,9 +21,7 @@ object WifiConnector {
 
     /** 提交连接请求；返回系统是否接受（不代表已连上） */
     fun connect(context: Context, ssid: String, password: String?): Boolean {
-        WifiEnvironment.connectPort?.let { return it(context, ssid, password) }
         if (ssid.isBlank()) return false
-        val wifiManager = wifiManager(context)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val builder = WifiNetworkSuggestion.Builder()
@@ -32,7 +30,10 @@ object WifiConnector {
             if (!password.isNullOrBlank()) {
                 builder.setWpa2Passphrase(password)
             }
-            val status = wifiManager.addNetworkSuggestions(listOf(builder.build()))
+            val suggestion = builder.build()
+            // Keep API-specific request construction in device tests; replace the radio submission only.
+            WifiEnvironment.connectPort?.let { return it(context, ssid, password) }
+            val status = wifiManager(context).addNetworkSuggestions(listOf(suggestion))
             // 重复建议同一网络视为成功（重试时会再次提交）
             return status == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS ||
                 status == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_ADD_DUPLICATE
@@ -50,6 +51,8 @@ object WifiConnector {
                 allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA_PSK)
             }
         }
+        WifiEnvironment.connectPort?.let { return it(context, ssid, password) }
+        val wifiManager = wifiManager(context)
         @Suppress("DEPRECATION")
         val networkId = wifiManager.addNetwork(wifiConfig)
         if (networkId == -1) return false
