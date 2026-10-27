@@ -1,7 +1,8 @@
 import { test, expect } from './fixtures';
+import { openPage } from './helpers';
 
 test('日志页按级别筛选日志', async ({ appWindow: window }) => {
-  await window.getByText('运行日志').click();
+  await openPage(window, '运行日志');
 
   // 初始展示全部级别
   await expect(window.getByText('心跳检测正常')).toBeVisible();
@@ -14,4 +15,25 @@ test('日志页按级别筛选日志', async ({ appWindow: window }) => {
   await expect(window.getByText('WiFi 信号较弱')).toBeVisible();
   await expect(window.getByText('心跳检测正常')).toHaveCount(0);
   await expect(window.getByText('登录成功')).toHaveCount(0);
+});
+
+test('清除日志后展示空态并禁用导出', async ({ appWindow: window }) => {
+  await openPage(window, '运行日志');
+  await expect(window.getByText('心跳检测正常')).toBeVisible();
+
+  await window.getByRole('button', { name: '清除日志' }).click();
+
+  await expect(window.getByText('暂无日志记录')).toBeVisible();
+  await expect(window.getByRole('button', { name: '导出 LOG' })).toBeDisabled();
+  await expect(window.getByRole('button', { name: '导出 JSON' })).toBeDisabled();
+});
+
+test('日志目录和导出命令可正常执行', async ({ appWindow: window }) => {
+  await openPage(window, '运行日志');
+
+  await window.getByRole('button', { name: '日志目录' }).click();
+  await window.getByRole('button', { name: '导出 LOG' }).click();
+  await window.getByRole('button', { name: '导出 JSON' }).click();
+
+  await expect(window.getByRole('button', { name: '清除日志' })).toBeEnabled();
 });
