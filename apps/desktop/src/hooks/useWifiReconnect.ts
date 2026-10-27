@@ -3,7 +3,7 @@
  * 监听 WiFi 自动重连进度和失败事件
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { IPC_EVENTS } from '../constants/ipc';
 import type { WifiReconnectProgress, WifiAllReconnectsFailed } from '../types/electron';
 
@@ -28,6 +28,7 @@ export function useWifiReconnect() {
     progress: null,
     allFailed: null,
   });
+  const progressResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // 监听 WiFi 重连进度事件
@@ -57,11 +58,15 @@ export function useWifiReconnect() {
 
         // 如果重连成功，3秒后清除进度信息
         if (progress.status === 'success') {
-          setTimeout(() => {
+          if (progressResetTimerRef.current) {
+            clearTimeout(progressResetTimerRef.current);
+          }
+          progressResetTimerRef.current = setTimeout(() => {
             setState((prev) => ({
               ...prev,
               progress: null,
             }));
+            progressResetTimerRef.current = null;
           }, 3000);
         }
       }
@@ -84,6 +89,10 @@ export function useWifiReconnect() {
 
     // 清理监听器
     return () => {
+      if (progressResetTimerRef.current) {
+        clearTimeout(progressResetTimerRef.current);
+        progressResetTimerRef.current = null;
+      }
       unsubscribeProgress();
       unsubscribeFailed();
     };

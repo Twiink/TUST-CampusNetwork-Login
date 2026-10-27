@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useHeartbeat } from '../hooks/useHeartbeat';
 import { useWifiReconnect } from '../hooks/useWifiReconnect';
@@ -40,11 +40,30 @@ export const Home: React.FC = () => {
   const [lastRefreshTime, setLastRefreshTime] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [switching, setSwitching] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const switchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const switchRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      if (switchTimerRef.current) clearTimeout(switchTimerRef.current);
+      if (switchRefreshTimerRef.current) clearTimeout(switchRefreshTimerRef.current);
+    };
+  }, []);
 
   // 显示toast提示
   const showToast = (message: string, type: 'success' | 'error') => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3000);
   };
 
   // WiFi切换处理
@@ -57,8 +76,12 @@ export const Home: React.FC = () => {
       if (success) {
         showToast(`正在切换到 ${ssid}，请稍候...`, 'success');
         // 等待WiFi连接完成后刷新状态
-        setTimeout(async () => {
+        if (switchRefreshTimerRef.current) {
+          clearTimeout(switchRefreshTimerRef.current);
+        }
+        switchRefreshTimerRef.current = setTimeout(async () => {
           await fetchStatus();
+          switchRefreshTimerRef.current = null;
         }, 3000);
       } else {
         showToast(`切换到 ${ssid} 失败，请重试`, 'error');
@@ -67,8 +90,12 @@ export const Home: React.FC = () => {
       console.error('WiFi切换失败:', error);
       showToast('WiFi切换失败，请检查网络设置', 'error');
     } finally {
-      setTimeout(() => {
+      if (switchTimerRef.current) {
+        clearTimeout(switchTimerRef.current);
+      }
+      switchTimerRef.current = setTimeout(() => {
         setSwitching(false);
+        switchTimerRef.current = null;
       }, 1000);
     }
   };
@@ -92,8 +119,12 @@ export const Home: React.FC = () => {
       showToast('刷新失败，请重试', 'error');
     } finally {
       // 确保至少显示1秒的加载动画
-      setTimeout(() => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = setTimeout(() => {
         setRefreshing(false);
+        refreshTimerRef.current = null;
       }, 1000);
     }
   };
@@ -311,23 +342,14 @@ export const Home: React.FC = () => {
               </p>
             </>
           }
-          action={
-            <button
-              className="btn btn-danger"
-              style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
-              onClick={logout}
-            >
-              <LogOut size={16} style={{ marginRight: 6 }} />
-              断开连接
-            </button>
-          }
         />
       </div>
     );
   }
 
   // 第四优先级：检查是否有关联账户
-  const linkedAccount = config?.accounts.find((a) => a.id === wifiConfig.linkedAccountId);
+  const linkedAccountId = wifiConfig.linkedAccountIds?.[0] || wifiConfig.linkedAccountId;
+  const linkedAccount = config?.accounts.find((a) => a.id === linkedAccountId);
 
   if (!linkedAccount) {
     return (

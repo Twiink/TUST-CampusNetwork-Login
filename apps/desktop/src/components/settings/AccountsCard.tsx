@@ -8,6 +8,7 @@ export const AccountsCard: React.FC<{
   currentAccountId: string | null;
   newAccount: NewAccountForm;
   setNewAccount: React.Dispatch<React.SetStateAction<NewAccountForm>>;
+  accountError?: string | null;
   onAddAccount: () => void;
   onRemoveAccount: (id: string) => void;
   onSwitchAccount: (id: string) => void;
@@ -16,6 +17,7 @@ export const AccountsCard: React.FC<{
   currentAccountId,
   newAccount,
   setNewAccount,
+  accountError,
   onAddAccount,
   onRemoveAccount,
   onSwitchAccount,
@@ -41,73 +43,78 @@ export const AccountsCard: React.FC<{
             <p style={{ margin: 0 }}>暂无账号，请添加账号以使用登录功能</p>
           </div>
         ) : (
-          accounts.map((acc) => (
-            <div
-              key={acc.id}
-              style={{
-                padding: '12px 0',
-                borderBottom: '1px solid rgba(0,0,0,0.05)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                  <User size={14} style={{ marginRight: 6 }} />
-                  {acc.username}
-                  <span
+          <div role="list" aria-label="账号列表">
+            {accounts.map((acc) => (
+              <div
+                key={acc.id}
+                role="listitem"
+                aria-label={`账号 ${acc.username}`}
+                style={{
+                  padding: '12px 0',
+                  borderBottom: '1px solid rgba(0,0,0,0.05)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                    <User size={14} style={{ marginRight: 6 }} />
+                    {acc.username}
+                    <span
+                      style={{
+                        fontSize: '0.8rem',
+                        backgroundColor: '#e0f2fe',
+                        color: '#0369a1',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        marginLeft: '8px',
+                      }}
+                    >
+                      {getISPLabel(acc.isp)}
+                    </span>
+                  </div>
+                  <div
                     style={{
-                      fontSize: '0.8rem',
-                      backgroundColor: '#e0f2fe',
-                      color: '#0369a1',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      marginLeft: '8px',
+                      fontSize: '0.85rem',
+                      color: 'var(--text-secondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      marginTop: 4,
                     }}
                   >
-                    {getISPLabel(acc.isp)}
-                  </span>
+                    <Server size={12} style={{ marginRight: 4 }} />
+                    {acc.serverUrl}
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontSize: '0.85rem',
-                    color: 'var(--text-secondary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    marginTop: 4,
-                  }}
-                >
-                  <Server size={12} style={{ marginRight: 4 }} />
-                  {acc.serverUrl}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className={`btn ${currentAccountId === acc.id ? 'btn-primary' : ''}`}
+                    style={{ padding: '6px 16px', fontSize: '14px', height: 'auto' }}
+                    onClick={() => onSwitchAccount(acc.id)}
+                    disabled={currentAccountId === acc.id}
+                  >
+                    {currentAccountId === acc.id ? (
+                      <>
+                        <Check size={14} style={{ marginRight: 4 }} />
+                        使用中
+                      </>
+                    ) : (
+                      '使用此账号'
+                    )}
+                  </button>
+                  <button
+                    className="btn btn-danger"
+                    style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
+                    onClick={() => onRemoveAccount(acc.id)}
+                    aria-label={`删除账号 ${acc.username}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className={`btn ${currentAccountId === acc.id ? 'btn-primary' : ''}`}
-                  style={{ padding: '6px 16px', fontSize: '14px', height: 'auto' }}
-                  onClick={() => onSwitchAccount(acc.id)}
-                  disabled={currentAccountId === acc.id}
-                >
-                  {currentAccountId === acc.id ? (
-                    <>
-                      <Check size={14} style={{ marginRight: 4 }} />
-                      使用中
-                    </>
-                  ) : (
-                    '使用此账号'
-                  )}
-                </button>
-                <button
-                  className="btn btn-danger"
-                  style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
-                  onClick={() => onRemoveAccount(acc.id)}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
@@ -123,6 +130,7 @@ export const AccountsCard: React.FC<{
         <input
           className="form-control"
           placeholder="请输入学号/用户名"
+          aria-label="用户名"
           value={newAccount.username}
           onChange={(e) => setNewAccount({ ...newAccount, username: e.target.value })}
         />
@@ -136,6 +144,7 @@ export const AccountsCard: React.FC<{
           type="password"
           className="form-control"
           placeholder="请输入密码"
+          aria-label="密码"
           value={newAccount.password}
           onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
         />
@@ -147,9 +156,11 @@ export const AccountsCard: React.FC<{
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px' }}>
           {ISP_OPTIONS.map((opt) => (
-            <div
+            <button
+              type="button"
               key={opt.value}
               onClick={() => setNewAccount({ ...newAccount, isp: opt.value })}
+              aria-pressed={newAccount.isp === opt.value}
               style={{
                 padding: '12px',
                 textAlign: 'center',
@@ -168,7 +179,7 @@ export const AccountsCard: React.FC<{
               }}
             >
               {opt.label}
-            </div>
+            </button>
           ))}
         </div>
       </div>
@@ -179,10 +190,16 @@ export const AccountsCard: React.FC<{
         </label>
         <input
           className="form-control"
+          aria-label="登录服务器地址"
           value={newAccount.serverUrl}
           onChange={(e) => setNewAccount({ ...newAccount, serverUrl: e.target.value })}
         />
       </div>
+      {accountError && (
+        <p role="alert" style={{ color: 'var(--error-color)', margin: '0 0 12px' }}>
+          {accountError}
+        </p>
+      )}
       <button className="btn btn-primary" style={{ width: '100%' }} onClick={onAddAccount}>
         <Plus size={16} style={{ marginRight: 6 }} />
         保存并添加账号

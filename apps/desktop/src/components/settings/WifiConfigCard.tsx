@@ -8,6 +8,7 @@ export const WifiConfigCard: React.FC<{
   accounts: AccountConfig[];
   newWifi: NewWifiForm;
   setNewWifi: React.Dispatch<React.SetStateAction<NewWifiForm>>;
+  wifiError?: string | null;
   onAddWifi: () => void;
   onRemoveWifi: (id: string) => void;
   onToggleAutoConnect: (id: string) => void;
@@ -16,6 +17,7 @@ export const WifiConfigCard: React.FC<{
   accounts,
   newWifi,
   setNewWifi,
+  wifiError,
   onAddWifi,
   onRemoveWifi,
   onToggleAutoConnect,
@@ -52,133 +54,143 @@ export const WifiConfigCard: React.FC<{
             <p style={{ margin: 0 }}>暂无 WiFi 配置</p>
           </div>
         ) : (
-          wifiList.map((wifi) => {
-            const linkedAccount = getLinkedAccount(wifi.linkedAccountId);
-            return (
-              <div
-                key={wifi.id}
-                style={{
-                  padding: '12px 0',
-                  borderBottom: '1px solid rgba(0,0,0,0.05)',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      gap: 4,
-                    }}
-                  >
-                    <Wifi size={14} style={{ marginRight: 6 }} />
-                    {wifi.ssid}
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
-                        color: wifi.requiresAuth ? '#92400e' : '#065f46',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        marginLeft: '4px',
-                      }}
-                    >
-                      {wifi.requiresAuth ? '需要认证' : '无需认证'}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        backgroundColor: getPriorityColor(wifi.priority || 10) + '20',
-                        color: getPriorityColor(wifi.priority || 10),
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <Star size={12} />
-                      优先级 {wifi.priority || 10}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
-                        color: wifi.autoConnect ? '#1e40af' : '#6b7280',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                    >
-                      <RefreshCw size={12} />
-                      {wifi.autoConnect ? '自动重连' : '手动连接'}
-                    </span>
-                  </div>
-                  {wifi.requiresAuth && linkedAccount && (
+          <div role="list" aria-label="WiFi 配置列表">
+            {wifiList.map((wifi) => {
+              const linkedAccount = getLinkedAccount(wifi.linkedAccountId);
+              return (
+                <div
+                  key={wifi.id}
+                  role="listitem"
+                  aria-label={`WiFi ${wifi.ssid}`}
+                  style={{
+                    padding: '12px 0',
+                    borderBottom: '1px solid rgba(0,0,0,0.05)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
                     <div
                       style={{
-                        fontSize: '0.85rem',
-                        color: 'var(--text-secondary)',
+                        fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
-                        marginTop: 4,
+                        flexWrap: 'wrap',
+                        gap: 4,
                       }}
                     >
-                      <Link size={12} style={{ marginRight: 4 }} />
-                      关联账号: {linkedAccount.username}
-                      <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#0369a1' }}>
-                        ({getISPLabel(linkedAccount.isp)} - {linkedAccount.serverUrl})
+                      <Wifi size={14} style={{ marginRight: 6 }} />
+                      {wifi.ssid}
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          backgroundColor: wifi.requiresAuth ? '#fef3c7' : '#d1fae5',
+                          color: wifi.requiresAuth ? '#92400e' : '#065f46',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          marginLeft: '4px',
+                        }}
+                      >
+                        {wifi.requiresAuth ? '需要认证' : '无需认证'}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          backgroundColor: getPriorityColor(wifi.priority || 10) + '20',
+                          color: getPriorityColor(wifi.priority || 10),
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <Star size={12} />
+                        优先级 {wifi.priority || 10}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
+                          color: wifi.autoConnect ? '#1e40af' : '#6b7280',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <RefreshCw size={12} />
+                        {wifi.autoConnect ? '自动重连' : '手动连接'}
                       </span>
                     </div>
-                  )}
-                  {wifi.requiresAuth && !linkedAccount && (
-                    <div
+                    {wifi.requiresAuth && linkedAccount && (
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                          color: 'var(--text-secondary)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginTop: 4,
+                        }}
+                      >
+                        <Link size={12} style={{ marginRight: 4 }} />
+                        关联账号: {linkedAccount.username}
+                        <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#0369a1' }}>
+                          ({getISPLabel(linkedAccount.isp)} - {linkedAccount.serverUrl})
+                        </span>
+                      </div>
+                    )}
+                    {wifi.requiresAuth && !linkedAccount && (
+                      <div
+                        style={{
+                          fontSize: '0.85rem',
+                          color: '#ef4444',
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginTop: 4,
+                        }}
+                      >
+                        <Link size={12} style={{ marginRight: 4 }} />
+                        未关联账号（账号可能已删除）
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn"
                       style={{
-                        fontSize: '0.85rem',
-                        color: '#ef4444',
-                        display: 'flex',
-                        alignItems: 'center',
-                        marginTop: 4,
+                        padding: '6px 12px',
+                        fontSize: '14px',
+                        height: 'auto',
+                        backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
+                        color: wifi.autoConnect ? '#1e40af' : '#6b7280',
+                        border: wifi.autoConnect ? '1px solid #93c5fd' : '1px solid #d1d5db',
                       }}
+                      onClick={() => onToggleAutoConnect(wifi.id)}
+                      title={wifi.autoConnect ? '点击禁用WiFi自动重连' : '点击启用WiFi自动重连'}
+                      aria-label={
+                        wifi.autoConnect
+                          ? `禁用 ${wifi.ssid} 自动重连`
+                          : `启用 ${wifi.ssid} 自动重连`
+                      }
                     >
-                      <Link size={12} style={{ marginRight: 4 }} />
-                      未关联账号（账号可能已删除）
-                    </div>
-                  )}
+                      <RefreshCw size={14} />
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
+                      onClick={() => onRemoveWifi(wifi.id)}
+                      aria-label={`删除 WiFi ${wifi.ssid}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    className="btn"
-                    style={{
-                      padding: '6px 12px',
-                      fontSize: '14px',
-                      height: 'auto',
-                      backgroundColor: wifi.autoConnect ? '#dbeafe' : '#f3f4f6',
-                      color: wifi.autoConnect ? '#1e40af' : '#6b7280',
-                      border: wifi.autoConnect ? '1px solid #93c5fd' : '1px solid #d1d5db',
-                    }}
-                    onClick={() => onToggleAutoConnect(wifi.id)}
-                    title={wifi.autoConnect ? '点击禁用WiFi自动重连' : '点击启用WiFi自动重连'}
-                  >
-                    <RefreshCw size={14} />
-                  </button>
-                  <button
-                    className="btn btn-danger"
-                    style={{ padding: '6px 12px', fontSize: '14px', height: 'auto' }}
-                    onClick={() => onRemoveWifi(wifi.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -194,6 +206,7 @@ export const WifiConfigCard: React.FC<{
         <input
           className="form-control"
           placeholder="请输入 WiFi 名称"
+          aria-label="WiFi 名称"
           value={newWifi.ssid}
           onChange={(e) => setNewWifi({ ...newWifi, ssid: e.target.value })}
         />
@@ -207,6 +220,7 @@ export const WifiConfigCard: React.FC<{
           type="password"
           className="form-control"
           placeholder="请输入 WiFi 密码（可选）"
+          aria-label="WiFi 密码"
           value={newWifi.password}
           onChange={(e) => setNewWifi({ ...newWifi, password: e.target.value })}
         />
@@ -263,9 +277,12 @@ export const WifiConfigCard: React.FC<{
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {accounts.map((acc) => (
-                <div
+                <button
+                  type="button"
                   key={acc.id}
                   onClick={() => setNewWifi({ ...newWifi, linkedAccountId: acc.id })}
+                  aria-pressed={newWifi.linkedAccountId === acc.id}
+                  aria-label={`选择账号 ${acc.username}`}
                   style={{
                     padding: '12px',
                     borderRadius: 'var(--radius-md)',
@@ -280,6 +297,8 @@ export const WifiConfigCard: React.FC<{
                         : 'rgba(255, 255, 255, 0.4)',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
+                    textAlign: 'left',
+                    width: '100%',
                   }}
                 >
                   <div
@@ -318,7 +337,7 @@ export const WifiConfigCard: React.FC<{
                   >
                     {acc.serverUrl}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -335,6 +354,7 @@ export const WifiConfigCard: React.FC<{
           type="number"
           className="form-control"
           placeholder="请输入优先级（1-99，数字越小优先级越高）"
+          aria-label="WiFi 优先级"
           value={newWifi.priority || 10}
           min={1}
           max={99}
@@ -355,6 +375,11 @@ export const WifiConfigCard: React.FC<{
         </div>
       </div>
 
+      {wifiError && (
+        <p role="alert" style={{ color: 'var(--error-color)', margin: '0 0 12px' }}>
+          {wifiError}
+        </p>
+      )}
       <button
         className="btn btn-primary"
         style={{ width: '100%' }}

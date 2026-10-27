@@ -35,6 +35,7 @@ export const Logs: React.FC = () => {
   const { logs, clearLogs } = useLogs();
   const [filterLevel, setFilterLevel] = useState<LogLevel>('all');
   const [exporting, setExporting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const filteredLogs = useMemo(() => {
     if (filterLevel === 'all') return logs;
@@ -43,20 +44,37 @@ export const Logs: React.FC = () => {
 
   const handleExport = async (format: 'text' | 'json') => {
     setExporting(true);
+    setActionError(null);
     try {
-      await window.electronAPI.log.exportSave(format);
-    } catch {
-      // 忽略导出错误
+      const result = await window.electronAPI.log.exportSave(format);
+      if (!result.success) {
+        setActionError(result.error || '导出日志失败');
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '导出日志失败');
     } finally {
       setExporting(false);
     }
   };
 
   const handleOpenLogDir = async () => {
+    setActionError(null);
     try {
-      await window.electronAPI.log.openDir();
-    } catch {
-      // 忽略打开失败
+      const result = await window.electronAPI.log.openDir();
+      if (!result.success) {
+        setActionError(result.error || '打开日志目录失败');
+      }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '打开日志目录失败');
+    }
+  };
+
+  const handleClearLogs = async () => {
+    setActionError(null);
+    try {
+      await clearLogs();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '清除日志失败');
     }
   };
 
@@ -185,14 +203,16 @@ export const Logs: React.FC = () => {
               导出 JSON
             </button>
             <button
-              onClick={clearLogs}
+              onClick={() => void handleClearLogs()}
               className="btn btn-danger"
+              disabled={logs.length === 0}
               style={{
                 padding: '6px 12px',
                 fontSize: '0.85rem',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
+                opacity: logs.length === 0 ? 0.5 : 1,
               }}
             >
               <Trash2 size={14} />
@@ -200,6 +220,20 @@ export const Logs: React.FC = () => {
             </button>
           </div>
         </div>
+        {actionError && (
+          <div
+            role="alert"
+            style={{
+              margin: '12px 24px 0',
+              padding: '10px 12px',
+              color: 'var(--error-color)',
+              backgroundColor: 'rgba(239, 68, 68, 0.08)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            {actionError}
+          </div>
+        )}
         <div
           className="logs-content"
           style={{

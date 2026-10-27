@@ -2,7 +2,7 @@ import React, { createContext, useContext, useCallback, useMemo } from 'react';
 import { DEFAULT_APP_SETTINGS, type AppConfig, type ConnectionStatus } from '@repo/shared';
 import { useAuth } from '../hooks/useAuth';
 import { useNetwork } from '../hooks/useNetwork';
-import { useConfig } from '../hooks/useConfig';
+import { useConfig, type ConfigUpdate } from '../hooks/useConfig';
 
 export interface DisplayLogEntry {
   id: string;
@@ -13,7 +13,7 @@ export interface DisplayLogEntry {
 
 interface AppContextType {
   config: AppConfig | null;
-  setConfig: (config: AppConfig) => void;
+  setConfig: (update: ConfigUpdate) => Promise<void>;
   networkStatus: ConnectionStatus;
   status: ReturnType<typeof useNetwork>['status'];
   info: ReturnType<typeof useNetwork>['info'];
@@ -52,6 +52,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     ipAddress,
     wifiConnected,
     wifiSSID,
+    setAuthenticated,
   } = useNetwork();
   const { config, updateConfig, loading: configLoading } = useConfig();
 
@@ -63,16 +64,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [authStatus, isAuthenticated]);
 
   const login = useCallback(async () => {
-    await authLogin();
-  }, [authLogin]);
+    const result = await authLogin();
+    if (result.success) {
+      setAuthenticated(true);
+    }
+  }, [authLogin, setAuthenticated]);
 
   const logout = useCallback(async () => {
-    await authLogout();
-  }, [authLogout]);
+    const result = await authLogout();
+    if (result.success) {
+      setAuthenticated(false);
+    }
+  }, [authLogout, setAuthenticated]);
 
   const setConfig = useCallback(
-    (newConfig: AppConfig) => {
-      updateConfig(newConfig);
+    async (update: ConfigUpdate) => {
+      await updateConfig(update);
     },
     [updateConfig]
   );

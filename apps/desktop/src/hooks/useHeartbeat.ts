@@ -40,6 +40,7 @@ export function useHeartbeat() {
   });
 
   const scheduleRef = useRef<HeartbeatState | null>(null);
+  const progressResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recomputeCountdown = useCallback(() => {
     const schedule = scheduleRef.current;
@@ -77,13 +78,17 @@ export function useHeartbeat() {
 
         // 3秒后自动清除成功或失败状态
         if (progressData.status === 'success' || progressData.status === 'failed') {
-          setTimeout(() => {
+          if (progressResetTimerRef.current) {
+            clearTimeout(progressResetTimerRef.current);
+          }
+          progressResetTimerRef.current = setTimeout(() => {
             setReconnectProgress({
               status: 'idle',
               currentAttempt: 0,
               maxAttempts: 3,
               message: '',
             });
+            progressResetTimerRef.current = null;
           }, 3000);
         }
       }
@@ -93,6 +98,10 @@ export function useHeartbeat() {
 
     return () => {
       clearInterval(countdownTimer);
+      if (progressResetTimerRef.current) {
+        clearTimeout(progressResetTimerRef.current);
+        progressResetTimerRef.current = null;
+      }
       unsubscribeHeartbeat();
       unsubscribeReconnect();
     };

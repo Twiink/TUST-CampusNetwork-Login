@@ -51,6 +51,10 @@ export function useNetwork() {
     }
   }, []);
 
+  const setAuthenticated = useCallback((authenticated: boolean) => {
+    setStatus((previous) => ({ ...previous, authenticated }));
+  }, []);
+
   // 快速检测WiFi连接状态
   const quickCheckWifi = useCallback(async () => {
     try {
@@ -130,6 +134,7 @@ export function useNetwork() {
     initialCheckDone,
     fetchStatus,
     checkConnectivity,
+    setAuthenticated,
     isConnected: status.connected,
     isAuthenticated: status.authenticated,
     ipAddress: info.ipv4 || '0.0.0.0',

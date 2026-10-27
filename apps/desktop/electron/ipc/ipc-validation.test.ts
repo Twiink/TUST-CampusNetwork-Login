@@ -136,12 +136,12 @@ describe('IPC 入口校验', () => {
     await expect(add({}, { ...validAccount, password: longPassword })).resolves.toBeTruthy();
   });
 
-  it('需要认证的 WiFi 未关联账号被拒绝', async () => {
+  it('需要认证的 WiFi 允许暂时不关联账号，等待用户重新绑定', async () => {
     const wifiAdd = handlers.get(IPC_CHANNELS.WIFI_ADD)!;
 
     await expect(
       wifiAdd({}, { ...validWifi, requiresAuth: true, linkedAccountIds: [] })
-    ).rejects.toThrow('需要认证的 WiFi 必须至少关联一个账号');
+    ).resolves.toBeTruthy();
   });
 
   it('负数优先级被拒绝', async () => {

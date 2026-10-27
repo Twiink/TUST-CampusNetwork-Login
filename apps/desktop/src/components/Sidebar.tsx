@@ -17,34 +17,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
         <Wifi size={20} style={{ marginRight: 8 }} />
         NetMate
       </div>
-      <div
+      <button
+        type="button"
         className={`nav-item ${activeTab === 'home' ? 'active' : ''}`}
         onClick={() => onTabChange('home')}
+        aria-current={activeTab === 'home' ? 'page' : undefined}
       >
         <Globe size={18} style={{ marginRight: 10 }} />
         运行状态
-      </div>
-      <div
+      </button>
+      <button
+        type="button"
         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
         onClick={() => onTabChange('settings')}
+        aria-current={activeTab === 'settings' ? 'page' : undefined}
       >
         <Settings size={18} style={{ marginRight: 10 }} />
         配置设置
-      </div>
-      <div
+      </button>
+      <button
+        type="button"
         className={`nav-item ${activeTab === 'logs' ? 'active' : ''}`}
         onClick={() => onTabChange('logs')}
+        aria-current={activeTab === 'logs' ? 'page' : undefined}
       >
         <FileText size={18} style={{ marginRight: 10 }} />
         运行日志
-      </div>
-      <div
+      </button>
+      <button
+        type="button"
         className={`nav-item ${activeTab === 'about' ? 'active' : ''}`}
         onClick={() => onTabChange('about')}
+        aria-current={activeTab === 'about' ? 'page' : undefined}
       >
         <Info size={18} style={{ marginRight: 10 }} />
         关于
-      </div>
+      </button>
 
       <div
         style={{

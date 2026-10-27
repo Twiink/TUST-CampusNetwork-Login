@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import type { AccountConfig, WifiConfig } from '@repo/shared';
+import {
+  generateId,
+  validateAccountConfig,
+  validateWifiConfig,
+  type AccountConfig,
+  type WifiConfig,
+} from '@repo/shared';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
@@ -16,59 +22,109 @@ export const Settings: React.FC = () => {
   const { config, setConfig } = useApp();
   const [newAccount, setNewAccount] = useState<NewAccountForm>(DEFAULT_NEW_ACCOUNT);
   const [newWifi, setNewWifi] = useState<NewWifiForm>(DEFAULT_NEW_WIFI);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [wifiError, setWifiError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleAddAccount = () => {
-    if (!newAccount.username || !newAccount.password || !config) return;
+  const getErrorMessage = (error: unknown) =>
+    error instanceof Error ? error.message : '保存配置失败，请重试';
+
+  const handleAddAccount = async () => {
+    if (!config) return;
+    const username = newAccount.username.trim();
+    if (!username || !newAccount.password) {
+      setAccountError('请输入用户名和密码');
+      return;
+    }
+    if (config.accounts.some((account) => account.username === username)) {
+      setAccountError('该用户名已存在');
+      return;
+    }
+    setAccountError(null);
+    setSaveError(null);
     const account: AccountConfig = {
-      id: Date.now().toString(),
-      name: newAccount.username,
-      username: newAccount.username,
+      id: generateId(),
+      name: username,
+      username,
       password: newAccount.password,
       serverUrl: newAccount.serverUrl,
       isp: newAccount.isp,
     };
-
-    setConfig({
-      ...config,
-      accounts: [...config.accounts, account],
-      currentAccountId: config.currentAccountId || account.id,
-    });
-    setNewAccount(DEFAULT_NEW_ACCOUNT);
-  };
-
-  const handleRemoveAccount = (id: string) => {
-    if (!config) return;
-    const updatedAccounts = config.accounts.filter((a) => a.id !== id);
-    // 同时更新引用了该账号的 WiFi 配置
-    const updatedWifiList = config.wifiList.map((wifi) => {
-      if (wifi.linkedAccountId === id) {
-        return { ...wifi, linkedAccountId: undefined };
-      }
-      return wifi;
-    });
-    setConfig({
-      ...config,
-      accounts: updatedAccounts,
-      wifiList: updatedWifiList,
-      currentAccountId:
-        config.currentAccountId === id
-          ? updatedAccounts.length > 0
-            ? updatedAccounts[0].id
-            : null
-          : config.currentAccountId,
-    });
-  };
-
-  const handleAddWifi = () => {
-    if (!newWifi.ssid || !config) return;
-    // 如果需要认证但没选择账号，提示用户
-    if (newWifi.requiresAuth && !newWifi.linkedAccountId) {
-      alert('需要认证的 WiFi 必须选择关联账号');
+    const validation = validateAccountConfig(account);
+    if (!validation.valid) {
+      setAccountError(validation.errors[0] || '账号配置格式无效');
       return;
     }
+
+    try {
+      await setConfig((current) => ({
+        ...current,
+        accounts: [...current.accounts, account],
+        currentAccountId: current.currentAccountId || account.id,
+      }));
+      setNewAccount(DEFAULT_NEW_ACCOUNT);
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
+  };
+
+  const handleRemoveAccount = async (id: string) => {
+    if (!config) return;
+    setSaveError(null);
+    try {
+      await setConfig((current) => {
+        const updatedAccounts = current.accounts.filter((account) => account.id !== id);
+        const updatedWifiList = current.wifiList.map((wifi) => {
+          if (!wifi.linkedAccountIds.includes(id) && wifi.linkedAccountId !== id) {
+            return wifi;
+          }
+
+          const linkedAccountIds = wifi.linkedAccountIds.filter((accountId) => accountId !== id);
+          return {
+            ...wifi,
+            linkedAccountIds,
+            linkedAccountId: linkedAccountIds[0],
+          };
+        });
+
+        return {
+          ...current,
+          accounts: updatedAccounts,
+          wifiList: updatedWifiList,
+          currentAccountId:
+            current.currentAccountId === id
+              ? updatedAccounts.length > 0
+                ? updatedAccounts[0].id
+                : null
+              : current.currentAccountId,
+        };
+      });
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
+  };
+
+  const handleAddWifi = async () => {
+    if (!config) return;
+    const ssid = newWifi.ssid.trim();
+    if (!ssid) {
+      setWifiError('请输入 WiFi 名称');
+      return;
+    }
+    if (config.wifiList.some((wifi) => wifi.ssid === ssid)) {
+      setWifiError('该 WiFi 配置已存在');
+      return;
+    }
+    // 如果需要认证但没选择账号，提示用户
+    if (newWifi.requiresAuth && !newWifi.linkedAccountId) {
+      setWifiError('需要认证的 WiFi 必须选择关联账号');
+      return;
+    }
+    setWifiError(null);
+    setSaveError(null);
     const wifi: WifiConfig = {
-      id: Date.now().toString(),
-      ssid: newWifi.ssid,
+      id: generateId(),
+      ssid,
       password: newWifi.password,
       autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
@@ -78,44 +134,73 @@ export const Settings: React.FC = () => {
       priority: newWifi.priority,
       lastConnectedAt: null,
     };
+    const validation = validateWifiConfig(wifi);
+    if (!validation.valid) {
+      setWifiError(validation.errors[0] || 'WiFi 配置格式无效');
+      return;
+    }
 
-    setConfig({
-      ...config,
-      wifiList: [...config.wifiList, wifi],
-    });
-    setNewWifi(DEFAULT_NEW_WIFI);
+    try {
+      await setConfig((current) => ({
+        ...current,
+        wifiList: [...current.wifiList, wifi],
+      }));
+      setNewWifi(DEFAULT_NEW_WIFI);
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
   };
 
-  const handleRemoveWifi = (id: string) => {
+  const handleRemoveWifi = async (id: string) => {
     if (!config) return;
-    setConfig({
-      ...config,
-      wifiList: config.wifiList.filter((w) => w.id !== id),
-    });
+    setSaveError(null);
+    try {
+      await setConfig((current) => ({
+        ...current,
+        wifiList: current.wifiList.filter((wifi) => wifi.id !== id),
+      }));
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
   };
 
   // 切换WiFi自动重连状态
-  const handleToggleWifiAutoConnect = (id: string) => {
+  const handleToggleWifiAutoConnect = async (id: string) => {
     if (!config) return;
-    setConfig({
-      ...config,
-      wifiList: config.wifiList.map((w) =>
-        w.id === id ? { ...w, autoConnect: !w.autoConnect } : w
-      ),
-    });
+    setSaveError(null);
+    try {
+      await setConfig((current) => ({
+        ...current,
+        wifiList: current.wifiList.map((wifi) =>
+          wifi.id === id ? { ...wifi, autoConnect: !wifi.autoConnect } : wifi
+        ),
+      }));
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
   };
 
-  const handleSettingChange = (key: string, value: unknown) => {
+  const handleSettingChange = async (key: string, value: unknown) => {
     if (!config) return;
-    setConfig({
-      ...config,
-      settings: { ...config.settings, [key]: value },
-    });
+    setSaveError(null);
+    try {
+      await setConfig((current) => ({
+        ...current,
+        settings: { ...current.settings, [key]: value },
+      }));
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
   };
 
-  const handleSwitchAccount = (id: string) => {
+  const handleSwitchAccount = async (id: string) => {
     if (!config) return;
-    setConfig({ ...config, currentAccountId: id });
+    setSaveError(null);
+    try {
+      await setConfig((current) => ({ ...current, currentAccountId: id }));
+    } catch (error) {
+      setSaveError(getErrorMessage(error));
+    }
   };
 
   return (
@@ -125,30 +210,41 @@ export const Settings: React.FC = () => {
         配置设置
       </h1>
 
+      {saveError && (
+        <div className="card" role="alert" style={{ color: 'var(--error-color)' }}>
+          {saveError}
+        </div>
+      )}
+
       {!config ? (
         <div className="card">
           <p>加载中...</p>
         </div>
       ) : (
         <>
-          <GeneralSettingsCard settings={config.settings} onSettingChange={handleSettingChange} />
+          <GeneralSettingsCard
+            settings={config.settings}
+            onSettingChange={(key, value) => void handleSettingChange(key, value)}
+          />
           <AccountsCard
             accounts={config.accounts}
             currentAccountId={config.currentAccountId}
             newAccount={newAccount}
             setNewAccount={setNewAccount}
-            onAddAccount={handleAddAccount}
-            onRemoveAccount={handleRemoveAccount}
-            onSwitchAccount={handleSwitchAccount}
+            accountError={accountError}
+            onAddAccount={() => void handleAddAccount()}
+            onRemoveAccount={(id) => void handleRemoveAccount(id)}
+            onSwitchAccount={(id) => void handleSwitchAccount(id)}
           />
           <WifiConfigCard
             wifiList={config.wifiList}
             accounts={config.accounts}
             newWifi={newWifi}
             setNewWifi={setNewWifi}
-            onAddWifi={handleAddWifi}
-            onRemoveWifi={handleRemoveWifi}
-            onToggleAutoConnect={handleToggleWifiAutoConnect}
+            wifiError={wifiError}
+            onAddWifi={() => void handleAddWifi()}
+            onRemoveWifi={(id) => void handleRemoveWifi(id)}
+            onToggleAutoConnect={(id) => void handleToggleWifiAutoConnect(id)}
           />
         </>
       )}

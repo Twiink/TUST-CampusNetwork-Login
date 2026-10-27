@@ -2,47 +2,70 @@
  * 配置管理 Hook
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import type { AppConfig, AppSettings } from '@repo/shared';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { createDefaultAppConfig, type AppConfig, type AppSettings } from '@repo/shared';
+
+export type ConfigUpdate = AppConfig | ((current: AppConfig) => AppConfig);
 
 export function useConfig() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const configRef = useRef<AppConfig | null>(null);
+  const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const applyConfig = useCallback((nextConfig: AppConfig | null) => {
+    configRef.current = nextConfig;
+    setConfig(nextConfig);
+  }, []);
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
     try {
       const data = await window.electronAPI.config.get();
-      setConfig(data);
+      applyConfig(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取配置失败');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyConfig]);
 
-  const updateConfig = useCallback(async (newConfig: AppConfig) => {
-    setLoading(true);
-    try {
-      await window.electronAPI.config.set(newConfig);
-      setConfig(newConfig);
-      setError(null);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '保存配置失败';
-      setError(message);
-      throw new Error(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const updateConfig = useCallback(
+    (update: ConfigUpdate) => {
+      const task = updateQueueRef.current.then(async () => {
+        const current = configRef.current ?? createDefaultAppConfig();
+        const newConfig = typeof update === 'function' ? update(current) : update;
+
+        setLoading(true);
+        try {
+          const saved = await window.electronAPI.config.set(newConfig);
+          if (!saved) {
+            throw new Error('保存配置失败');
+          }
+          applyConfig(newConfig);
+          setError(null);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '保存配置失败';
+          setError(message);
+          throw new Error(message);
+        } finally {
+          setLoading(false);
+        }
+      });
+
+      updateQueueRef.current = task.catch(() => undefined);
+      return task;
+    },
+    [applyConfig]
+  );
 
   const resetConfig = useCallback(async () => {
     setLoading(true);
     try {
       const defaultConfig = await window.electronAPI.config.reset();
-      setConfig(defaultConfig);
+      applyConfig(defaultConfig);
       setError(null);
       return defaultConfig;
     } catch (err) {
@@ -52,7 +75,7 @@ export function useConfig() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyConfig]);
 
   useEffect(() => {
     fetchConfig();

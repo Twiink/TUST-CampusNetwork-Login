@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import type { AppSettings, NotificationSettings } from '@repo/shared';
 import {
   Settings as SettingsIcon,
@@ -52,28 +52,33 @@ const NumberRow: React.FC<{
   min: number;
   max: number;
   onChange: (value: number) => void;
-}> = ({ icon, label, value, min, max, onChange }) => (
-  <div className="form-group">
-    <label>
-      {icon}
-      {label}
-    </label>
-    <input
-      type="number"
-      className="form-control"
-      value={value}
-      min={min}
-      max={max}
-      onWheel={(e) => e.currentTarget.blur()}
-      onChange={(e) => {
-        const parsed = parseInt(e.target.value, 10);
-        if (Number.isFinite(parsed)) {
-          onChange(Math.min(max, Math.max(min, parsed)));
-        }
-      }}
-    />
-  </div>
-);
+}> = ({ icon, label, value, min, max, onChange }) => {
+  const inputId = useId();
+
+  return (
+    <div className="form-group">
+      <label htmlFor={inputId}>
+        {icon}
+        {label}
+      </label>
+      <input
+        id={inputId}
+        type="number"
+        className="form-control"
+        value={value}
+        min={min}
+        max={max}
+        onWheel={(e) => e.currentTarget.blur()}
+        onChange={(e) => {
+          const parsed = parseInt(e.target.value, 10);
+          if (Number.isFinite(parsed)) {
+            onChange(Math.min(max, Math.max(min, parsed)));
+          }
+        }}
+      />
+    </div>
+  );
+};
 
 export const GeneralSettingsCard: React.FC<{
   settings: AppSettings;

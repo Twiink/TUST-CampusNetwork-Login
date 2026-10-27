@@ -1,5 +1,32 @@
 import '@testing-library/jest-dom/vitest';
 
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(globalThis, 'ResizeObserver', {
+  configurable: true,
+  writable: true,
+  value: ResizeObserverStub,
+});
+
+Object.defineProperty(window, 'matchMedia', {
+  configurable: true,
+  writable: true,
+  value: vi.fn().mockImplementation((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 beforeEach(() => {
   const listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
@@ -52,6 +79,8 @@ beforeEach(() => {
         get: vi.fn(),
         clear: vi.fn(),
         export: vi.fn(),
+        exportSave: vi.fn(),
+        openDir: vi.fn(),
       },
       settings: {
         get: vi.fn(),

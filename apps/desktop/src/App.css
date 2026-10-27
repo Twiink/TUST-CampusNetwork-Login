@@ -101,6 +101,10 @@ body::after {
 }
 
 .nav-item {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  background: transparent;
   padding: 12px 12px;
   cursor: pointer;
   border-radius: var(--radius-md);
