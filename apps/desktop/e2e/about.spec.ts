@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures';
 import { openPage } from './helpers';
+
+const packageJson = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+) as { version: string };
 
 test('关于页展示真实版本与仓库链接', async ({ appWindow: window }) => {
   await openPage(window, '关于');
 
-  await expect(window.getByText('版本 1.0.0')).toBeVisible();
+  await expect(window.getByText(`版本 ${packageJson.version}`)).toBeVisible();
   await expect(window.getByRole('link', { name: 'GitHub 仓库' })).toHaveAttribute(
     'href',
     'https://github.com/Twiink/TUST-CampusNetwork-Login'
