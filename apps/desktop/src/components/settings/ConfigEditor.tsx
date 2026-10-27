@@ -211,7 +211,7 @@ export function ConfigEditor({
               checked={clearPassword}
               onChange={(e) => setClearPassword(e.target.checked)}
             />
-            清除 WiFi 密码，使用开放网络
+            清除应用保存的 WiFi 密码
           </label>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}

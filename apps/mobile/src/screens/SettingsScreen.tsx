@@ -222,6 +222,8 @@ export const SettingsScreen: React.FC = () => {
         </Text>
       ) : null}
       <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}

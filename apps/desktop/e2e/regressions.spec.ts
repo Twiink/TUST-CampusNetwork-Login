@@ -55,8 +55,27 @@ test('附近扫描、选择、编辑与实际无线边界连接', async ({ appWi
   await page.getByRole('button', { name: '选择账号 20250001' }).click();
   await page.getByRole('button', { name: '添加 WiFi' }).click();
   await expect(page.getByRole('listitem', { name: 'WiFi Nearby-WIFI' })).toBeVisible();
+  const before = await page.evaluate(() => window.electronAPI.config.get());
+  const original = before?.wifiList.find((wifi) => wifi.ssid === 'Nearby-WIFI');
+  if (!original) throw new Error('Scanned WiFi configuration missing');
+  await page.getByRole('button', { name: '编辑 WiFi Nearby-WIFI' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('优先级', { exact: true }).fill('7');
+  await dialog.getByLabel('新密码（留空保留原密码）').fill('e2e-wifi-pass');
+  await dialog.getByRole('button', { name: '保存修改' }).click();
+  await expect(dialog).toHaveCount(0);
+  const after = await page.evaluate(() => window.electronAPI.config.get());
+  expect(after?.wifiList.find((wifi) => wifi.id === original.id)).toMatchObject({
+    ssid: 'Nearby-WIFI',
+    priority: 7,
+    password: 'e2e-wifi-pass',
+    linkedAccountIds: original.linkedAccountIds,
+  });
   await openPage(page, '运行状态');
-  expect(await page.evaluate(() => window.electronAPI.wifi.switch('Nearby-WIFI'))).toBe(true);
+  const switchButton = page.getByRole('button', { name: /Nearby-WIFI/ });
+  await switchButton.click();
+  await expect(switchButton).toContainText('当前', { timeout: 15000 });
+  await expect(switchButton).toBeDisabled();
 });
 
 test('多账号异常回退通过真实门户、IPC 和认证服务', async ({ appWindow: page, electronApp }) => {

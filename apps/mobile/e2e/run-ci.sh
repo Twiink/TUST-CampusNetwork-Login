@@ -51,6 +51,13 @@ if not list(root.iter('testcase')) or any(list(root.iter(tag)) for tag in ['fail
 PY
 }
 run_flow config-auth
+adb exec-out run-as com.netmate.app.e2e cat cache/exports/NetMate-diagnostic.log > "$E2E_ARTIFACTS/exported-diagnostic.log"
+node - "$E2E_ARTIFACTS/exported-diagnostic.log" <<'JS'
+const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
+const entries = text.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+if (!entries.length || entries.some(entry => typeof entry.message !== 'string')) throw new Error('Log export did not contain persisted diagnostic entries');
+if (['fake-password', 'e2e-wifi-pass'].some(password => text.includes(password))) throw new Error('Log export contained a fixture password');
+JS
 run_flow config-crud
 curl -fsS 'http://127.0.0.1:38081/control?ssid=&failConnections=true&online=false'
 run_flow reconnect-failure

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Keyboard } from 'react-native';
 import type { AccountConfig } from '@repo/shared';
 import { GlassView } from '../GlassView';
 import { useTheme } from '../../context/ThemeContext';
@@ -125,6 +125,10 @@ export const AccountsCard: React.FC<{
           ]}
           testID="add-username"
           accessibilityLabel="add-username"
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
           value={newAccount.username}
           onChangeText={t => setNewAccount({ ...newAccount, username: t })}
           placeholder="请输入学号/用户名"
@@ -145,6 +149,8 @@ export const AccountsCard: React.FC<{
           ]}
           testID="add-account-password"
           accessibilityLabel="add-account-password"
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
           value={newAccount.password}
           onChangeText={t => setNewAccount({ ...newAccount, password: t })}
           placeholder="请输入密码"

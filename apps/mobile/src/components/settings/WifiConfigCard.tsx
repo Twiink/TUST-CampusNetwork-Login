@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, Switch, Keyboard } from 'react-native';
 import type { AccountConfig, WifiConfig } from '@repo/shared';
 import { GlassView } from '../GlassView';
 import { useTheme } from '../../context/ThemeContext';
@@ -199,6 +199,8 @@ export const WifiConfigCard: React.FC<{
           ]}
           testID="add-wifi-password"
           accessibilityLabel="add-wifi-password"
+          returnKeyType="done"
+          onSubmitEditing={Keyboard.dismiss}
           value={newWifi.password}
           onChangeText={t => setNewWifi({ ...newWifi, password: t })}
           placeholder="请输入 WiFi 密码（可选）"

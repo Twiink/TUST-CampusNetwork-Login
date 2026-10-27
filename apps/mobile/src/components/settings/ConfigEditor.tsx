@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  Keyboard,
 } from 'react-native';
 import {
   editAccount,
@@ -119,7 +120,7 @@ export function ConfigEditor({
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.panel} accessibilityViewIsModal testID="config-editor">
-          <ScrollView keyboardShouldPersistTaps="handled">
+          <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
             <Text style={styles.title}>{target.kind === 'account' ? '编辑账号' : '编辑 WiFi'}</Text>
             {target.kind === 'account' ? (
               <>
@@ -127,6 +128,8 @@ export function ConfigEditor({
                 <TextInput
                   accessibilityLabel="编辑用户名"
                   testID="edit-username"
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
                   style={styles.input}
                   autoCapitalize="none"
                   value={account.username}
@@ -163,6 +166,8 @@ export function ConfigEditor({
                 <Text style={styles.label}>WiFi 名称</Text>
                 <TextInput
                   accessibilityLabel="编辑 WiFi 名称"
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
                   style={styles.input}
                   value={wifi.ssid}
                   onChangeText={ssid => setWifi(previous => ({ ...previous, ssid }))}
@@ -275,7 +280,7 @@ export function ConfigEditor({
             />
             {target.kind === 'wifi' ? (
               <View style={styles.row}>
-                <Text style={styles.text}>清除密码，使用开放网络</Text>
+                <Text style={styles.text}>清除应用保存的 WiFi 密码</Text>
                 <Switch
                   accessibilityLabel="清除 WiFi 密码"
                   value={clearPassword}

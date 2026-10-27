@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, Switch } from 'react-native';
+import { View, Text, TextInput, Switch, Keyboard } from 'react-native';
 import type { AppSettings } from '@repo/shared';
 import { GlassView } from '../GlassView';
 import { useTheme } from '../../context/ThemeContext';
@@ -205,6 +205,8 @@ export const GeneralSettingsCard: React.FC<{
                   },
                 ]}
                 testID="wifi-retries"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
                 accessibilityLabel="WiFi 重试次数"
                 value={String(settings.wifiReconnectRetries)}
                 onChangeText={text => {
@@ -240,6 +242,8 @@ export const GeneralSettingsCard: React.FC<{
                   },
                 ]}
                 testID="wifi-cooldown"
+                returnKeyType="done"
+                onSubmitEditing={Keyboard.dismiss}
                 accessibilityLabel="WiFi 冷却分钟"
                 value={String(settings.wifiReconnectCooldownMinutes)}
                 onChangeText={text => {

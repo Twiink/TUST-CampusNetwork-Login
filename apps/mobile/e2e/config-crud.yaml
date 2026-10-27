@@ -4,6 +4,7 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'tab-settings' }
 - runFlow: { file: 'flows/add-account.yaml', env: { USERNAME: 'temporary' } }
 - scrollUntilVisible:
+    centerElement: true
     timeout: 60000
     speed: 80
     element: '编辑账号 temporary'
@@ -12,56 +13,113 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'edit-username' }
 - eraseText
 - inputText: 'temporary-edited'
-- hideKeyboard
-- scrollUntilVisible: { element: { id: 'save-edit' }, direction: DOWN, timeout: 60000, speed: 80 }
+- pressKey: enter
+- assertVisible: { id: 'config-editor' }
+- scrollUntilVisible:
+    {
+      element: { id: 'save-edit' },
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: { id: 'save-edit' }
 - stopApp
 - launchApp
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
+    centerElement: true
     timeout: 60000
     speed: 80
     element: '删除账号 temporary-edited'
     direction: DOWN
 - tapOn: '删除账号 temporary-edited'
 - assertNotVisible: '删除账号 temporary-edited'
-- scrollUntilVisible: { element: { id: 'scan-wifi' }, direction: UP, timeout: 60000, speed: 80 }
+- scrollUntilVisible:
+    { element: { id: 'scan-wifi' }, direction: UP, timeout: 60000, speed: 80, centerElement: true }
 - tapOn: { id: 'scan-wifi' }
 - scrollUntilVisible:
+    centerElement: true
     element: '选择网络 Nearby-WIFI'
     direction: DOWN
     timeout: 60000
     speed: 80
 - tapOn: '选择网络 Nearby-WIFI'
 - scrollUntilVisible:
-    { element: { id: 'add-wifi-password' }, direction: DOWN, timeout: 60000, speed: 80 }
+    {
+      element: { id: 'add-wifi-password' },
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: { id: 'add-wifi-password' }
 - inputText: 'e2e-wifi-pass'
-- hideKeyboard
+- pressKey: enter
 - scrollUntilVisible:
-    { element: { id: 'add-requires-auth' }, direction: DOWN, timeout: 60000, speed: 80 }
+    {
+      element: { id: 'add-requires-auth' },
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: { id: 'add-requires-auth' }
-- scrollUntilVisible: { element: { id: 'add-wifi' }, direction: DOWN, timeout: 60000, speed: 80 }
+- scrollUntilVisible:
+    { element: { id: 'add-wifi' }, direction: DOWN, timeout: 60000, speed: 80, centerElement: true }
 - tapOn: { id: 'add-wifi' }
-- scrollUntilVisible: { element: '编辑 WiFi Nearby-WIFI', direction: UP, timeout: 60000, speed: 80 }
+- scrollUntilVisible:
+    {
+      element: '编辑 WiFi Nearby-WIFI',
+      direction: UP,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: '编辑 WiFi Nearby-WIFI'
 - tapOn: '编辑 WiFi 名称'
 - eraseText
 - inputText: 'Nearby-edited'
-- hideKeyboard
-- scrollUntilVisible: { element: { id: 'save-edit' }, direction: DOWN, timeout: 60000, speed: 80 }
+- pressKey: enter
+- assertVisible: { id: 'config-editor' }
+- scrollUntilVisible:
+    {
+      element: { id: 'save-edit' },
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: { id: 'save-edit' }
 - scrollUntilVisible:
-    { element: '自动连接 Nearby-edited', direction: UP, timeout: 60000, speed: 80 }
+    {
+      element: '自动连接 Nearby-edited',
+      direction: UP,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: '自动连接 Nearby-edited'
 - stopApp
 - launchApp
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
-    { element: '自动连接 Nearby-edited', direction: DOWN, timeout: 60000, speed: 80 }
+    {
+      element: '自动连接 Nearby-edited',
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - assertVisible: { text: '自动连接 Nearby-edited', checked: false }
 - scrollUntilVisible:
-    { element: '删除 WiFi Nearby-edited', direction: DOWN, timeout: 60000, speed: 80 }
+    {
+      element: '删除 WiFi Nearby-edited',
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - tapOn: '删除 WiFi Nearby-edited'
 - assertNotVisible: '删除 WiFi Nearby-edited'
 - tapOn: { id: 'tab-home' }

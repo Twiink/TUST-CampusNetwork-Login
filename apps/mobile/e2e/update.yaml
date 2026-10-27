@@ -3,6 +3,7 @@ appId: com.netmate.app.e2e
 - launchApp
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
+    centerElement: true
     timeout: 60000
     speed: 80
     element: '检查更新'
@@ -22,6 +23,7 @@ appId: com.netmate.app.e2e
 - launchApp
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
+    centerElement: true
     timeout: 60000
     speed: 80
     element: '取消下载'

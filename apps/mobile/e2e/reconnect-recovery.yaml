@@ -6,6 +6,7 @@ appId: com.netmate.app.e2e
     timeout: 60000
 - tapOn: { id: 'tab-settings' }
 - scrollUntilVisible:
+    centerElement: true
     timeout: 60000
     speed: 80
     element: '连接 WiFi TUST-WIFI'

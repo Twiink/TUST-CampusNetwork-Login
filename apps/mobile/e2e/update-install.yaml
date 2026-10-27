@@ -2,7 +2,8 @@ appId: com.netmate.app.e2e
 ---
 - launchApp
 - tapOn: { id: 'tab-settings' }
-- scrollUntilVisible: { element: '检查更新', direction: DOWN, timeout: 60000, speed: 80 }
+- scrollUntilVisible:
+    { element: '检查更新', direction: DOWN, timeout: 60000, speed: 80, centerElement: true }
 - tapOn: '检查更新'
 - scrollUntilVisible:
     element: '重试下载'
@@ -23,7 +24,15 @@ appId: com.netmate.app.e2e
 - extendedWaitUntil: { visible: 'Done|完成|Open|打开', timeout: 60000 }
 - launchApp
 - tapOn: { id: 'tab-settings' }
-- scrollUntilVisible: { element: '当前版本 1.0.2-e2e', direction: DOWN, timeout: 60000, speed: 80 }
+- scrollUntilVisible:
+    {
+      element: '当前版本 1.0.2-e2e',
+      direction: DOWN,
+      timeout: 60000,
+      speed: 80,
+      centerElement: true,
+    }
 - assertVisible: '当前版本 1.0.2-e2e'
-- scrollUntilVisible: { element: '更新已安装', direction: DOWN, timeout: 15000, speed: 80 }
+- scrollUntilVisible:
+    { element: '更新已安装', direction: DOWN, timeout: 15000, speed: 80, centerElement: true }
 - extendedWaitUntil: { visible: '更新已安装', timeout: 15000 }
