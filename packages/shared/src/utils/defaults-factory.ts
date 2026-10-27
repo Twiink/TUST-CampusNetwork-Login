@@ -16,12 +16,14 @@ let lastTimestamp = 0;
  * 创建默认账户配置
  */
 export function createDefaultAccountConfig(partial: Partial<AccountConfig> = {}): AccountConfig {
+  const username = partial.username?.trim() || '';
+  const id = partial.id?.trim() || generateId();
   return {
-    id: partial.id || generateId(),
-    name: partial.name || '默认账户',
-    username: partial.username || '',
+    id,
+    name: partial.name?.trim() || username || '默认账户',
+    username,
     password: partial.password || '',
-    serverUrl: partial.serverUrl || DEFAULT_SERVER_URL,
+    serverUrl: partial.serverUrl?.trim() || DEFAULT_SERVER_URL,
     isp: partial.isp || 'campus',
   };
 }

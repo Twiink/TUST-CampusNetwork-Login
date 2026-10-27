@@ -42,6 +42,65 @@ function toFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function isHttpUrl(value: string): boolean {
+  const trimmed = value.trim();
+  const match = /^(https?):\/\/([^/?#]+)(?:[/?#].*)?$/i.exec(trimmed);
+  if (!match || /\s/.test(trimmed)) {
+    return false;
+  }
+
+  // Avoid relying on the DOM URL type so this validator also works in React Native.
+  const authority = match[2];
+  if (authority.includes('@')) {
+    return false;
+  }
+
+  let host = authority;
+  let port: string | undefined;
+  if (authority.startsWith('[')) {
+    const closingBracket = authority.indexOf(']');
+    if (closingBracket < 0) {
+      return false;
+    }
+    host = authority.slice(1, closingBracket);
+    const suffix = authority.slice(closingBracket + 1);
+    if (suffix) {
+      if (!suffix.startsWith(':')) {
+        return false;
+      }
+      port = suffix.slice(1);
+    }
+    if (!host.includes(':') || !/^[0-9a-f:.]+$/i.test(host)) {
+      return false;
+    }
+  } else {
+    const colon = authority.lastIndexOf(':');
+    if (colon !== -1) {
+      if (authority.indexOf(':') !== colon) {
+        return false;
+      }
+      host = authority.slice(0, colon);
+      port = authority.slice(colon + 1);
+    }
+    if (
+      !/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(
+        host
+      )
+    ) {
+      return false;
+    }
+  }
+
+  if (port !== undefined) {
+    const numericPort = Number(port);
+    if (!/^\d+$/.test(port) || numericPort < 1 || numericPort > 65_535) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function dedupeStringList(values: unknown[]): string[] {
   return Array.from(
     new Set(
@@ -160,15 +219,15 @@ export function normalizeAppSettings(settings?: unknown): AppSettings {
 export function validateAccountConfig(config: Partial<AccountConfig>): ValidationResult {
   const errors: string[] = [];
 
-  if (!config.id || typeof config.id !== 'string') {
+  if (typeof config.id !== 'string' || !config.id.trim()) {
     errors.push('账户 ID 不能为空');
   }
 
-  if (!config.username || typeof config.username !== 'string') {
+  if (typeof config.username !== 'string' || !config.username.trim()) {
     errors.push('用户名不能为空');
   }
 
-  if (!config.password || typeof config.password !== 'string') {
+  if (typeof config.password !== 'string' || config.password.length === 0) {
     errors.push('密码不能为空');
   }
 
@@ -176,12 +235,12 @@ export function validateAccountConfig(config: Partial<AccountConfig>): Validatio
     errors.push('服务器地址格式无效');
   }
 
-  if (config.serverUrl) {
-    try {
-      new URL(config.serverUrl);
-    } catch {
-      errors.push('服务器地址格式无效');
-    }
+  if (
+    typeof config.serverUrl === 'string' &&
+    config.serverUrl.trim() &&
+    !isHttpUrl(config.serverUrl)
+  ) {
+    errors.push('服务器地址格式无效，仅支持 http:// 或 https://');
   }
 
   const validIsps: ISP[] = ['campus', 'cmcc', 'cucc', 'ctcc'];
@@ -226,11 +285,11 @@ export function normalizeWifiConfig(config: Partial<LegacyWifiConfig> = {}): Wif
 export function validateWifiConfig(config: Partial<WifiConfig>): ValidationResult {
   const errors: string[] = [];
 
-  if (!config.id || typeof config.id !== 'string') {
+  if (typeof config.id !== 'string' || !config.id.trim()) {
     errors.push('WiFi 配置 ID 不能为空');
   }
 
-  if (!config.ssid || typeof config.ssid !== 'string') {
+  if (typeof config.ssid !== 'string' || !config.ssid.trim()) {
     errors.push('WiFi 名称不能为空');
   }
 
@@ -266,6 +325,15 @@ export function validateWifiConfig(config: Partial<WifiConfig>): ValidationResul
   }
 
   if (
+    config.linkedAccountId !== undefined &&
+    (typeof config.linkedAccountId !== 'string' ||
+      !Array.isArray(config.linkedAccountIds) ||
+      config.linkedAccountId !== config.linkedAccountIds[0])
+  ) {
+    errors.push('兼容关联账号字段与关联账号列表不一致');
+  }
+
+  if (
     typeof config.priority !== 'number' ||
     !Number.isFinite(config.priority) ||
     config.priority < 0
@@ -279,10 +347,6 @@ export function validateWifiConfig(config: Partial<WifiConfig>): ValidationResul
     (typeof config.lastConnectedAt !== 'number' || !Number.isFinite(config.lastConnectedAt))
   ) {
     errors.push('最近连接时间格式无效');
-  }
-
-  if (config.requiresAuth && (!config.linkedAccountIds || config.linkedAccountIds.length === 0)) {
-    errors.push('需要认证的 WiFi 必须至少关联一个账号');
   }
 
   return {
@@ -300,6 +364,7 @@ export function validateAppSettings(settings: Partial<AppSettings>): ValidationR
   if (settings.heartbeatIntervalSeconds !== undefined) {
     if (
       typeof settings.heartbeatIntervalSeconds !== 'number' ||
+      !Number.isFinite(settings.heartbeatIntervalSeconds) ||
       settings.heartbeatIntervalSeconds < 5
     ) {
       errors.push('心跳间隔必须大于等于 5 秒');
@@ -309,6 +374,7 @@ export function validateAppSettings(settings: Partial<AppSettings>): ValidationR
   if (settings.heartbeatFailureThreshold !== undefined) {
     if (
       typeof settings.heartbeatFailureThreshold !== 'number' ||
+      !Number.isFinite(settings.heartbeatFailureThreshold) ||
       settings.heartbeatFailureThreshold < 1
     ) {
       errors.push('连续失败阈值必须大于等于 1');
@@ -316,7 +382,11 @@ export function validateAppSettings(settings: Partial<AppSettings>): ValidationR
   }
 
   if (settings.wifiReconnectRetries !== undefined) {
-    if (typeof settings.wifiReconnectRetries !== 'number' || settings.wifiReconnectRetries < 0) {
+    if (
+      typeof settings.wifiReconnectRetries !== 'number' ||
+      !Number.isFinite(settings.wifiReconnectRetries) ||
+      settings.wifiReconnectRetries < 0
+    ) {
       errors.push('WiFi 重试次数必须大于等于 0');
     }
   }
@@ -324,9 +394,20 @@ export function validateAppSettings(settings: Partial<AppSettings>): ValidationR
   if (settings.wifiReconnectCooldownMinutes !== undefined) {
     if (
       typeof settings.wifiReconnectCooldownMinutes !== 'number' ||
+      !Number.isFinite(settings.wifiReconnectCooldownMinutes) ||
       settings.wifiReconnectCooldownMinutes < 0
     ) {
       errors.push('冷却期必须大于等于 0');
+    }
+  }
+
+  if (settings.destroyHiddenWindowAfterMs !== undefined) {
+    if (
+      typeof settings.destroyHiddenWindowAfterMs !== 'number' ||
+      !Number.isFinite(settings.destroyHiddenWindowAfterMs) ||
+      settings.destroyHiddenWindowAfterMs < 0
+    ) {
+      errors.push('隐藏窗口销毁时间必须大于等于 0');
     }
   }
 
@@ -346,11 +427,13 @@ export function normalizeAppConfig(config: Partial<AppConfig> = {}): AppConfig {
   const rawWifiList = Array.isArray(config.wifiList) ? config.wifiList : [];
   const wifiList = rawWifiList.map((wifi) => {
     const normalized = normalizeWifiConfig(wifi);
+    const linkedAccountIds = normalized.linkedAccountIds.filter((accountId) =>
+      accountIds.has(accountId)
+    );
     return {
       ...normalized,
-      linkedAccountIds: normalized.linkedAccountIds.filter((accountId) =>
-        accountIds.has(accountId)
-      ),
+      linkedAccountIds,
+      linkedAccountId: normalized.requiresAuth ? linkedAccountIds[0] : undefined,
     };
   });
   const currentAccountId =

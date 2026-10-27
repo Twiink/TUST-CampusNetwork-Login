@@ -92,7 +92,7 @@ export class NetworkDetector {
    */
   async isAuthenticated(recentStatus?: NetworkStatus): Promise<boolean> {
     if (recentStatus) {
-      return recentStatus.connected;
+      return recentStatus.authenticated;
     }
     return this.checkConnectivity();
   }
@@ -164,8 +164,8 @@ export class NetworkDetector {
       return status;
     }
 
-    // WiFi 详情和连通性已并行完成；只有在线时才需要额外测延迟。
-    const latency = await this.measureLatency();
+    // 适配器已带延迟时直接复用；只有缺少延迟才额外探测。
+    const latency = wifiDetails.latency ?? (await this.measureLatency());
     const status: NetworkStatus = {
       connected,
       authenticated: connected,
@@ -268,17 +268,7 @@ export class NetworkDetector {
     // 立即执行一次
     if (options.immediate !== false) {
       this.logger?.debug('立即执行首次网络状态检测');
-      this.getNetworkStatus()
-        .then((status) => {
-          this.logger?.debug('首次网络状态检测完成');
-          void this.dispatchPollingResult(callback, status);
-        })
-        .catch((error) => {
-          this.logger?.error('首次网络状态检测失败', {
-            错误: error instanceof Error ? error.message : String(error),
-          });
-          callback({ connected: false, authenticated: false, wifiConnected: false });
-        });
+      void this.runImmediatePollingTick(callback);
     }
 
     // 定时轮询
@@ -287,6 +277,27 @@ export class NetworkDetector {
     }, options.interval);
 
     this.logger?.success('网络状态轮询已启动');
+  }
+
+  private async runImmediatePollingTick(callback: NetworkCallback): Promise<void> {
+    if (this.tickInFlight) {
+      this.logger?.warn('上一轮网络检测未完成，跳过首次检测');
+      return;
+    }
+
+    this.tickInFlight = true;
+    try {
+      const status = await this.getNetworkStatus();
+      this.logger?.debug('首次网络状态检测完成');
+      await this.dispatchPollingResult(callback, status);
+    } catch (error) {
+      this.logger?.error('首次网络状态检测失败', {
+        错误: error instanceof Error ? error.message : String(error),
+      });
+      callback({ connected: false, authenticated: false, wifiConnected: false });
+    } finally {
+      this.tickInFlight = false;
+    }
   }
 
   private async runPollingTick(callback: NetworkCallback): Promise<void> {

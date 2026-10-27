@@ -3,7 +3,12 @@
  */
 
 import { AccountConfig } from '../types/config';
-import { validateAccountConfig, createDefaultAccountConfig, generateId } from '../utils/validator';
+import {
+  validateAccountConfig,
+  createDefaultAccountConfig,
+  generateId,
+  normalizeWifiConfig,
+} from '../utils/validator';
 import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
 import type { Logger } from '../models/Logger';
@@ -66,10 +71,14 @@ export class AccountManager {
       服务器: account.serverUrl,
     });
 
+    const username = account.username.trim();
     const newAccount: AccountConfig = {
       ...createDefaultAccountConfig(),
       ...account,
-      id: account.id || generateId(),
+      id: account.id?.trim() || generateId(),
+      name: account.name.trim() || username,
+      username,
+      serverUrl: account.serverUrl.trim(),
     };
 
     const validation = validateAccountConfig(newAccount);
@@ -146,6 +155,19 @@ export class AccountManager {
       ...updates,
       id, // 确保 ID 不变
     };
+    updatedAccount.username = updatedAccount.username.trim();
+    updatedAccount.name = updatedAccount.name.trim() || updatedAccount.username;
+    updatedAccount.serverUrl = updatedAccount.serverUrl.trim();
+
+    const duplicate = config.accounts.find(
+      (account) => account.id !== id && account.username === updatedAccount.username
+    );
+    if (duplicate) {
+      this.logger?.error('更新账户失败：该用户名已存在', {
+        用户名: updatedAccount.username,
+      });
+      throw new AppError(ErrorCode.INVALID_PARAMS, '该用户名已存在');
+    }
 
     const validation = validateAccountConfig(updatedAccount);
     if (!validation.valid) {
@@ -196,9 +218,23 @@ export class AccountManager {
       currentAccountId = updatedAccounts.length > 0 ? updatedAccounts[0].id : null;
     }
 
+    // 保留 WiFi 配置，但移除对已删除账号的引用；剩下无关联账号时由界面提示重新关联。
+    const updatedWifiList = config.wifiList.map((wifi) => {
+      if (!wifi.linkedAccountIds.includes(id) && wifi.linkedAccountId !== id) {
+        return wifi;
+      }
+
+      return normalizeWifiConfig({
+        ...wifi,
+        linkedAccountIds: wifi.linkedAccountIds.filter((accountId) => accountId !== id),
+        linkedAccountId: undefined,
+      });
+    });
+
     await this.configManager.update({
       accounts: updatedAccounts,
       currentAccountId,
+      wifiList: updatedWifiList,
     });
 
     this.logger?.success('账户删除成功', {
