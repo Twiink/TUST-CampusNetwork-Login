@@ -115,7 +115,9 @@ class UpdateModule(private val context: ReactApplicationContext) : ReactContextB
     private fun verify(file: File): Verification {
         if (!file.isFile) return Verification("下载文件不存在，请重试")
         val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
-        val candidate = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return Verification("APK 文件无效")
+        // Android 9 only collects archive certificates with GET_SIGNATURES. Keep the
+        // modern flag as well so identity() still validates the full signing lineage.
+        val candidate = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags or PackageManager.GET_SIGNATURES) ?: return Verification("APK 文件无效")
         val expected = prefs.getString("version", null)?.removePrefix("v")
         if (expected != null && candidate.versionName?.substringBefore('-') != expected) return Verification("APK 版本与更新信息不匹配")
         val installed = context.packageManager.getPackageInfo(context.packageName, flags)

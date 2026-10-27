@@ -36,6 +36,8 @@ Android 日志页支持 debug/info/success/warn/error 筛选、分页、清空�
 
 Android 设置页“应用更新”支持手动检查、应用内进度、取消/重试，重启后恢复下载状态。下载完成校验包名、版本和签名，通过后提供安装入口；缺少安装权限时引导到系统授权页，返回后继续安装。系统安装确认由用户操作。
 
+Android 9 的 APK 读取同时请求新旧证书标记，确保系统实际采集证书；签名校验继续使用当前证书和轮换历史，证书缺失或多签不匹配均拒绝安装。依据：[Android 9 PackageManager 实现](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-9.0.0_r47/core/java/android/content/pm/PackageManager.java)。
+
 通用包 versionCode 为基础版本码 × 10，ABI 分包额外加 1–4。发布时递增基础版本码，下版通用包版本码大于上一版所有 ABI 分包。测试 APK 使用独立应用 ID 和测试签名，不用于正式分发。
 
 ## 验证范围

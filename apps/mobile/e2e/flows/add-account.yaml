@@ -9,8 +9,8 @@ appId: com.netmate.app.e2e
     direction: DOWN
 - tapOn: { id: 'add-username' }
 - inputText: ${USERNAME}
-- assertVisible: { id: 'add-username', text: '${USERNAME}' }
 - pressKey: enter
+- assertVisible: { id: 'add-username', text: '${USERNAME}' }
 - scrollUntilVisible:
     centerElement: true
     waitToSettleTimeoutMs: 1000

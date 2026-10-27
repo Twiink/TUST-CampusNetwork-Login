@@ -23,4 +23,15 @@ class ApkPolicyTest {
         assertFalse(ApkPolicy.isInstalled(installed, installed.copy(signers = setOf("untrusted"))))
         assertFalse(ApkPolicy.isInstalled(installed.copy(signers = emptySet()), installed.copy(signers = emptySet())))
     }
+    @Test fun missingCertificatesCannotAuthorizeAnUpgrade() {
+        val candidate = installed.copy(version = 10020)
+        assertEquals("无法验证 APK 签名", ApkPolicy.validate(installed.copy(signers = emptySet()), candidate))
+        assertEquals("无法验证 APK 签名", ApkPolicy.validate(installed, candidate.copy(signers = emptySet())))
+    }
+    @Test fun multipleSignersRequireTheExactCurrentSignerSet() {
+        val multiple = installed.copy(signers = setOf("release", "second"))
+        assertNull(ApkPolicy.validate(multiple, multiple.copy(version = 10020)))
+        val changed = multiple.copy(version = 10020, signers = setOf("release", "other"), history = setOf("release", "second", "other"))
+        assertEquals("APK 签名不匹配", ApkPolicy.validate(multiple, changed))
+    }
 }
