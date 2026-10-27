@@ -252,57 +252,6 @@ POST http://{auth_server}/eportal/portal/login
 
 提交信息必须为单行 `<scope>: <中文主题>`，例如 `mobile: 修复 Gradle 插件解析`。可用 scope 包括 `desktop`、`mobile`、`shared`、`ci`、`release`、`docs`、`chore`、`build`、`test`、`deps`、`repo`。
 
-## 故障排除
-
-### Electron 二进制安装失败
-
-如果出现：
-
-```text
-Error: Electron failed to install correctly, please delete node_modules/electron and try installing again
-```
-
-先尝试补装 Electron 二进制：
-
-```bash
-node node_modules/electron/install.js
-```
-
-若仍失败，再清理后重装：
-
-```bash
-rm -rf node_modules
-pnpm install
-```
-
-Windows PowerShell 可使用 `Remove-Item -Recurse -Force node_modules`。修复后 `node_modules/electron` 应包含 `dist/` 和 `path.txt`。
-
-### Android Gradle 无法解析 React Native
-
-本仓库依赖 hoisted 工作区布局，React Native 与 Gradle 插件位于仓库根目录 `node_modules`。如果 Gradle 报找不到 `react-native`、`react-native-svg` 或 `@react-native/gradle-plugin`：
-
-```bash
-pnpm install --frozen-lockfile
-
-# 清理可再生成的 Android 构建缓存
-cd apps/mobile/android
-./gradlew clean
-```
-
-若只修改了依赖布局而自动链接仍使用旧路径，删除 `apps/mobile/android/build/generated/autolinking/` 后重新运行 Gradle。该目录是可再生成的构建缓存，不应提交。
-
-### Android 原生编译失败
-
-确认 JDK 为 17，而不是系统默认的更高版本；同时检查 Android SDK、NDK 与 CMake 是否完整安装。CI 使用 Temurin JDK 17。可使用以下命令先验证 Gradle 配置：
-
-```bash
-bash apps/mobile/android/gradlew -p apps/mobile/android help
-```
-
-### 桌面端出现进程清理乱码
-
-Windows 控制台可能把“没有找到进程”显示为乱码。这通常是 `vite-plugin-electron` 清理已退出进程时的无害警告。可执行 `chcp 65001` 切换到 UTF-8 后重试。
-
 ## 许可证
 
 ISC License
