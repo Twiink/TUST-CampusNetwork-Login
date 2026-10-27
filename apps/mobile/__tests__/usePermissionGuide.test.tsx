@@ -45,8 +45,16 @@ describe('usePermissionGuide', () => {
       granted.add(p);
       return PermissionsAndroid.RESULTS.GRANTED;
     });
+    const requestMultiple = jest
+      .spyOn(PermissionsAndroid, 'requestMultiple')
+      .mockImplementation(async permissions => {
+        permissions.forEach(permission => granted.add(permission));
+        return Object.fromEntries(
+          permissions.map(permission => [permission, PermissionsAndroid.RESULTS.GRANTED])
+        ) as Awaited<ReturnType<typeof PermissionsAndroid.requestMultiple>>;
+      });
     const titles: string[] = [];
-    // 说明对话框：定位、通知同意；后台定位跳过
+    // 前台定位、附近设备和通知同意；后台定位跳过。
     alertMock.mockImplementation((title: string, _message: string, buttons?: AlertButton[]) => {
       titles.push(title);
       const list = (buttons ?? []) as AlertButton[];
@@ -73,10 +81,14 @@ describe('usePermissionGuide', () => {
     );
 
     // 电池优化已在白名单、无厂商自启动页：不打扰
-    expect(titles).toEqual(['位置权限', '通知权限', '后台位置权限']);
+    expect(titles).toEqual(['位置权限', '附近 WiFi 设备', '通知权限', '后台位置权限']);
     expect(request.mock.calls.map(call => call[0])).toEqual([
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES,
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
+    ]);
+    expect(requestMultiple).toHaveBeenCalledWith([
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     ]);
     expect(onLocationGranted).toHaveBeenCalledTimes(1);
     expect(permissionModule.openAppSettings).not.toHaveBeenCalled();
@@ -90,7 +102,7 @@ describe('usePermissionGuide', () => {
     const second = renderHook(() =>
       usePermissionGuide({ ready: true, autoAuthEnabled: true, addLog: jest.fn() })
     );
-    await waitFor(() => expect(second.result.current.items.length).toBe(5));
+    await waitFor(() => expect(second.result.current.items.length).toBe(6));
     expect(alertMock).not.toHaveBeenCalled();
     second.unmount();
   });

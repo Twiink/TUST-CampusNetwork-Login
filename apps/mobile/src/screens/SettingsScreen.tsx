@@ -1,6 +1,6 @@
 import { UpdateCard } from '../components/settings/UpdateCard';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Alert, View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { ConfigEditor, type EditingTarget } from '../components/settings/ConfigEditor';
 import { NearbyWifi } from '../components/settings/NearbyWifi';
@@ -13,6 +13,7 @@ import {
   generateId,
   validateAccountConfig,
   validateWifiConfig,
+  resolveWifiSecurity,
 } from '@repo/shared';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
@@ -154,7 +155,7 @@ export const SettingsScreen: React.FC = () => {
       ssid,
       password: newWifi.password,
       autoConnect: newWifi.autoConnect ?? true,
-      security: newWifi.security,
+      security: resolveWifiSecurity(newWifi.security, newWifi.password),
       bssid: newWifi.bssid,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountIds,
@@ -319,9 +320,11 @@ export const SettingsScreen: React.FC = () => {
               .then(success => {
                 if (!success) return openWifiSettings();
               })
-              .catch(error =>
-                addLog?.('warn', error instanceof Error ? error.message : 'WiFi 连接失败')
-              );
+              .catch(error => {
+                const message = error instanceof Error ? error.message : 'WiFi 连接失败';
+                addLog?.('warn', message);
+                Alert.alert('无法连接 WiFi', message);
+              });
           }}
           wifiList={config.wifiList}
           accounts={config.accounts}

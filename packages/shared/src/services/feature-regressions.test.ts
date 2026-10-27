@@ -162,6 +162,12 @@ describe('审查回归：配置、认证与脱敏', () => {
       linkedAccountIds: ['a1'],
     });
     expect(() => editWifi(edited, 'w1', { priority: 100 })).toThrow('1–99');
+    expect(editWifi(open, 'w1', {}, 'new-wifi-password').wifiList[0]).toMatchObject({
+      id: 'w1',
+      security: 'WPA2',
+      password: 'new-wifi-password',
+      linkedAccountIds: ['a1'],
+    });
     expect(moveLinkedAccount(['a1', 'a2'], 'a2', -1)).toEqual(['a2', 'a1']);
   });
 

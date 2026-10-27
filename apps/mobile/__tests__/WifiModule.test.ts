@@ -3,6 +3,7 @@ import * as WifiModule from '../src/native/WifiModule';
 
 const nativeWifi = NativeModules.WifiModule as Record<string, jest.Mock>;
 const originalOS = Platform.OS;
+const originalVersion = Platform.Version;
 
 function setPlatform(os: string) {
   Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
@@ -11,6 +12,7 @@ function setPlatform(os: string) {
 describe('WifiModule bridge', () => {
   afterEach(() => {
     setPlatform(originalOS);
+    Object.defineProperty(Platform, 'Version', { value: originalVersion, configurable: true });
     jest.restoreAllMocks();
   });
 
@@ -53,6 +55,8 @@ describe('WifiModule bridge', () => {
 
   it('权限申请和状态读取在 Android 上走原生桥接', async () => {
     setPlatform('android');
+    Object.defineProperty(Platform, 'Version', { value: 28, configurable: true });
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
     const request = jest
       .spyOn(PermissionsAndroid, 'request')
       .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
@@ -65,6 +69,8 @@ describe('WifiModule bridge', () => {
 
   it('权限桥接异常时不会把失败当成已授权', async () => {
     setPlatform('android');
+    Object.defineProperty(Platform, 'Version', { value: 28, configurable: true });
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
     jest.spyOn(PermissionsAndroid, 'request').mockRejectedValueOnce(new Error('permission'));
     nativeWifi.checkLocationPermission.mockRejectedValueOnce(new Error('permission'));
 
@@ -78,5 +84,24 @@ describe('WifiModule bridge', () => {
 
     await expect(WifiModule.startWatching()).resolves.toBe(false);
     await expect(WifiModule.stopWatching()).resolves.toBe(false);
+  });
+
+  it('Android 13 拒绝附近设备权限时不连接，授权后可重试', async () => {
+    setPlatform('android');
+    Object.defineProperty(Platform, 'Version', { value: 33, configurable: true });
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    const request = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValueOnce(PermissionsAndroid.RESULTS.DENIED)
+      .mockResolvedValueOnce(PermissionsAndroid.RESULTS.GRANTED);
+    nativeWifi.connectToWifi.mockClear();
+    await expect(WifiModule.connectToWifi('TUST', 'fake-password')).rejects.toThrow(
+      '附近设备权限未授予'
+    );
+    expect(nativeWifi.connectToWifi).not.toHaveBeenCalled();
+    nativeWifi.connectToWifi.mockResolvedValueOnce(true);
+    await expect(WifiModule.connectToWifi('TUST', 'fake-password')).resolves.toBe(true);
+    expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES);
+    expect(nativeWifi.connectToWifi).toHaveBeenCalledWith('TUST', 'fake-password');
   });
 });

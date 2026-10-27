@@ -215,6 +215,7 @@ export const WifiConfigCard: React.FC<{
           </Text>
         </View>
         <Switch
+          testID="add-requires-auth"
           trackColor={{ false: theme.colors.border, true: theme.colors.primary + '40' }}
           thumbColor={newWifi.requiresAuth ? theme.colors.primary : '#f4f3f4'}
           value={newWifi.requiresAuth}
@@ -334,6 +335,7 @@ export const WifiConfigCard: React.FC<{
         </Text>
       )}
       <TouchableOpacity
+        testID="add-wifi"
         style={[
           styles.btnPrimary,
           {

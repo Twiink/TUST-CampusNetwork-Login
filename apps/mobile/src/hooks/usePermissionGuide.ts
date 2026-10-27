@@ -24,6 +24,7 @@ const GUIDE_DONE_KEY = 'netmate:permission-guide-done';
 /** 引导顺序；后台定位依赖前台定位，必须排在其后 */
 const GUIDE_ORDER: PermissionKey[] = [
   'location',
+  'nearbyWifi',
   'notification',
   'battery',
   'backgroundLocation',
@@ -34,6 +35,7 @@ const GUIDE_ORDER: PermissionKey[] = [
 const GUIDE_MESSAGES: Record<PermissionKey, string> = {
   location:
     '需要位置权限来读取当前 WiFi 名称，用于判断是否连接校园网并自动认证。应用不会记录或上传位置。',
+  nearbyWifi: '需要附近设备权限来管理 WiFi 连接。授权后可提交连接建议，并在系统页面选择网络。',
   notification: '需要通知权限来显示后台自动认证的运行状态和结果。',
   battery: '为避免后台自动认证被系统省电策略停止，请在接下来的系统对话框中选择「允许」。',
   backgroundLocation:
@@ -44,6 +46,7 @@ const GUIDE_MESSAGES: Record<PermissionKey, string> = {
 
 const CONFIRM_LABELS: Record<PermissionKey, string> = {
   location: '去授权',
+  nearbyWifi: '去授权',
   notification: '去授权',
   battery: '去设置',
   backgroundLocation: '去设置',

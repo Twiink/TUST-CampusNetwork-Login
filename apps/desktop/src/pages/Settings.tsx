@@ -4,6 +4,7 @@ import {
   generateId,
   validateAccountConfig,
   validateWifiConfig,
+  resolveWifiSecurity,
   type AccountConfig,
   type WifiConfig,
 } from '@repo/shared';
@@ -129,7 +130,7 @@ export const Settings: React.FC = () => {
       id: generateId(),
       ssid,
       password: newWifi.password,
-      security: newWifi.security,
+      security: resolveWifiSecurity(newWifi.security, newWifi.password),
       autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountIds:

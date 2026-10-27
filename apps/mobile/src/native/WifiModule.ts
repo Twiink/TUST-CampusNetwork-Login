@@ -4,13 +4,8 @@
  * 提供跨平台的 WiFi 信息获取能力
  */
 
-import {
-  NativeModules,
-  Platform,
-  PermissionsAndroid,
-  NativeEventEmitter,
-  EmitterSubscription,
-} from 'react-native';
+import { NativeModules, Platform, NativeEventEmitter, EmitterSubscription } from 'react-native';
+import { requestPermission } from './Permissions';
 
 /**
  * 网络信息接口（扩展版）
@@ -129,22 +124,8 @@ export async function requestLocationPermission(): Promise<boolean> {
     return true;
   }
 
-  try {
-    const granted = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: '位置权限',
-        message: '需要位置权限来获取当前连接的 WiFi 名称',
-        buttonNeutral: '稍后询问',
-        buttonNegative: '取消',
-        buttonPositive: '确定',
-      }
-    );
-    return granted === PermissionsAndroid.RESULTS.GRANTED;
-  } catch (err) {
-    console.warn('requestLocationPermission error:', err);
-    return false;
-  }
+  const state = await requestPermission('location');
+  return state === 'granted' || state === 'unsupported';
 }
 
 /**
@@ -308,6 +289,13 @@ export async function connectToWifi(ssid: string, password?: string): Promise<bo
   if (!WifiModule) {
     console.warn('WifiModule is not available');
     return false;
+  }
+
+  if (Platform.OS === 'android') {
+    const permission = await requestPermission('nearbyWifi');
+    if (permission !== 'granted' && permission !== 'unsupported') {
+      throw new Error('附近设备权限未授予，请在配置设置的权限状态中授权后重试');
+    }
   }
 
   try {

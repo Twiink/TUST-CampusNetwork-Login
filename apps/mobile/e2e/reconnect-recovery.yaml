@@ -6,6 +6,8 @@ appId: com.netmate.app.e2e
     timeout: 60000
 - tapOn: '配置设置'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '连接 WiFi TUST-WIFI'
     direction: DOWN
 - tapOn: '连接 WiFi TUST-WIFI'

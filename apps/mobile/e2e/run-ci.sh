@@ -51,6 +51,7 @@ if not list(root.iter('testcase')) or any(list(root.iter(tag)) for tag in ['fail
 PY
 }
 run_flow config-auth
+run_flow config-crud
 curl -fsS 'http://127.0.0.1:38081/control?ssid=&failConnections=true&online=false'
 run_flow reconnect-failure
 curl -fsS 'http://127.0.0.1:38081/control?failConnections=false'

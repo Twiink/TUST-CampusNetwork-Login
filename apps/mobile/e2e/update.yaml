@@ -3,6 +3,8 @@ appId: com.netmate.app.e2e
 - launchApp
 - tapOn: '配置设置'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '检查更新'
     direction: DOWN
 - tapOn: '检查更新'
@@ -17,6 +19,8 @@ appId: com.netmate.app.e2e
 - launchApp
 - tapOn: '配置设置'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '取消下载'
     direction: DOWN
 - assertVisible: '下载进度.*'

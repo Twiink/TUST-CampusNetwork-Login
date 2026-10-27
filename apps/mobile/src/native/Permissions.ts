@@ -3,6 +3,8 @@
  *
  * 自动认证依赖的权限，按申请顺序：
  * 1. 精确定位（必需）：前台读取 SSID，判定当前 WiFi 是否需要认证
+ *    Android 12+ 同时申请粗略和精确定位，仍以精确定位的授权结果为准。
+ *    Android 13+ 另需「附近 WiFi 设备」权限才能管理网络连接。
  * 2. 通知（Android 13+）：后台服务通知与认证结果
  * 3. 电池优化白名单：避免后台自动认证被省电策略停止
  * 4. 后台定位（可选）：后台读取 SSID；Android 11+ 只能在系统设置页选择「始终允许」
@@ -13,6 +15,7 @@ import { NativeModules, PermissionsAndroid, Platform, type Permission } from 're
 
 export type PermissionKey =
   | 'location'
+  | 'nearbyWifi'
   | 'notification'
   | 'battery'
   | 'backgroundLocation'
@@ -50,6 +53,8 @@ const POST_NOTIFICATIONS = (P.POST_NOTIFICATIONS ??
   'android.permission.POST_NOTIFICATIONS') as Permission;
 const BACKGROUND_LOCATION = (P.ACCESS_BACKGROUND_LOCATION ??
   'android.permission.ACCESS_BACKGROUND_LOCATION') as Permission;
+const NEARBY_WIFI = (P.NEARBY_WIFI_DEVICES ??
+  'android.permission.NEARBY_WIFI_DEVICES') as Permission;
 
 /** 被拒绝过的权限记录在内存中，用于区分「从未申请」与「永久拒绝」（PermissionsAndroid.check 只返回布尔值） */
 const blockedPermissions = new Set<Permission>();
@@ -59,6 +64,12 @@ export const PERMISSION_META: Record<PermissionKey, Omit<PermissionItem, 'state'
     key: 'location',
     title: '位置权限',
     description: '读取当前 WiFi 名称，判断是否需要校园网认证',
+    required: true,
+  },
+  nearbyWifi: {
+    key: 'nearbyWifi',
+    title: '附近 WiFi 设备',
+    description: 'Android 13 及以上需要此权限才能管理 WiFi 连接',
     required: true,
   },
   notification: {
@@ -107,7 +118,12 @@ async function checkRuntime(permission: Permission, minApi: number): Promise<Per
 async function requestRuntime(permission: Permission, minApi: number): Promise<PermissionState> {
   if (apiLevel() < minApi) return 'unsupported';
   try {
-    const result = await PermissionsAndroid.request(permission);
+    const result =
+      permission === FINE_LOCATION && apiLevel() >= 31
+        ? (await PermissionsAndroid.requestMultiple([P.ACCESS_COARSE_LOCATION, FINE_LOCATION]))[
+            FINE_LOCATION
+          ]
+        : await PermissionsAndroid.request(permission);
     if (result === PermissionsAndroid.RESULTS.GRANTED) {
       blockedPermissions.delete(permission);
       return 'granted';
@@ -127,6 +143,8 @@ export async function checkPermission(key: PermissionKey): Promise<PermissionSta
   switch (key) {
     case 'location':
       return checkRuntime(FINE_LOCATION, 23);
+    case 'nearbyWifi':
+      return checkRuntime(NEARBY_WIFI, 33);
     case 'notification':
       return checkRuntime(POST_NOTIFICATIONS, 33);
     case 'backgroundLocation':
@@ -175,6 +193,8 @@ export async function requestPermission(key: PermissionKey): Promise<PermissionS
   switch (key) {
     case 'location':
       return requestRuntime(FINE_LOCATION, 23);
+    case 'nearbyWifi':
+      return requestRuntime(NEARBY_WIFI, 33);
     case 'notification':
       return requestRuntime(POST_NOTIFICATIONS, 33);
     case 'backgroundLocation': {
@@ -198,6 +218,7 @@ export async function requestPermission(key: PermissionKey): Promise<PermissionS
 export async function getPermissionItems(): Promise<PermissionItem[]> {
   const keys: PermissionKey[] = [
     'location',
+    'nearbyWifi',
     'notification',
     'battery',
     'backgroundLocation',

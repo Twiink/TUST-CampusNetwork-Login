@@ -24,6 +24,8 @@ WiFi 卡片提供自动连接开关和手动连接。断线后依次重试原网
 
 Android 展示连接阶段、目标、次数、倒计时及失败清单。Android 10+ 会进入系统授权/选择流程，应用等待实际目标 SSID 和地址确认连接结果。系统或厂商可能拒绝网络建议。
 
+Android 13+ 的“附近 WiFi 设备”权限可在首次引导及“权限状态”中申请，手动连接前也会检查；拒绝后提供授权重试说明。Android 12+ 联合申请粗略/精确定位，WiFi 扫描仍以精确定位的实际授权结果为准。依据：[WiFi 权限](https://developer.android.com/develop/connectivity/wifi/wifi-permissions)、[定位运行时权限](https://developer.android.com/develop/sensors-and-location/location/permissions/runtime)。
+
 Windows 支持首次连接开放和个人密码网络，profile 仅写入当前系统用户。企业认证沿用系统配置。macOS 网络字段由 Darwin 原生结构解析，字段缺失/非法时逐项回退。
 
 ## 日志与更新

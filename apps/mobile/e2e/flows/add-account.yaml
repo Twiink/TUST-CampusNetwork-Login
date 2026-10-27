@@ -1,6 +1,8 @@
 appId: com.netmate.app.e2e
 ---
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'add-username' }
     direction: DOWN
 - tapOn: { id: 'add-username' }
@@ -9,6 +11,8 @@ appId: com.netmate.app.e2e
 - inputText: 'fake-password'
 - hideKeyboard
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '保存并添加账号'
     direction: DOWN
 - tapOn: '保存并添加账号'

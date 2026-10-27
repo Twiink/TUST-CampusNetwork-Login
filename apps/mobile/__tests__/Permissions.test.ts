@@ -11,6 +11,7 @@ const permissionModule = {
 
 const originalOS = Platform.OS;
 const originalVersion = Platform.Version;
+type PermissionGrants = Awaited<ReturnType<typeof PermissionsAndroid.requestMultiple>>;
 
 function setPlatform(os: string, version: number) {
   Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
@@ -33,12 +34,17 @@ describe('Permissions', () => {
 
   it('定位权限走系统弹窗，永久拒绝后改为跳转设置页', async () => {
     jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
-    const request = jest
-      .spyOn(PermissionsAndroid, 'request')
-      .mockResolvedValue(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+    const request = jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({
+      [PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION]: PermissionsAndroid.RESULTS.GRANTED,
+      [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION]:
+        PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+    } as PermissionGrants);
 
     await expect(requestPermission('location')).resolves.toBe('blocked');
-    expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    expect(request).toHaveBeenCalledWith([
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+    ]);
     await expect(checkPermission('location')).resolves.toBe('blocked');
 
     // 再次申请不再弹窗，直接打开应用设置页
@@ -81,12 +87,35 @@ describe('Permissions', () => {
     expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION);
   });
 
+  it('Android 12 仅授予粗略定位时不会报告 WiFi 定位已授权', async () => {
+    setPlatform('android', 31);
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({
+      [PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION]: PermissionsAndroid.RESULTS.GRANTED,
+      [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION]: PermissionsAndroid.RESULTS.DENIED,
+    } as PermissionGrants);
+    await expect(requestPermission('location')).resolves.toBe('denied');
+  });
+
   it('通知权限仅 Android 13+ 需要', async () => {
     setPlatform('android', 31);
     await expect(checkPermission('notification')).resolves.toBe('unsupported');
     setPlatform('android', 33);
     jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(true);
     await expect(checkPermission('notification')).resolves.toBe('granted');
+  });
+
+  it('附近 WiFi 权限在 Android 13+ 申请，旧版本不申请', async () => {
+    const request = jest
+      .spyOn(PermissionsAndroid, 'request')
+      .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
+    setPlatform('android', 28);
+    await expect(requestPermission('nearbyWifi')).resolves.toBe('unsupported');
+    expect(request).not.toHaveBeenCalled();
+    setPlatform('android', 33);
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    await expect(requestPermission('nearbyWifi')).resolves.toBe('granted');
+    expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES);
   });
 
   it('电池优化走系统对话框，自启动跳厂商页面', async () => {
@@ -110,6 +139,7 @@ describe('Permissions', () => {
     const items = await getPermissionItems();
     expect(items.map(item => [item.key, item.state])).toEqual([
       ['location', 'granted'],
+      ['nearbyWifi', 'granted'],
       ['notification', 'granted'],
       ['battery', 'granted'],
       ['backgroundLocation', 'granted'],

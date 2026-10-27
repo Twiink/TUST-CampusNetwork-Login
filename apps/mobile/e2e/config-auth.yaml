@@ -11,29 +11,39 @@ appId: com.netmate.app.e2e
       - tapOn: '跳过|暂不'
 - tapOn: '配置设置'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'auto-reconnect' }
     direction: DOWN
 - tapOn: { id: 'auto-reconnect' }
 - runFlow: { file: 'flows/add-account.yaml', env: { USERNAME: 'reject' } }
 - runFlow: { file: 'flows/add-account.yaml', env: { USERNAME: 'accept' } }
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'scan-wifi' }
     direction: UP
 - tapOn: { id: 'scan-wifi' }
 - tapOn: '选择网络 TUST-WIFI'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '选择账号 reject'
     direction: DOWN
 - tapOn: '选择账号 reject'
 - tapOn: '选择账号 accept'
 - scrollUntilVisible:
-    element: '添加 WiFi'
+    timeout: 60000
+    speed: 80
+    element: { id: 'add-wifi' }
     direction: DOWN
-- tapOn: '添加 WiFi'
+- tapOn: { id: 'add-wifi' }
 - extendedWaitUntil:
     visible: '配置已保存并同步'
     timeout: 15000
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: '编辑账号 accept'
     direction: UP
 - tapOn: '编辑账号 accept'
@@ -43,6 +53,8 @@ appId: com.netmate.app.e2e
 - inputText: 'accept-edited'
 - hideKeyboard
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'save-edit' }
     direction: DOWN
 - tapOn: { id: 'save-edit' }
@@ -60,6 +72,8 @@ appId: com.netmate.app.e2e
 - assertNotVisible: '自动认证已暂停'
 - tapOn: '配置设置'
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'wifi-retries' }
     direction: DOWN
 - tapOn: { id: 'wifi-retries' }
@@ -67,6 +81,8 @@ appId: com.netmate.app.e2e
 - inputText: '1'
 - hideKeyboard
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'wifi-cooldown' }
     direction: DOWN
 - tapOn: { id: 'wifi-cooldown' }
@@ -74,6 +90,8 @@ appId: com.netmate.app.e2e
 - inputText: '0'
 - hideKeyboard
 - scrollUntilVisible:
+    timeout: 60000
+    speed: 80
     element: { id: 'auto-reconnect' }
     direction: UP
 - tapOn: { id: 'auto-reconnect' }

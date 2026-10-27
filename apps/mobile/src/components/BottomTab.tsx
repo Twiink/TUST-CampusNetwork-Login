@@ -179,7 +179,7 @@ export const BottomTab: React.FC<BottomTabProps> = ({ activeTab, onTabChange }) 
           </Text>
         </TouchableOpacity>
       </View>
-      <SafeAreaView style={{ backgroundColor: theme.colors.sidebarBg }} />
+      <SafeAreaView edges={['bottom']} style={{ backgroundColor: theme.colors.sidebarBg }} />
     </View>
   );
 };
@@ -192,10 +192,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 20,
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },

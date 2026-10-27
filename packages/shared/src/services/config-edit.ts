@@ -1,6 +1,13 @@
 import type { AccountConfig, AppConfig, WifiConfig } from '../types/config';
 import { validateAccountConfig, validateWifiConfig } from '../utils/validator';
 
+export function resolveWifiSecurity(
+  security: string | undefined,
+  password: string
+): string | undefined {
+  return password && (!security || security.toLowerCase() === 'open') ? 'WPA2' : security;
+}
+
 export function editAccount(
   config: AppConfig,
   id: string,
@@ -34,6 +41,7 @@ export function editWifi(
   if (!previous) throw new Error('WiFi 已被删除，请刷新');
   const linkedAccountIds =
     draft.requiresAuth === false ? [] : (draft.linkedAccountIds ?? previous.linkedAccountIds);
+  const nextPassword = clearPassword ? '' : password || previous.password;
   const wifi = {
     ...previous,
     ...draft,
@@ -41,8 +49,10 @@ export function editWifi(
     id,
     linkedAccountIds,
     linkedAccountId: linkedAccountIds[0],
-    security: clearPassword ? 'Open' : (draft.security ?? previous.security),
-    password: clearPassword ? '' : password || previous.password,
+    security: clearPassword
+      ? 'Open'
+      : resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
+    password: nextPassword,
   };
   if (
     config.wifiList.some(
