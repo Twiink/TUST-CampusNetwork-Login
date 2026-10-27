@@ -178,7 +178,7 @@ export const WifiConfigCard: React.FC<{
             },
           ]}
           testID="add-ssid"
-          accessibilityLabel="add-ssid"
+          accessibilityLabel="新增 WiFi 名称"
           value={newWifi.ssid}
           onChangeText={t => setNewWifi({ ...newWifi, ssid: t })}
           placeholder="请输入 WiFi 名称"
@@ -198,7 +198,7 @@ export const WifiConfigCard: React.FC<{
             },
           ]}
           testID="add-wifi-password"
-          accessibilityLabel="add-wifi-password"
+          accessibilityLabel="新增 WiFi 密码"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           value={newWifi.password}

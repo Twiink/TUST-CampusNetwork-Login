@@ -24,11 +24,15 @@
 
 `pnpm test:e2e` 先构建 `dist-e2e` 和 shared，再运行 Playwright。每个场景使用隔离 userData；覆盖配置增删改、重启保留、扫描连接、账号回退、暂停恢复、冷却后重连和日志。失败归档 trace、截图、渲染错误与主进程日志。
 
+清空日志用例先等待初始网络查询完成，再检查空态与导出按钮。运行中的后台服务仍可追加新的诊断记录。
+
 ## Android E2E 边界
 
 `e2e` build type 使用 `com.netmate.app.e2e`、debug 测试签名、内置 JS bundle，独立 PlatformRuntime 安装硬件和 HTTP 端点适配器；正式 debug/release Runtime 不安装测试端点。原生桥接、Keystore、日志、后台认证串行引擎、DownloadManager、包校验及安装权限流程保留真实实现。
 
 CI 构建基础版本 1.0.1-e2e（10010）和同签名 1.0.2-e2e（10020），另准备错误签名的 APK。`run-ci.sh` 要求 `GITHUB_ACTIONS=true`，先执行 instrumentation 并检查至少 3 项成功且无跳过，再执行 7 个 Maestro 用户流程。首个流程导出日志后，额外执行 1 项签名 instrumentation，读取实际私有文件并通过 FileProvider 校验分享内容，再复制到外部诊断目录供 CI 归档；E2E APK 保持不可调试和内置 bundle。覆盖账号/WiFi 增删改及重启保存、关联/重启暂停、扫描、连接、账号回退、失败后恢复、日志导出、下载中重启与取消/重试、错误签名拒绝、安装授权及安装后状态恢复。最终检查安装包版本码，避免把打开安装器误判成完成升级。
+
+受控更新服务持续发送限速数据，跨应用重启保持 DownloadManager 下载，再通过页面执行取消和重试。
 
 ## 诊断与验收
 

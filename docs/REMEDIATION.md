@@ -2,7 +2,7 @@
 
 日期：2026-10-27。基线：v1.0.1 / `9e4b563`。实施分支：`codex/netmate-feature-completion`。
 
-11 项缺陷均已修复，功能入口和长期回归已补齐。最终远程验收仍在进行，当前不能报告全平台通过。[分支 CI 记录](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/workflows/ci.yml?query=branch%3Acodex%2Fnetmate-feature-completion)。
+11 项缺陷均已修复，功能入口和长期回归已补齐。下表保留已执行的功能验证证据；最终验收要求该分支最新提交的全平台门禁成功，状态见[分支 CI 记录](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/workflows/ci.yml?query=branch%3Acodex%2Fnetmate-feature-completion)。
 
 ## 缺陷与回归映射
 
@@ -37,26 +37,28 @@ Android 12+ 精确/粗略定位联合申请，13+ 附近设备权限在引导、
 
 本任务未在本机执行任何 E2E。本机只执行普通测试、静态检查及构建；所有 E2E 均在 GitHub Actions。
 
-| 检查                                      | 结果                                                                    |
-| ----------------------------------------- | ----------------------------------------------------------------------- |
-| shared 单元/集成                          | 115 项通过                                                              |
-| desktop 单元/组件                         | 185 项通过                                                              |
-| mobile 单元/组件                          | 16 套件、81 项通过                                                      |
-| native Node 加载路径                      | 2 项通过                                                                |
-| Android JVM                               | 34 项通过，0 跳过                                                       |
-| Darwin Rust                               | macOS runner 4 项通过，0 忽略                                           |
-| 全工作区类型、lint、Prettier              | 通过                                                                    |
-| 三平台原生 API 与桌面生产构建             | 通过                                                                    |
-| Windows/macOS/Linux 真实主进程 Playwright | 各 25 项通过，0 跳过、失败或重试通过                                    |
-| Android 原生 integration                  | API 28/36 引擎各 3 项、日志导出各 1 项通过                              |
-| Android Maestro 2.12.0                    | API 36 全部 7 个流程通过；API 28 前 5 个通过，APK 证书读取兼容修正待 CI |
-| 全平台 acceptance                         | 等待全部依赖成功，尚未验收                                              |
+| 检查                                      | 结果                                             |
+| ----------------------------------------- | ------------------------------------------------ |
+| shared 单元/集成                          | 115 项通过                                       |
+| desktop 单元/组件                         | 185 项通过                                       |
+| mobile 单元/组件                          | 16 套件、81 项通过                               |
+| native Node 加载路径                      | 2 项通过                                         |
+| Android JVM                               | 34 项通过，0 跳过                                |
+| Darwin Rust                               | macOS runner 4 项通过，0 忽略                    |
+| 全工作区类型、lint、Prettier              | 通过                                             |
+| 三平台原生 API 与桌面生产构建             | 通过                                             |
+| Windows/macOS/Linux 真实主进程 Playwright | 各 25 项通过，0 跳过、失败或重试通过             |
+| Android 原生 integration                  | API 28/36 引擎各 3 项、日志导出各 1 项通过       |
+| Android Maestro 2.12.0                    | API 28/36 各 7 个流程通过，0 失败、错误或跳过    |
+| 全平台 acceptance                         | 要求最新提交所有依赖成功，实际状态见分支 CI 记录 |
 
 桌面测试运行真实 main、preload、IPC、配置、认证和重连服务。Android 测试运行独立 E2E APK 的实际 React Native 页面、原生桥接、引擎、Keystore、持久存储、DownloadManager 与系统安装器。测试入口不进入正式发布构建。
 
 Android 的 7 个顶层用户流程为：配置与认证、配置增删改及重启保存、重连失败、重连恢复、下载重启与取消、错误签名拒绝、同签名升级安装。基础测试包 `1.0.1-e2e / 10010`，更新包 `1.0.2-e2e / 10020`。最终通过 dumpsys 核验实际安装版本；日志导出读取实际生成的文件并检查测试密码未泄漏。每个流程的 JUnit 必须存在且没有失败、错误或跳过。
 
-Android 9 的归档解析需要同时请求 `GET_SIGNATURES` 才会实际采集证书；保留 `GET_SIGNING_CERTIFICATES` 读取当前证书和轮换历史。新增 JVM 用例验证证书缺失及多签不匹配仍拒绝升级，API 28 的错误签名拒绝与安装流程将验证平台兼容修正。
+Android 9 的归档解析需要同时请求 `GET_SIGNATURES` 才会实际采集证书；保留 `GET_SIGNING_CERTIFICATES` 读取当前证书和轮换历史。JVM 用例验证证书缺失及多签不匹配仍拒绝升级，API 28 的错误签名拒绝与实际覆盖安装已通过。
+
+桌面功能证据：[Windows 25 项](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40497303788/job/122165882763)、[macOS 25 项](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40497303788/job/122165883113)、[Linux 25 项](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40497303788/job/122165882986)。Android 功能证据：[API 28](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40501201775/job/122182515764)、[API 36](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40501201775/job/122182515651)，每档均通过 3 项引擎、1 项日志集成和全部 7 个 Maestro 流程，并实际升级至 `1.0.2-e2e / 10020`。这些链接记录对应功能验证，完整提交是否验收仍由最新分支门禁判定。
 
 每次分支 push 和 PR 均触发完整矩阵。桌面 artifact 保留 Playwright 报告、trace、截图和主进程日志；Android 保留 Maestro JUnit、截图、控件树、logcat、门户证据、导出文件及安装信息。acceptance 对缺失、跳过、失败或取消的依赖一律拒绝通过。
 

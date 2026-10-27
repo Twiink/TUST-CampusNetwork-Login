@@ -20,6 +20,9 @@ test('日志页按级别筛选日志', async ({ appWindow: window }) => {
 test('清除日志后展示空态并禁用导出', async ({ appWindow: window }) => {
   await openPage(window, '运行日志');
   await expect(window.getByText('核心服务初始化完成')).toBeVisible();
+  // The first renderer network query can finish after navigation. Wait for its
+  // real completion before clearing; later diagnostic entries enable exports.
+  await expect(window.getByText('网络状态获取成功')).toBeVisible();
 
   await window.getByRole('button', { name: '清除日志' }).click();
 

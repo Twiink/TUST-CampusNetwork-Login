@@ -124,7 +124,7 @@ export const AccountsCard: React.FC<{
             },
           ]}
           testID="add-username"
-          accessibilityLabel="add-username"
+          accessibilityLabel="新增账号用户名"
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="done"
@@ -148,7 +148,7 @@ export const AccountsCard: React.FC<{
             },
           ]}
           testID="add-account-password"
-          accessibilityLabel="add-account-password"
+          accessibilityLabel="新增账号密码"
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           value={newAccount.password}
@@ -208,7 +208,7 @@ export const AccountsCard: React.FC<{
             },
           ]}
           testID="add-server"
-          accessibilityLabel="add-server"
+          accessibilityLabel="新增账号服务器地址"
           value={newAccount.serverUrl}
           onChangeText={t => setNewAccount({ ...newAccount, serverUrl: t })}
           placeholder="http://..."
