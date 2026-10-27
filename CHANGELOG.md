@@ -37,6 +37,10 @@
 - 移动端 jest 转换与 pnpm 依赖解析配置。
 - 桌面端与 Android 发布构建、release 工作流初始化顺序等 CI 问题。
 
+## [v1.0.1] - 2026-10-27
+
+**Full Changelog**: https://github.com/Twiink/TUST-CampusNetwork-Login/compare/v1.0.0...v1.0.1
+
 ## [v1.0.0] - 2026-10-26
 
 **Full Changelog**: https://github.com/Twiink/TUST-CampusNetwork-Login/compare/v0.0.2...v1.0.0
