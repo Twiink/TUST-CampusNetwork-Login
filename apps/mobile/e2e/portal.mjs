@@ -79,12 +79,16 @@ createServer(async (request, response) => {
       let sent = 0;
       for await (const bytes of stream) {
         if (response.destroyed) break;
-        response.write(bytes);
-        sent += bytes.length;
-        // Keep a real download in progress through app restarts, independent of APK size.
-        while (slow && sent >= 1024 * 1024 && !response.destroyed)
-          await new Promise(resolve => setTimeout(resolve, 100));
-        if (slow) await new Promise(resolve => setTimeout(resolve, 50));
+        for (let offset = 0; offset < bytes.length && !response.destroyed; ) {
+          // Keep bytes flowing during restarts: an idle socket hits DownloadManager's
+          // read timeout and tests a failed download instead of a resumable one.
+          const throttled = slow && sent >= 1024 * 1024;
+          const end = throttled ? Math.min(offset + 1024, bytes.length) : bytes.length;
+          response.write(bytes.subarray(offset, end));
+          sent += end - offset;
+          offset = end;
+          if (throttled) await new Promise(resolve => setTimeout(resolve, 500));
+        }
       }
       response.end();
     } catch {
