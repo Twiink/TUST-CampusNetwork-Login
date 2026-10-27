@@ -37,20 +37,20 @@ Android 12+ 精确/粗略定位联合申请，13+ 附近设备权限在引导、
 
 本任务未在本机执行任何 E2E。本机只执行普通测试、静态检查及构建；所有 E2E 均在 GitHub Actions。
 
-| 检查                                      | 结果                                 |
-| ----------------------------------------- | ------------------------------------ |
-| shared 单元/集成                          | 115 项通过                           |
-| desktop 单元/组件                         | 185 项通过                           |
-| mobile 单元/组件                          | 16 套件、81 项通过                   |
-| native Node 加载路径                      | 2 项通过                             |
-| Android JVM                               | 32 项通过，0 跳过                    |
-| Darwin Rust                               | macOS runner 4 项通过，0 忽略        |
-| 全工作区类型、lint、Prettier              | 通过                                 |
-| 三平台原生 API 与桌面生产构建             | 通过                                 |
-| Windows/macOS/Linux 真实主进程 Playwright | 各 25 项通过，0 跳过、失败或重试通过 |
-| Android 原生 integration                  | API 28/36 各 3 项通过，0 跳过        |
-| Android Maestro 2.12.0                    | 等待当前矩阵完成，尚未验收           |
-| 全平台 acceptance                         | 等待全部依赖成功，尚未验收           |
+| 检查                                      | 结果                                                  |
+| ----------------------------------------- | ----------------------------------------------------- |
+| shared 单元/集成                          | 115 项通过                                            |
+| desktop 单元/组件                         | 185 项通过                                            |
+| mobile 单元/组件                          | 16 套件、81 项通过                                    |
+| native Node 加载路径                      | 2 项通过                                              |
+| Android JVM                               | 32 项通过，0 跳过                                     |
+| Darwin Rust                               | macOS runner 4 项通过，0 忽略                         |
+| 全工作区类型、lint、Prettier              | 通过                                                  |
+| 三平台原生 API 与桌面生产构建             | 通过                                                  |
+| Windows/macOS/Linux 真实主进程 Playwright | 各 25 项通过，0 跳过、失败或重试通过                  |
+| Android 原生 integration                  | API 28/36 引擎各 3 项通过；日志导出新增 1 项待 CI     |
+| Android Maestro 2.12.0                    | 两档配置/认证流程通过；其余流程待下一轮验证，尚未验收 |
+| 全平台 acceptance                         | 等待全部依赖成功，尚未验收                            |
 
 桌面测试运行真实 main、preload、IPC、配置、认证和重连服务。Android 测试运行独立 E2E APK 的实际 React Native 页面、原生桥接、引擎、Keystore、持久存储、DownloadManager 与系统安装器。测试入口不进入正式发布构建。
 

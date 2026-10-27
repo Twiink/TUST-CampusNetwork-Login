@@ -172,12 +172,12 @@ export interface CurrentAccountCardProps {
   theme: { colors: ThemeColors };
 }
 
-/** 当前账号卡：用户名 + 服务器 */
+/** 首选认证账号卡：用户名 + 服务器 */
 export const CurrentAccountCard: React.FC<CurrentAccountCardProps> = React.memo(
   ({ username, serverUrl, theme }) => {
     return (
       <GlassView style={styles.card}>
-        <Text style={[styles.cardHeader, { color: theme.colors.text }]}>当前账号</Text>
+        <Text style={[styles.cardHeader, { color: theme.colors.text }]}>首选认证账号</Text>
 
         <View style={styles.accountInfoContainer}>
           <View style={styles.infoRow}>

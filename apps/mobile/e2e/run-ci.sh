@@ -24,7 +24,7 @@ for attempt in {1..30}; do
 done
 adb install -r android-e2e-apks/base.apk
 adb install -r android-e2e-apks/test.apk
-adb shell am instrument -w -r com.netmate.app.e2e.test/androidx.test.runner.AndroidJUnitRunner | tee "$E2E_ARTIFACTS/instrumentation.txt"
+adb shell am instrument -w -r -e class com.netmate.app.auth.NativeEngineIntegrationTest com.netmate.app.e2e.test/androidx.test.runner.AndroidJUnitRunner | tee "$E2E_ARTIFACTS/instrumentation.txt"
 node - "$E2E_ARTIFACTS/instrumentation.txt" <<'JS'
 const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
 const count = /OK \((\d+) tests?\)/.exec(text);
@@ -51,7 +51,12 @@ if not list(root.iter('testcase')) or any(list(root.iter(tag)) for tag in ['fail
 PY
 }
 run_flow config-auth
-adb exec-out run-as com.netmate.app.e2e cat cache/exports/NetMate-diagnostic.log > "$E2E_ARTIFACTS/exported-diagnostic.log"
+adb shell am instrument -w -r -e class com.netmate.app.logging.LogExportIntegrationTest com.netmate.app.e2e.test/androidx.test.runner.AndroidJUnitRunner | tee "$E2E_ARTIFACTS/log-export-instrumentation.txt"
+node - "$E2E_ARTIFACTS/log-export-instrumentation.txt" <<'JS'
+const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
+if (!/OK \(1 tests?\)/.test(text) || /FAILURES|INSTRUMENTATION_FAILED|INSTRUMENTATION_STATUS_CODE:\s*-[34]/.test(text)) throw new Error('Native log export integration test is missing, failed or skipped');
+JS
+adb pull /sdcard/Android/data/com.netmate.app.e2e/files/e2e-exported-diagnostic.log "$E2E_ARTIFACTS/exported-diagnostic.log"
 node - "$E2E_ARTIFACTS/exported-diagnostic.log" <<'JS'
 const text = require('node:fs').readFileSync(process.argv[2], 'utf8');
 const entries = text.trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
