@@ -178,10 +178,11 @@ export class MobileWifiAdapter implements WifiAdapter {
     const networks = await WifiModule.scanWifiNetworks();
     return networks
       .filter(
-        (network): network is typeof network & { ssid: string } => typeof network.ssid === 'string'
+        (network): network is typeof network & { ssid: string } =>
+          typeof network.ssid === 'string' && network.ssid.trim().length > 0
       )
       .map(network => ({
-        ssid: network.ssid,
+        ssid: network.ssid.trim(),
         bssid: network.bssid || undefined,
         signalStrength: network.signalStrength || 0,
         frequency: network.frequency || undefined,

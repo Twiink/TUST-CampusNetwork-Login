@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import {
-  AppConfig,
-  DEFAULT_APP_SETTINGS,
+  createDefaultAppConfig,
+  type AppConfig,
   type AccountConfig,
   type AccountManager,
   type AuthService,
@@ -38,10 +38,24 @@ export interface LogEntry {
   message: string;
 }
 
+export type ConfigUpdate = AppConfig | ((current: AppConfig) => AppConfig);
+
+function getConfigPatch(current: AppConfig, next: AppConfig): Partial<AppConfig> {
+  const patch: Partial<AppConfig> = {};
+  if (next.version !== current.version) patch.version = next.version;
+  if (next.accounts !== current.accounts) patch.accounts = next.accounts;
+  if (next.currentAccountId !== current.currentAccountId) {
+    patch.currentAccountId = next.currentAccountId;
+  }
+  if (next.wifiList !== current.wifiList) patch.wifiList = next.wifiList;
+  if (next.settings !== current.settings) patch.settings = next.settings;
+  return patch;
+}
+
 interface AppContextType {
   // 配置
   config: AppConfig;
-  setConfig: (config: AppConfig) => void;
+  setConfig: (update: ConfigUpdate) => void;
 
   // 网络状态
   networkStatus: 'connected' | 'disconnected' | 'connecting';
@@ -105,12 +119,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const servicesRef = useRef<AppContextType['services']>(null);
 
   // 配置状态
-  const [config, setConfigState] = useState<AppConfig>({
-    accounts: [],
-    currentAccountId: null,
-    wifiList: [],
-    settings: DEFAULT_APP_SETTINGS,
-  });
+  const [config, setConfigState] = useState<AppConfig>(() => createDefaultAppConfig());
+  const configRef = useRef<AppConfig>(config);
+  const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   // 网络状态
   const [networkStatus, setNetworkStatus] = useState<'connected' | 'disconnected' | 'connecting'>(
@@ -144,6 +155,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setLogs([]);
   }, []);
 
+  const applyConfigState = useCallback((nextConfig: AppConfig) => {
+    configRef.current = nextConfig;
+    setConfigState(nextConfig);
+    setAccounts(nextConfig.accounts);
+    setCurrentAccount(
+      nextConfig.currentAccountId
+        ? (nextConfig.accounts.find(account => account.id === nextConfig.currentAccountId) ?? null)
+        : null
+    );
+  }, []);
+
   // 初始化服务
   useEffect(() => {
     let mounted = true;
@@ -168,14 +190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const loadedConfig = configManager.getConfig();
         if (loadedConfig) {
-          setConfigState(loadedConfig);
-          setAccounts(loadedConfig.accounts);
-
-          // 设置当前账户
-          if (loadedConfig.currentAccountId) {
-            const account = accountManager.getAccountById(loadedConfig.currentAccountId);
-            setCurrentAccount(account);
-          }
+          applyConfigState(loadedConfig);
         }
 
         // 保存服务引用
@@ -225,7 +240,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       mounted = false;
       logger?.stopAutoCleanup();
     };
-  }, [addLog, isModuleAvailable]);
+  }, [addLog, applyConfigState, isModuleAvailable]);
 
   // 刷新网络信息
   const refreshNetworkInfo = useCallback(async (): Promise<NetworkInfo | null> => {
@@ -256,10 +271,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [addLog, refreshNetworkInfo]);
 
   // 更新配置
-  const setConfig = useCallback((newConfig: AppConfig) => {
-    setConfigState(newConfig);
-    servicesRef.current?.configManager.update(newConfig).catch(() => undefined);
-  }, []);
+  const setConfig = useCallback(
+    (update: ConfigUpdate) => {
+      const current = configRef.current;
+      const nextConfig = typeof update === 'function' ? update(current) : update;
+      applyConfigState(nextConfig);
+
+      const configManager = servicesRef.current?.configManager;
+      if (!configManager) {
+        return;
+      }
+
+      const patch = getConfigPatch(current, nextConfig);
+      if (Object.keys(patch).length === 0) {
+        return;
+      }
+
+      persistenceQueueRef.current = persistenceQueueRef.current
+        .then(() => configManager.update(patch))
+        .then(
+          () => undefined,
+          error => {
+            addLog(
+              'error',
+              `保存配置失败: ${error instanceof Error ? error.message : String(error)}`
+            );
+          }
+        );
+    },
+    [addLog, applyConfigState]
+  );
+
+  // AccountManager 直接写入 ConfigManager；操作完成后同步同一份状态，避免 config/accounts 分叉。
+  const syncConfigState = useCallback(() => {
+    const latest = servicesRef.current?.configManager.getConfig();
+    if (!latest) {
+      return;
+    }
+
+    applyConfigState(latest);
+  }, [applyConfigState]);
 
   useEffect(() => {
     if (!isAutoStartAvailable()) {
@@ -305,7 +356,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    if (!currentAccount) {
+    const wifiConfig = networkInfo.ssid
+      ? config.wifiList.find(wifi => wifi.ssid === networkInfo.ssid)
+      : undefined;
+    const linkedAccounts =
+      wifiConfig?.linkedAccountIds
+        .map(id => config.accounts.find(account => account.id === id))
+        .filter((account): account is AccountConfig => account !== undefined) ?? [];
+    const accountsToLogin =
+      linkedAccounts.length > 0 ? linkedAccounts : currentAccount ? [currentAccount] : [];
+
+    if (accountsToLogin.length === 0) {
       addLog('error', '请先选择账户');
       return;
     }
@@ -318,23 +379,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    addLog('info', `正在登录账户: ${currentAccount.username}...`);
+    addLog('info', `正在登录账户: ${accountsToLogin[0].username}...`);
     setNetworkStatus('connecting');
 
     try {
       const { authService } = servicesRef.current;
-      authService.setServerUrl(currentAccount.serverUrl);
+      const primaryAccount = accountsToLogin[0];
+      authService.setServerUrl(primaryAccount.serverUrl);
 
-      // 手动登录使用带重试封装（3 次、间隔 2 秒），与桌面端及参考实现一致
-      const result = await authService.loginWithRetry({
-        serverUrl: currentAccount.serverUrl,
-        userAccount: currentAccount.username,
-        userPassword: currentAccount.password,
-        wlanUserIp: latestInfo.ipv4,
-        wlanUserIpv6: latestInfo.ipv6 || undefined,
-        wlanUserMac: latestInfo.mac || undefined,
-        isp: currentAccount.isp,
-      });
+      // 单账号保留 3 次重试；关联多个账号时按配置顺序逐个尝试。
+      const result =
+        accountsToLogin.length === 1
+          ? await authService.loginWithRetry({
+              serverUrl: primaryAccount.serverUrl,
+              userAccount: primaryAccount.username,
+              userPassword: primaryAccount.password,
+              wlanUserIp: latestInfo.ipv4,
+              wlanUserIpv6: latestInfo.ipv6 || undefined,
+              wlanUserMac: latestInfo.mac || undefined,
+              isp: primaryAccount.isp,
+            })
+          : await authService.loginWithAccounts(accountsToLogin, {
+              wlanUserIp: latestInfo.ipv4,
+              wlanUserIpv6: latestInfo.ipv6 || undefined,
+              wlanUserMac: latestInfo.mac || undefined,
+            });
 
       if (result.success) {
         setNetworkStatus('connected');
@@ -347,7 +416,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setNetworkStatus('disconnected');
       addLog('error', `登录异常: ${error instanceof Error ? error.message : '未知错误'}`);
     }
-  }, [currentAccount, networkInfo, addLog, refreshNetworkInfo]);
+  }, [addLog, config.accounts, config.wifiList, currentAccount, networkInfo, refreshNetworkInfo]);
 
   // 登出
   const logout = useCallback(async () => {
@@ -421,6 +490,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAccounts,
     setCurrentAccount,
     addLog,
+    syncConfigState,
   });
   const ipAddress = networkInfo.ipv4 || '0.0.0.0';
 

@@ -13,6 +13,7 @@ export const AccountsCard: React.FC<{
   currentAccountId: string | null;
   newAccount: NewAccountForm;
   setNewAccount: React.Dispatch<React.SetStateAction<NewAccountForm>>;
+  error?: string | null;
   onAddAccount: () => void;
   onRemoveAccount: (id: string) => void;
   onSwitchAccount: (id: string) => void;
@@ -21,6 +22,7 @@ export const AccountsCard: React.FC<{
   currentAccountId,
   newAccount,
   setNewAccount,
+  error,
   onAddAccount,
   onRemoveAccount,
   onSwitchAccount,
@@ -70,6 +72,8 @@ export const AccountsCard: React.FC<{
                 onPress={() => onSwitchAccount(acc.id)}
                 disabled={currentAccountId === acc.id}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`使用账号 ${acc.username}`}
               >
                 <Text
                   style={[
@@ -86,6 +90,8 @@ export const AccountsCard: React.FC<{
                 style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                 onPress={() => onRemoveAccount(acc.id)}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={`删除账号 ${acc.username}`}
               >
                 <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>删除</Text>
               </TouchableOpacity>
@@ -188,6 +194,14 @@ export const AccountsCard: React.FC<{
         />
       </View>
 
+      {error && (
+        <Text
+          accessibilityRole="alert"
+          style={{ color: theme.colors.danger, fontSize: 13, marginBottom: 12 }}
+        >
+          {error}
+        </Text>
+      )}
       <TouchableOpacity
         style={[
           styles.btnPrimary,
@@ -198,6 +212,8 @@ export const AccountsCard: React.FC<{
         ]}
         onPress={onAddAccount}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="保存并添加账号"
       >
         <Text style={styles.btnText}>保存并添加账号</Text>
       </TouchableOpacity>

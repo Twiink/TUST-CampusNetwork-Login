@@ -13,6 +13,8 @@ interface UseAccountActionsOptions {
   setAccounts: React.Dispatch<React.SetStateAction<AccountConfig[]>>;
   setCurrentAccount: React.Dispatch<React.SetStateAction<AccountConfig | null>>;
   addLog: (level: 'info' | 'success' | 'warn' | 'error', message: string) => void;
+  /** 账户管理器已经把变更持久化到 ConfigManager，这里只同步 React 状态。 */
+  syncConfigState?: () => void;
 }
 
 export function useAccountActions({
@@ -22,6 +24,7 @@ export function useAccountActions({
   setAccounts,
   setCurrentAccount,
   addLog,
+  syncConfigState,
 }: UseAccountActionsOptions) {
   const addAccount = useCallback(
     async (account: Omit<AccountConfig, 'id'>): Promise<AccountConfig> => {
@@ -38,11 +41,11 @@ export function useAccountActions({
         setCurrentAccount(newAccount);
       }
 
+      syncConfigState?.();
       addLog('success', `添加账户: ${newAccount.username}`);
       return newAccount;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts.length, addLog]
+    [accounts.length, addLog, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
   );
 
   const updateAccount = useCallback(
@@ -58,11 +61,11 @@ export function useAccountActions({
         setCurrentAccount(updated);
       }
 
+      syncConfigState?.();
       addLog('info', `更新账户: ${updated.username}`);
       return updated;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentAccount?.id, addLog]
+    [addLog, currentAccount?.id, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
   );
 
   const removeAccount = useCallback(
@@ -74,15 +77,12 @@ export function useAccountActions({
       const account = servicesRef.current.accountManager.getAccountById(id);
       await servicesRef.current.accountManager.removeAccount(id);
       setAccounts(prev => prev.filter(a => a.id !== id));
+      setCurrentAccount(servicesRef.current.accountManager.getCurrentAccount());
 
-      if (currentAccount?.id === id) {
-        setCurrentAccount(null);
-      }
-
+      syncConfigState?.();
       addLog('warn', `删除账户: ${account?.username || id}`);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentAccount?.id, addLog]
+    [addLog, servicesRef, setAccounts, setCurrentAccount, syncConfigState]
   );
 
   const switchAccount = useCallback(
@@ -95,10 +95,10 @@ export function useAccountActions({
       const account = servicesRef.current.accountManager.getAccountById(id);
       setCurrentAccount(account);
 
+      syncConfigState?.();
       addLog('info', `切换到账户: ${account?.username || id}`);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [addLog]
+    [addLog, servicesRef, setCurrentAccount, syncConfigState]
   );
 
   return { addAccount, updateAccount, removeAccount, switchAccount };

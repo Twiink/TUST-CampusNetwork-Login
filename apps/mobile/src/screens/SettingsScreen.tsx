@@ -2,7 +2,13 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../context/AppContext';
 import { useTheme } from '../context/ThemeContext';
-import { AccountConfig, WifiConfig } from '@repo/shared';
+import {
+  AccountConfig,
+  WifiConfig,
+  generateId,
+  validateAccountConfig,
+  validateWifiConfig,
+} from '@repo/shared';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
 import { WifiConfigCard } from '../components/settings/WifiConfigCard';
@@ -38,103 +44,142 @@ export const SettingsScreen: React.FC = () => {
 
   const [newAccount, setNewAccount] = useState<NewAccountForm>(DEFAULT_NEW_ACCOUNT);
   const [newWifi, setNewWifi] = useState<NewWifiForm>(DEFAULT_NEW_WIFI);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [wifiError, setWifiError] = useState<string | null>(null);
 
   const handleAddAccount = () => {
-    if (!newAccount.username || !newAccount.password) return;
+    const username = newAccount.username.trim();
+    if (!username || !newAccount.password) {
+      setAccountError('请输入用户名和密码');
+      return;
+    }
+    if (config.accounts.some(account => account.username === username)) {
+      setAccountError('该用户名已存在');
+      return;
+    }
+
     const account: AccountConfig = {
-      id: Date.now().toString(),
-      name: newAccount.username,
-      username: newAccount.username,
+      id: generateId(),
+      name: username,
+      username,
       password: newAccount.password,
       serverUrl: newAccount.serverUrl,
       isp: newAccount.isp,
     };
+    const validation = validateAccountConfig(account);
+    if (!validation.valid) {
+      setAccountError(validation.errors[0] || '账号配置格式无效');
+      return;
+    }
 
-    setConfig({
-      ...config,
-      accounts: [...config.accounts, account],
-      currentAccountId: config.currentAccountId || account.id,
-    });
+    setAccountError(null);
+    setConfig(current => ({
+      ...current,
+      accounts: [...current.accounts, account],
+      currentAccountId: current.currentAccountId || account.id,
+    }));
     setNewAccount(DEFAULT_NEW_ACCOUNT);
   };
 
   const handleRemoveAccount = (id: string) => {
-    const updatedAccounts = config.accounts.filter(a => a.id !== id);
-    const updatedWifiList = config.wifiList.map(wifi => {
-      return {
-        ...wifi,
-        linkedAccountIds: wifi.linkedAccountIds.filter(accountId => accountId !== id),
-      };
-    });
+    setConfig(current => {
+      const updatedAccounts = current.accounts.filter(account => account.id !== id);
+      const updatedWifiList = current.wifiList.map(wifi => {
+        const linkedAccountIds = wifi.linkedAccountIds.filter(accountId => accountId !== id);
+        return {
+          ...wifi,
+          linkedAccountIds,
+          linkedAccountId: linkedAccountIds[0],
+        };
+      });
 
-    setConfig({
-      ...config,
-      accounts: updatedAccounts,
-      wifiList: updatedWifiList,
-      currentAccountId:
-        config.currentAccountId === id
-          ? updatedAccounts.length > 0
-            ? updatedAccounts[0].id
-            : null
-          : config.currentAccountId,
+      return {
+        ...current,
+        accounts: updatedAccounts,
+        wifiList: updatedWifiList,
+        currentAccountId:
+          current.currentAccountId === id
+            ? updatedAccounts.length > 0
+              ? updatedAccounts[0].id
+              : null
+            : current.currentAccountId,
+      };
     });
   };
 
   const handleAddWifi = () => {
-    if (!newWifi.ssid) return;
-    if (newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) {
+    const ssid = newWifi.ssid.trim();
+    if (!ssid) {
+      setWifiError('请输入 WiFi 名称');
       return;
     }
+    if (config.wifiList.some(wifi => wifi.ssid === ssid)) {
+      setWifiError('该 WiFi 配置已存在');
+      return;
+    }
+    if (newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) {
+      setWifiError('需要认证的 WiFi 必须选择关联账号');
+      return;
+    }
+
+    const linkedAccountIds = newWifi.requiresAuth ? newWifi.linkedAccountIds : [];
     const wifi: WifiConfig = {
-      id: Date.now().toString(),
-      ssid: newWifi.ssid,
+      id: generateId(),
+      ssid,
       password: newWifi.password,
       autoConnect: true,
       requiresAuth: newWifi.requiresAuth,
-      linkedAccountIds: newWifi.requiresAuth ? newWifi.linkedAccountIds : [],
+      linkedAccountIds,
+      linkedAccountId: linkedAccountIds[0],
       priority: newWifi.priority,
       lastConnectedAt: null,
     };
+    const validation = validateWifiConfig(wifi);
+    if (!validation.valid) {
+      setWifiError(validation.errors[0] || 'WiFi 配置格式无效');
+      return;
+    }
 
-    setConfig({
-      ...config,
-      wifiList: [...config.wifiList, wifi],
-    });
+    setWifiError(null);
+    setConfig(current => ({
+      ...current,
+      wifiList: [...current.wifiList, wifi],
+    }));
     setNewWifi(DEFAULT_NEW_WIFI);
   };
 
   const handleRemoveWifi = (id: string) => {
-    setConfig({
-      ...config,
-      wifiList: config.wifiList.filter(w => w.id !== id),
-    });
+    setConfig(current => ({
+      ...current,
+      wifiList: current.wifiList.filter(wifi => wifi.id !== id),
+    }));
   };
 
   const toggleSetting = (key: string, value: boolean | number) => {
-    setConfig({
-      ...config,
-      settings: { ...config.settings, [key]: value },
-    });
+    setConfig(current => ({
+      ...current,
+      settings: { ...current.settings, [key]: value },
+    }));
   };
 
   const toggleNotificationSetting = (
     key: keyof typeof config.settings.notificationSettings,
     value: boolean
   ) => {
-    setConfig({
-      ...config,
+    setConfig(current => ({
+      ...current,
       settings: {
-        ...config.settings,
+        ...current.settings,
         notificationSettings: {
-          ...config.settings.notificationSettings,
+          ...current.settings.notificationSettings,
           [key]: value,
         },
       },
-    });
+    }));
   };
 
   const handleSwitchAccount = (id: string) => {
-    setConfig({ ...config, currentAccountId: id });
+    setConfig(current => ({ ...current, currentAccountId: id }));
   };
 
   return (
@@ -168,6 +213,7 @@ export const SettingsScreen: React.FC = () => {
           currentAccountId={config.currentAccountId}
           newAccount={newAccount}
           setNewAccount={setNewAccount}
+          error={accountError}
           onAddAccount={handleAddAccount}
           onRemoveAccount={handleRemoveAccount}
           onSwitchAccount={handleSwitchAccount}
@@ -178,6 +224,7 @@ export const SettingsScreen: React.FC = () => {
           accounts={config.accounts}
           newWifi={newWifi}
           setNewWifi={setNewWifi}
+          error={wifiError}
           onAddWifi={handleAddWifi}
           onRemoveWifi={handleRemoveWifi}
         />

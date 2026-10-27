@@ -144,6 +144,14 @@ export const NetworkStatusCard: React.FC<NetworkStatusCardProps> = React.memo(
           onPress={networkStatus === 'connected' ? onLogout : onLogin}
           disabled={networkStatus === 'connecting'}
           activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            networkStatus === 'connected'
+              ? '断开连接'
+              : networkStatus === 'connecting'
+                ? '正在连接...'
+                : '立即连接'
+          }
         >
           <Text style={styles.btnText}>
             {networkStatus === 'connected'

@@ -254,10 +254,11 @@ export const HomeScreen: React.FC = () => {
     );
   }
 
-  // 第四优先级：检查是否有关联账户
-  const linkedAccount = config.accounts.find(account =>
-    wifiConfig.linkedAccountIds.includes(account.id)
-  );
+  // 第四优先级：按关联顺序取第一个仍存在的账户；兼容旧版单字段配置。
+  const linkedAccountId =
+    wifiConfig.linkedAccountIds.find(id => config.accounts.some(account => account.id === id)) ??
+    wifiConfig.linkedAccountId;
+  const linkedAccount = config.accounts.find(account => account.id === linkedAccountId);
 
   if (!linkedAccount) {
     return (

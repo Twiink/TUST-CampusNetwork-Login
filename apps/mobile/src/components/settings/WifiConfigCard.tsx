@@ -13,9 +13,10 @@ export const WifiConfigCard: React.FC<{
   accounts: AccountConfig[];
   newWifi: NewWifiForm;
   setNewWifi: React.Dispatch<React.SetStateAction<NewWifiForm>>;
+  error?: string | null;
   onAddWifi: () => void;
   onRemoveWifi: (id: string) => void;
-}> = ({ wifiList, accounts, newWifi, setNewWifi, onAddWifi, onRemoveWifi }) => {
+}> = ({ wifiList, accounts, newWifi, setNewWifi, error, onAddWifi, onRemoveWifi }) => {
   const { theme } = useTheme();
   return (
     <GlassView style={styles.card}>
@@ -38,7 +39,15 @@ export const WifiConfigCard: React.FC<{
           </View>
         ) : (
           wifiList.map(wifi => {
-            const linkedAccounts = accounts.filter(a => wifi.linkedAccountIds.includes(a.id));
+            const linkedAccountIds =
+              wifi.linkedAccountIds.length > 0
+                ? wifi.linkedAccountIds
+                : wifi.linkedAccountId
+                  ? [wifi.linkedAccountId]
+                  : [];
+            const linkedAccounts = linkedAccountIds
+              .map(id => accounts.find(account => account.id === id))
+              .filter((account): account is AccountConfig => account !== undefined);
             return (
               <View
                 key={wifi.id}
@@ -109,6 +118,8 @@ export const WifiConfigCard: React.FC<{
                 <TouchableOpacity
                   style={[styles.deleteBtn, { backgroundColor: theme.colors.danger + '20' }]}
                   onPress={() => onRemoveWifi(wifi.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`删除 WiFi ${wifi.ssid}`}
                 >
                   <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>删除</Text>
                 </TouchableOpacity>
@@ -169,6 +180,7 @@ export const WifiConfigCard: React.FC<{
           thumbColor={newWifi.requiresAuth ? theme.colors.primary : '#f4f3f4'}
           value={newWifi.requiresAuth}
           onValueChange={v => setNewWifi({ ...newWifi, requiresAuth: v, linkedAccountIds: [] })}
+          accessibilityLabel="需要校园网认证"
         />
       </View>
 
@@ -212,6 +224,8 @@ export const WifiConfigCard: React.FC<{
                     }))
                   }
                   activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`选择账号 ${acc.username}`}
                 >
                   <Text
                     style={[
@@ -272,6 +286,14 @@ export const WifiConfigCard: React.FC<{
         </Text>
       </View>
 
+      {error && (
+        <Text
+          accessibilityRole="alert"
+          style={{ color: theme.colors.danger, fontSize: 13, marginBottom: 12 }}
+        >
+          {error}
+        </Text>
+      )}
       <TouchableOpacity
         style={[
           styles.btnPrimary,
@@ -286,6 +308,8 @@ export const WifiConfigCard: React.FC<{
         onPress={onAddWifi}
         disabled={(newWifi.requiresAuth && newWifi.linkedAccountIds.length === 0) || !newWifi.ssid}
         activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel="添加 WiFi"
       >
         <Text style={styles.btnText}>添加 WiFi</Text>
       </TouchableOpacity>
