@@ -14,6 +14,9 @@ if (!directory) throw new Error('An isolated userData directory is required');
 app.setPath('userData', directory);
 app.setPath('sessionData', directory);
 const scenario = process.env.E2E_SCENARIO ?? 'authenticated';
+const scannedSsids = ['TUST-WIFI', 'Home-WIFI', 'TUST-Backup', 'Nearby-WIFI'];
+const bssidFor = (ssid: string) =>
+  `00:11:22:33:44:${String(scannedSsids.indexOf(ssid) + 1).padStart(2, '0')}`;
 const radio = {
   ssid:
     scenario === 'offline' || process.env.E2E_NETWORK_STATE === 'offline'
@@ -104,6 +107,7 @@ const details = (): WifiDetails | null =>
   radio.ssid
     ? {
         ssid: radio.ssid,
+        bssid: bssidFor(radio.ssid),
         connected: true,
         ipv4: '10.1.2.3',
         mac: '001122334455',
@@ -129,7 +133,7 @@ runtimePorts.wifi = {
   getLinkSpeed: async () => 866,
   getFrequency: async () => 5000,
   getChannel: async () => 36,
-  getBSSID: async () => '00:11:22:33:44:55',
+  getBSSID: async () => (radio.ssid ? bssidFor(radio.ssid) : null),
   getSecurity: async () => 'WPA2',
   connect: async (ssid) => {
     if (radio.failConnections) return false;
@@ -144,11 +148,11 @@ runtimePorts.wifi = {
 } satisfies WifiAdapter;
 runtimePorts.scanRaw = async () => ({
   platform: process.platform === 'win32' ? 'win32' : 'linux',
-  text: ['TUST-WIFI', 'Home-WIFI', 'TUST-Backup', 'Nearby-WIFI']
+  text: scannedSsids
     .map((ssid, index) =>
       process.platform === 'win32'
-        ? `SSID ${index + 1} : ${ssid}\r\n    Authentication : WPA2-Personal\r\n    BSSID 1 : 00:11:22:33:44:55\r\n    Signal : 80%\r\n`
-        : `${ssid}:80:WPA2`
+        ? `SSID ${index + 1} : ${ssid}\r\n    Authentication : WPA2-Personal\r\n    BSSID 1 : ${bssidFor(ssid)}\r\n    Signal : 80%\r\n`
+        : `${ssid}:80:WPA2:${bssidFor(ssid).replaceAll(':', '\\:')}`
     )
     .join('\n'),
 });

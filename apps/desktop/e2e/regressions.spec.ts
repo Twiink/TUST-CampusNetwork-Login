@@ -58,6 +58,7 @@ test('附近扫描、选择、编辑与实际无线边界连接', async ({ appWi
   const before = await page.evaluate(() => window.electronAPI.config.get());
   const original = before?.wifiList.find((wifi) => wifi.ssid === 'Nearby-WIFI');
   if (!original) throw new Error('Scanned WiFi configuration missing');
+  expect(original.bssid).toBe('00:11:22:33:44:04');
   await page.getByRole('button', { name: '编辑 WiFi Nearby-WIFI' }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('优先级', { exact: true }).fill('7');
