@@ -48,6 +48,7 @@ export class ElectronStorageAdapter implements StorageAdapter {
         let next: Record<string, unknown> = {};
         if (fs.existsSync(filePath)) {
           try {
+            if (process.platform !== 'win32') await fsp.chmod(filePath, 0o600);
             next = JSON.parse(await fsp.readFile(filePath, 'utf-8'));
             if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error();
           } catch {
@@ -56,7 +57,6 @@ export class ElectronStorageAdapter implements StorageAdapter {
           const migrate = this.hasPlainPassword(next);
           this.decryptSensitiveData(next);
           if (migrate) await this.saveToFile(next);
-          else if (process.platform !== 'win32') await fsp.chmod(filePath, 0o600);
         }
         this.data = next;
         this.loaded = true;

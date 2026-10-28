@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, stat, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 const state = vi.hoisted(() => ({
@@ -50,10 +50,12 @@ describe('安全存储与失败恢复', () => {
   it('历史明文只有成功加密后才能加载，失败保留文件并可恢复', async () => {
     const original = JSON.stringify({ account: { password: 'legacy-fixture' } });
     await writeFile(file(), original);
+    if (process.platform !== 'win32') await chmod(file(), 0o644);
     state.available = false;
     const store = new ElectronStorageAdapter();
     await expect(store.get('account')).rejects.toThrow('钥匙串');
     expect(await readFile(file(), 'utf8')).toBe(original);
+    if (process.platform !== 'win32') expect((await stat(file())).mode & 0o777).toBe(0o600);
     state.available = true;
     expect(await store.get('account')).toEqual({ password: 'legacy-fixture' });
     expect(await readFile(file(), 'utf8')).not.toContain('legacy-fixture');
