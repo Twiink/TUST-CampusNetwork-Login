@@ -499,7 +499,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: resolve-release
     if: needs.resolve-release.outputs.should_publish == 'true' && needs.resolve-release.outputs.artifact_run_id == ''
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       ANDROID_VERSION_NAME: ${{ needs.resolve-release.outputs.android_version_name }}
       ANDROID_VERSION_CODE: ${{ needs.resolve-release.outputs.android_version_code }}

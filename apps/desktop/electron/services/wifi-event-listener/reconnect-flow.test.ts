@@ -76,6 +76,20 @@ const run = async <T>(promise: Promise<T>): Promise<T> => {
 };
 
 describe('reconnect-flow 纯函数', () => {
+  it('同名规则分别重试，并始终使用配置 ID', async () => {
+    const rules = [
+      { ...wifi('Campus', 1), id: 'first', security: 'open' },
+      { ...wifi('Campus', 2), id: 'second', security: 'WPA2' },
+    ];
+    const { deps, connectToConfiguredNetwork } = setup(rules, { wifiReconnectRetries: 1 }, [
+      'second',
+    ]);
+    await expect(run(executeAutoReconnect('Campus', deps))).resolves.toBe(true);
+    expect(connectToConfiguredNetwork.mock.calls.map((call) => call[0])).toEqual([
+      'first',
+      'second',
+    ]);
+  });
   it('断开的 WiFi 排第一，其余按优先级', () => {
     const plan = planReconnect('Lab', [wifi('Home', 5), wifi('Lab', 8), wifi('TUST', 1)]);
     expect(plan.map((w) => w.ssid)).toEqual(['Lab', 'TUST', 'Home']);

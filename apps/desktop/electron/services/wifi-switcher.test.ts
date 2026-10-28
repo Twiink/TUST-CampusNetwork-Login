@@ -36,6 +36,7 @@ import {
   scanAvailableNetworks,
   buildWindowsWifiProfile,
   waitForTargetNetwork,
+  WifiSwitcherService,
 } from './wifi-switcher';
 import { existsSync, readFileSync } from 'node:fs';
 
@@ -151,6 +152,28 @@ describe('scanAvailableNetworks', () => {
 });
 
 describe('connectToNetwork', () => {
+  it('Linux: 精确 BSSID 作为独立参数传给正式连接命令', async () => {
+    setPlatform('linux');
+    await connectToNetwork('Campus', 'pw', 'WPA2', undefined, 'AA-BB-CC-DD-EE-01');
+    expect(execFileMock.mock.calls[0][1]).toEqual([
+      'dev',
+      'wifi',
+      'connect',
+      'Campus',
+      'password',
+      'pw',
+      'bssid',
+      'aa:bb:cc:dd:ee:01',
+    ]);
+  });
+
+  it('macOS: 系统连接到同名的其他接入点时明确失败', async () => {
+    setPlatform('darwin');
+    const read = async () => ({ connected: true, ssid: 'Campus', bssid: 'aa:bb:cc:dd:ee:02' });
+    await expect(
+      connectToNetwork('Campus', 'pw', 'WPA2', read, 'aa:bb:cc:dd:ee:01')
+    ).rejects.toThrow('系统未连接到指定 BSSID');
+  });
   it('Linux: 带密码连接经 execFile 参数数组调用 nmcli', async () => {
     setPlatform('linux');
     mockExecOutput('');
@@ -258,7 +281,72 @@ describe('connectToNetwork', () => {
   });
 });
 
+describe('同名 WiFi 切换', () => {
+  const rules = [
+    { id: 'campus-open', ssid: 'Campus', password: '', security: 'open', priority: 1 },
+    {
+      id: 'campus-private',
+      ssid: 'Campus',
+      password: 'private-password',
+      security: 'WPA2',
+      bssid: 'aa:bb:cc:dd:ee:01',
+      priority: 2,
+    },
+  ];
+  it('按配置 ID 保留对应的密码、安全类型和 BSSID，旧 SSID 歧义调用被拒绝', async () => {
+    const connect = vi.fn(async () => true);
+    const service = new WifiSwitcherService({ connect });
+    service.setConfiguredNetworks(rules);
+    await expect(service.connectToConfiguredNetwork('Campus')).rejects.toThrow('存在同名 WiFi');
+    expect(connect).not.toHaveBeenCalled();
+    await expect(service.connectToConfiguredNetwork('campus-private')).resolves.toBe(true);
+    expect(connect).toHaveBeenCalledWith(
+      'Campus',
+      'private-password',
+      'WPA2',
+      undefined,
+      'aa:bb:cc:dd:ee:01'
+    );
+    service.setConfiguredNetworks([rules[0]]);
+    await expect(service.connectToConfiguredNetwork('Campus')).resolves.toBe(true);
+  });
+  it('扫描身份选择精确规则，信息不足时停止自动切换', async () => {
+    const scan = vi.fn(async () => [
+      { ssid: 'Campus', signal: 90, security: 'WPA2', bssid: 'aa:bb:cc:dd:ee:01' },
+    ]);
+    const connect = vi.fn(async () => true);
+    const service = new WifiSwitcherService({ scan, connect });
+    service.setConfiguredNetworks(rules);
+    await expect(service.switchToNextNetwork(null)).resolves.toEqual({
+      success: true,
+      ssid: 'Campus',
+    });
+    expect(connect).toHaveBeenCalledWith(
+      'Campus',
+      'private-password',
+      'WPA2',
+      undefined,
+      'aa:bb:cc:dd:ee:01'
+    );
+    scan.mockResolvedValue([{ ssid: 'Campus', signal: 90, security: '', bssid: '' }]);
+    connect.mockClear();
+    await expect(service.switchToNextNetwork(null)).resolves.toEqual({
+      success: false,
+      ssid: null,
+    });
+    expect(connect).not.toHaveBeenCalled();
+  });
+});
+
 describe('Windows profile and connection regressions', () => {
+  it('纯 WPA3 使用 SAE，过渡网络使用兼容的 WPA2 连接方式', () => {
+    expect(buildWindowsWifiProfile('Campus', 'password', 'WPA3').xml).toContain(
+      '<authentication>WPA3SAE</authentication>'
+    );
+    expect(buildWindowsWifiProfile('Campus', 'password', 'WPA2-WPA3').xml).toContain(
+      '<authentication>WPA2PSK</authentication>'
+    );
+  });
   it('encodes special SSID bytes and XML password characters', () => {
     const profile = buildWindowsWifiProfile('校园 & <wifi>', 'a<&"\'b', 'WPA2');
     expect(profile.xml).toContain(Buffer.from('校园 & <wifi>').toString('hex'));

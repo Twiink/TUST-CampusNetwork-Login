@@ -43,10 +43,12 @@ export function registerWifiIPC(
           const wifiConfigs = wifiManager.getWifiConfigs();
           wifiSwitcherService.setConfiguredNetworks(
             wifiConfigs.map((w) => ({
+              id: w.id,
               ssid: w.ssid,
               password: w.password,
               priority: w.priority ?? 10,
               security: w.security,
+              bssid: w.bssid,
             }))
           );
         }
@@ -75,10 +77,12 @@ export function registerWifiIPC(
           const wifiConfigs = wifiManager.getWifiConfigs();
           wifiSwitcherService.setConfiguredNetworks(
             wifiConfigs.map((w) => ({
+              id: w.id,
               ssid: w.ssid,
               password: w.password,
               priority: w.priority ?? 10,
               security: w.security,
+              bssid: w.bssid,
             }))
           );
         }
@@ -104,10 +108,12 @@ export function registerWifiIPC(
         const wifiConfigs = wifiManager.getWifiConfigs();
         wifiSwitcherService.setConfiguredNetworks(
           wifiConfigs.map((w) => ({
+            id: w.id,
             ssid: w.ssid,
             password: w.password,
             priority: w.priority ?? 10,
             security: w.security,
+            bssid: w.bssid,
           }))
         );
       }

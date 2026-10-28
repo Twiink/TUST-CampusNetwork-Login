@@ -1,7 +1,8 @@
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
-import { readdirSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, existsSync, mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 const [location, version] = process.argv.slice(2);
 function find(dir) {
   if (!existsSync(dir)) return [];
@@ -34,9 +35,13 @@ const main = asar.extractFile(asarPath, 'dist-electron/main.js').toString();
 if (/netmateHardware|受控网络|10\.0\.2\.2:38081/.test(main)) throw new Error('安装包包含测试边界');
 if (!find(path.join(resources, 'app.asar.unpacked')).some((file) => file.endsWith('.node')))
   throw new Error('安装包未包含解包原生模块');
+const userData = mkdtempSync(path.join(tmpdir(), 'netmate-package-smoke-'));
 const application = await electron.launch({
   executablePath: executable,
-  args: process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : [],
+  args: [
+    `--user-data-dir=${userData}`,
+    ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : []),
+  ],
   timeout: 45000,
 });
 mkdirSync('release-smoke', { recursive: true });
@@ -47,8 +52,8 @@ try {
   await page.getByText(`版本 ${version}`, { exact: true }).waitFor();
   const actual = await application.evaluate(({ app }) => app.getVersion());
   if (actual !== version) throw new Error('运行版本不符');
-  const native = await application.evaluate(async ({ app }) => {
-    const { createRequire } = await import('node:module');
+  const native = await application.evaluate(({ app }) => {
+    const { createRequire } = process.getBuiltinModule('node:module');
     const req = createRequire(app.getAppPath() + '/package.json');
     const module = req('@repo/native');
     return {
@@ -67,4 +72,5 @@ try {
   console.log(`安装包冒烟通过: ${process.platform} ${actual}`);
 } finally {
   await application.close();
+  rmSync(userData, { recursive: true, force: true });
 }

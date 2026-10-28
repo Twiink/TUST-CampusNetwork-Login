@@ -95,10 +95,12 @@ function applyConfigChange(config: AppConfig): void {
 
   wifiSwitcherService?.setConfiguredNetworks(
     config.wifiList.map((w) => ({
+      id: w.id,
       ssid: w.ssid,
       password: w.password,
       priority: w.priority ?? 10,
       security: w.security,
+      bssid: w.bssid,
     }))
   );
   // 新 WiFi/新密码/新冷却设置可以立即尝试
@@ -253,10 +255,12 @@ app.whenReady().then(async () => {
     const wifiConfigs = services.wifiManager.getWifiConfigs();
     wifiSwitcherService.setConfiguredNetworks(
       wifiConfigs.map((w) => ({
+        id: w.id,
         ssid: w.ssid,
         password: w.password,
         priority: w.priority ?? 10,
         security: w.security,
+        bssid: w.bssid,
       }))
     );
 
@@ -507,7 +511,9 @@ app.whenReady().then(async () => {
       category: 'system',
       source: 'Main',
     });
-    runtimePorts.onReady?.();
+    if (runtimePorts.onReady) {
+      void wifiEventListener.whenInitialized().then(() => runtimePorts.onReady?.());
+    }
   } catch (error) {
     devLog.error('Failed to initialize app:', error);
     if (!runtimePorts.headlessShell)

@@ -210,6 +210,18 @@ describe('Home', () => {
     consoleError.mockRestore();
   });
 
+  it('同名 WiFi 仅标记实际匹配的规则，并按选中配置 ID 切换', async () => {
+    const config = makeConfig();
+    config.wifiList[0].security = 'open';
+    config.wifiList.push({ ...config.wifiList[0], id: 'secure-campus', security: 'WPA2' });
+    renderHome({ status: { ...networkStatus, security: 'open' } }, config);
+    const target = screen.getByText('WPA2').closest('button')!;
+    expect(target.disabled).toBe(false);
+    fireEvent.click(target);
+    await screen.findByText('正在切换到 TUST-WIFI，请稍候...');
+    expect(window.electronAPI.wifi.switch).toHaveBeenCalledWith('secure-campus');
+  });
+
   it('多 WiFi 时支持切换，失败与异常均有反馈', async () => {
     const config = makeConfig();
     config.wifiList.push({
@@ -223,7 +235,7 @@ describe('Home', () => {
 
     fireEvent.click(screen.getByText('TUST-LAB').closest('button')!);
     expect(await screen.findByText('正在切换到 TUST-LAB，请稍候...')).toBeTruthy();
-    expect(window.electronAPI.wifi.switch).toHaveBeenCalledWith('TUST-LAB');
+    expect(window.electronAPI.wifi.switch).toHaveBeenCalledWith('w2');
 
     await new Promise((resolve) => setTimeout(resolve, 1100));
     vi.mocked(window.electronAPI.wifi.switch).mockResolvedValueOnce(false);

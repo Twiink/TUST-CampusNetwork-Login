@@ -14,7 +14,18 @@
     output: 'release/${version}',
     buildResources: 'build',
   },
-  files: ['dist/**', 'dist-electron/**', 'package.json', '!**/*.map', '!**/*.md', '!**/*.d.ts'],
+  files: [
+    'dist/**',
+    'dist-electron/**',
+    'package.json',
+    '!**/*.map',
+    '!**/*.md',
+    '!**/*.d.ts',
+    '!**/*.test.*',
+    '!node_modules/@repo/native/src/**',
+    '!node_modules/@repo/native/*.{ts,toml,rs}',
+    '!node_modules/@repo/native/{eslint.config.js,tsconfig.json}',
+  ],
   // Rust nl80211/CoreWLAN 原生模块必须解包到文件系统，Node 才能通过 require 加载 .node。
   asarUnpack: ['**/*.node'],
   // electron-updater 依赖此配置生成 app-update.yml，缺失会导致“publish configuration missing”。

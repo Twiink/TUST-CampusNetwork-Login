@@ -96,7 +96,7 @@ const electronAPI = {
     update: (id: string, updates: unknown) =>
       ipcRenderer.invoke(IPC_CHANNELS.WIFI_UPDATE, id, updates),
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_REMOVE, id),
-    switch: (ssid: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SWITCH, ssid),
+    switch: (idOrSsid: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SWITCH, idOrSsid),
     scan: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SCAN),
   },
 

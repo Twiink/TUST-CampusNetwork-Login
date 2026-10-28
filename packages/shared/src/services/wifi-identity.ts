@@ -35,10 +35,14 @@ export function sameWifiFingerprint(left: WifiIdentity, right: WifiIdentity): bo
   );
 }
 
-export function matchWifiRule(rules: WifiConfig[], identity: WifiIdentity): WifiConfig | null {
+export function matchWifiRule<
+  T extends Pick<WifiConfig, 'ssid' | 'security' | 'bssid' | 'priority'> & {
+    lastConnectedAt?: number | null;
+  },
+>(rules: T[], identity: WifiIdentity): T | null {
   const security = normalizeWifiSecurity(identity.security),
     bssid = normalizeBssid(identity.bssid);
-  const score = (rule: WifiConfig): number => {
+  const score = (rule: T): number => {
     const expectedSecurity = normalizeWifiSecurity(rule.security),
       expectedBssid = normalizeBssid(rule.bssid);
     if (rule.ssid !== identity.ssid || (rule.bssid && (!bssid || bssid !== expectedBssid)))

@@ -120,7 +120,8 @@ export interface ElectronAPI {
     add: (wifi: Omit<WifiConfig, 'id'>) => Promise<WifiConfig>;
     update: (id: string, updates: Partial<WifiConfig>) => Promise<WifiConfig>;
     remove: (id: string) => Promise<void>;
-    switch: (ssid: string) => Promise<boolean>;
+    /** 配置 ID；兼容唯一 SSID。 */
+    switch: (idOrSsid: string) => Promise<boolean>;
     scan: () => Promise<
       Array<{ ssid: string; signalStrength: number; security: string; bssid?: string }>
     >;

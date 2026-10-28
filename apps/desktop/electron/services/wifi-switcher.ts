@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
+import { matchWifiRule, normalizeBssid, normalizeWifiSecurity } from '@repo/shared';
 import { createDesktopWifiAdapter } from './wifi-adapter';
 import { splitNmcliLine } from './wifi-adapter/linux';
 import { execWindowsText, execWindowsFileText } from '../utils/win-exec';
@@ -180,18 +181,29 @@ export async function connectToNetwork(
   ssid: string,
   password?: string,
   security?: string,
-  readConnection?: () => Promise<ConnectionSnapshot>
+  readConnection?: () => Promise<ConnectionSnapshot>,
+  bssid?: string
 ): Promise<boolean> {
+  if (bssid && !normalizeBssid(bssid)) throw new Error('BSSID 格式无效');
+  let connected: boolean;
   switch (process.platform) {
     case 'darwin':
-      return await connectMacOS(ssid, password);
+      connected = await connectMacOS(ssid, password);
+      break;
     case 'win32':
-      return await connectWindowsInternal(ssid, password, security, readConnection);
+      connected = await connectWindowsInternal(ssid, password, security, readConnection);
+      break;
     case 'linux':
-      return await connectLinux(ssid, password);
+      return await connectLinux(ssid, password, bssid);
     default:
       return false;
   }
+  if (connected && bssid) {
+    const current = await (readConnection ?? readConnectionSnapshot)();
+    if (normalizeBssid(current.bssid) !== normalizeBssid(bssid))
+      throw new Error('系统未连接到指定 BSSID，请在系统网络设置中选择目标接入点');
+  }
+  return connected;
 }
 
 /**
@@ -219,6 +231,7 @@ async function connectMacOS(ssid: string, password?: string): Promise<boolean> {
 
 export interface ConnectionSnapshot {
   ssid?: string | null;
+  bssid?: string | null;
   connected: boolean;
   ip?: string | null;
 }
@@ -264,7 +277,11 @@ export function buildWindowsWifiProfile(
   if (!password && /WPA|SAE|personal|个人/i.test(security))
     throw new Error('安全网络需要密码或系统已保存的配置');
   const name = windowsProfileName(ssid);
-  const authentication = !password ? 'open' : /WPA3|SAE/i.test(security) ? 'WPA3SAE' : 'WPA2PSK';
+  const authentication = !password
+    ? 'open'
+    : normalizeWifiSecurity(security) === 'wpa3'
+      ? 'WPA3SAE'
+      : 'WPA2PSK';
   const sharedKey = password
     ? `<sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>${xml(password)}</keyMaterial></sharedKey>`
     : '';
@@ -279,7 +296,7 @@ async function readConnectionSnapshot(): Promise<ConnectionSnapshot> {
   const wifi = await adapter.getCurrentWifi();
   if (!wifi?.connected) return { connected: false };
   const info = await adapter.getNetworkInfo();
-  return { connected: true, ssid: wifi.ssid, ip: info.ipv4 || info.ipv6 };
+  return { connected: true, ssid: wifi.ssid, bssid: wifi.bssid, ip: info.ipv4 || info.ipv6 };
 }
 
 async function connectWindowsInternal(
@@ -358,13 +375,14 @@ export async function isWifiRadioEnabled(): Promise<boolean> {
 /**
  * Linux: 连接到 WiFi
  */
-async function connectLinux(ssid: string, password?: string): Promise<boolean> {
+async function connectLinux(ssid: string, password?: string, bssid?: string): Promise<boolean> {
   try {
     const connectArgs = ['dev', 'wifi', 'connect', ssid];
     if (password) {
       // 使用密码连接
       connectArgs.push('password', password);
     }
+    if (bssid) connectArgs.push('bssid', normalizeBssid(bssid).match(/../g)!.join(':'));
     await execFileAsync('nmcli', connectArgs, { timeout: 30000 });
     return true;
   } catch (error) {
@@ -384,10 +402,12 @@ export class WifiSwitcherService {
     private ports: { scan?: typeof scanAvailableNetworks; connect?: typeof connectToNetwork } = {}
   ) {}
   private configuredNetworks: Array<{
+    id?: string;
     ssid: string;
     password: string;
     priority: number;
     security?: string;
+    bssid?: string;
   }> = [];
 
   /**
@@ -395,21 +415,34 @@ export class WifiSwitcherService {
    * @param networks WiFi配置列表（包含SSID、密码和优先级）
    */
   setConfiguredNetworks(
-    networks: Array<{ ssid: string; password: string; priority: number; security?: string }>
+    networks: Array<{
+      id?: string;
+      ssid: string;
+      password: string;
+      priority: number;
+      security?: string;
+      bssid?: string;
+    }>
   ): void {
     // 按优先级排序（数字越小优先级越高）
-    this.configuredNetworks = networks.sort((a, b) => a.priority - b.priority);
+    this.configuredNetworks = [...networks].sort((a, b) => a.priority - b.priority);
   }
 
   /**
    * 获取下一个可用的 WiFi 网络
    * @param currentSsid 当前连接的 SSID
    */
-  async getNextAvailableNetwork(
-    currentSsid: string | null
-  ): Promise<{ ssid: string; password: string; security?: string } | null> {
+  async getNextAvailableNetwork(currentSsid: string | null): Promise<{
+    id?: string;
+    ssid: string;
+    password: string;
+    security?: string;
+    bssid?: string;
+  } | null> {
     const availableNetworks = await (this.ports.scan ?? scanAvailableNetworks)();
-    const availableSsids = new Set(availableNetworks.map((n) => n.ssid));
+    const available = new Set(
+      availableNetworks.map((identity) => matchWifiRule(this.configuredNetworks, identity))
+    );
 
     // 找到当前网络在配置列表中的位置
     const currentIndex = currentSsid
@@ -418,24 +451,12 @@ export class WifiSwitcherService {
 
     // 从下一个位置开始查找可用的网络
     for (let i = currentIndex + 1; i < this.configuredNetworks.length; i++) {
-      if (availableSsids.has(this.configuredNetworks[i].ssid)) {
-        return {
-          ssid: this.configuredNetworks[i].ssid,
-          password: this.configuredNetworks[i].password,
-          security: this.configuredNetworks[i].security,
-        };
-      }
+      if (available.has(this.configuredNetworks[i])) return this.configuredNetworks[i];
     }
 
     // 如果没找到，从头开始查找（不包括当前网络）
     for (let i = 0; i < currentIndex; i++) {
-      if (availableSsids.has(this.configuredNetworks[i].ssid)) {
-        return {
-          ssid: this.configuredNetworks[i].ssid,
-          password: this.configuredNetworks[i].password,
-          security: this.configuredNetworks[i].security,
-        };
-      }
+      if (available.has(this.configuredNetworks[i])) return this.configuredNetworks[i];
     }
 
     return null;
@@ -453,11 +474,7 @@ export class WifiSwitcherService {
       return { success: false, ssid: null };
     }
 
-    const connected = await (this.ports.connect ?? connectToNetwork)(
-      nextNetwork.ssid,
-      nextNetwork.password,
-      nextNetwork.security
-    );
+    const connected = await this.connectToConfiguredNetwork(nextNetwork.id ?? nextNetwork.ssid);
     return { success: connected, ssid: connected ? nextNetwork.ssid : null };
   }
 
@@ -466,12 +483,22 @@ export class WifiSwitcherService {
    * @param ssid WiFi SSID
    * @throws 抛出包含详细错误信息的 Error
    */
-  async connectToConfiguredNetwork(ssid: string): Promise<boolean> {
-    const network = this.configuredNetworks.find((n) => n.ssid === ssid);
+  async connectToConfiguredNetwork(idOrSsid: string): Promise<boolean> {
+    const byId = this.configuredNetworks.find((n) => n.id === idOrSsid);
+    const sameSsid = this.configuredNetworks.filter((n) => n.ssid === idOrSsid);
+    if (!byId && sameSsid.length > 1) throw new Error('存在同名 WiFi，请选择具体配置');
+    const network = byId ?? sameSsid[0];
     if (!network) {
-      throw new Error(`未找到WiFi配置: ${ssid}`);
+      throw new Error(`未找到WiFi配置: ${idOrSsid}`);
     }
-
+    if (network.bssid)
+      return (this.ports.connect ?? connectToNetwork)(
+        network.ssid,
+        network.password,
+        network.security,
+        undefined,
+        network.bssid
+      );
     return await (this.ports.connect ?? connectToNetwork)(
       network.ssid,
       network.password,

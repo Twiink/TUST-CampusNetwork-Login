@@ -9,7 +9,7 @@ old_certificate=$("$sdk_tools/apksigner" verify --print-certs "$previous_apk" | 
 [[ -n "$old_code" && -n "$old_certificate" ]]
 count=0
 for apk in "$apk_root"/*.apk; do
-  badge=$("$sdk_tools/aapt" dump badging "$apk" | head -n 1)
+  badge=$("$sdk_tools/aapt" dump badging "$apk" | sed -n '1p')
   [[ "$badge" == *"name='com.netmate.app'"* && "$badge" == *"versionName='$version'"* ]]
   code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badge")
   (( code > old_code ))

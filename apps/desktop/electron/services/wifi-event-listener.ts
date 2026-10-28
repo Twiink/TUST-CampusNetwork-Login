@@ -81,6 +81,7 @@ export class WifiEventListener {
   /** 最近一次「全部 WiFi 失败」的时间（冷却期起点） */
   private lastAllFailedAt = 0;
   private startupHandled = false;
+  private initialCheck: Promise<void> = Promise.resolve();
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSsid: string | null = null;
   private reconnectGeneration = 0;
@@ -142,10 +143,10 @@ export class WifiEventListener {
 
     // 立即执行一次检测，获取初始状态
     this.logger.info('执行初始 WiFi 状态检测...');
-    this.checkWifiChange()
-      .catch((error) => {
-        this.logger.error('初始 WiFi 状态检测失败', error);
-      })
+    this.initialCheck = this.checkWifiChange().catch((error) => {
+      this.logger.error('初始 WiFi 状态检测失败', error);
+    });
+    this.initialCheck
       .then(() => this.handleStartupAutoConnect())
       .catch((error) => {
         this.logger.error('启动自动连接失败', error);
@@ -162,6 +163,11 @@ export class WifiEventListener {
         this.nativeWatchStarted ? 30_000 : this.checkInterval
       }ms`
     );
+  }
+
+  /** 初次状态推送已完成；后续自动连接独立执行。 */
+  whenInitialized(): Promise<void> {
+    return this.initialCheck;
   }
 
   /**

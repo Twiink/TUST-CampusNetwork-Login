@@ -136,3 +136,7 @@ packages/native/*/*.node
 # Isolated E2E builds and diagnostics
 dist-e2e/
 .maestro/
+android-e2e-apks/
+release-smoke/
+release-assets/
+previous-release/

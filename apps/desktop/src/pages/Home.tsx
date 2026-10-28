@@ -69,12 +69,13 @@ export const Home: React.FC = () => {
   };
 
   // WiFi切换处理
-  const handleWifiSwitch = async (ssid: string) => {
+  const handleWifiSwitch = async (id: string) => {
+    const ssid = config?.wifiList.find((wifi) => wifi.id === id)?.ssid ?? id;
     if (switching) return;
 
     setSwitching(true);
     try {
-      const success = await window.electronAPI.wifi.switch(ssid);
+      const success = await window.electronAPI.wifi.switch(id);
       if (success) {
         showToast(`正在切换到 ${ssid}，请稍候...`, 'success');
         // 等待WiFi连接完成后刷新状态

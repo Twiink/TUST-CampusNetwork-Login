@@ -6,7 +6,7 @@
  * 语义与 Android 端 WifiReconnector / WifiReconnectPolicy 保持一致。
  */
 
-import type { Logger, WifiManager, ConfigManager } from '@repo/shared';
+import type { Logger, WifiManager, ConfigManager, WifiConfig } from '@repo/shared';
 import type { WifiSwitcherService } from '../wifi-switcher';
 
 /**
@@ -70,7 +70,7 @@ export function planReconnect<T extends { ssid: string; priority: number }>(
   const sorted = [...candidates].sort((a, b) => a.priority - b.priority);
   if (!disconnectedSsid) return sorted;
   const first = sorted.find((c) => c.ssid === disconnectedSsid);
-  return first ? [first, ...sorted.filter((c) => c.ssid !== disconnectedSsid)] : sorted;
+  return first ? [first, ...sorted.filter((c) => c !== first)] : sorted;
 }
 
 /**
@@ -97,10 +97,12 @@ export async function executeAutoReconnect(
   // 设置页整份保存配置时不会同步切换服务的网络列表，这里以最新配置为准
   deps.wifiSwitcherService.setConfiguredNetworks(
     wifiManager.getWifiConfigs().map((w) => ({
+      id: w.id,
       ssid: w.ssid,
       password: w.password,
       priority: w.priority ?? 10,
       security: w.security,
+      bssid: w.bssid,
     }))
   );
 
@@ -132,13 +134,7 @@ export async function executeAutoReconnect(
         if (index > 0) await sleep(1000);
       }
 
-      const success = await retryConnectToWifi(
-        wifi.ssid,
-        wifi.priority,
-        maxRetries,
-        failedList,
-        deps
-      );
+      const success = await retryConnectToWifi(wifi, maxRetries, failedList, deps);
       if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
       if (success) {
         logger.success(`WiFi自动连接成功: ${wifi.ssid}`);
@@ -207,14 +203,16 @@ export async function executeStartupAutoConnect(
   logger.info(`启动时切换 WiFi: ${currentSsid} → ${best.ssid}`);
   wifiSwitcherService.setConfiguredNetworks(
     wifiManager.getWifiConfigs().map((w) => ({
+      id: w.id,
       ssid: w.ssid,
       password: w.password,
       priority: w.priority ?? 10,
       security: w.security,
+      bssid: w.bssid,
     }))
   );
   try {
-    const success = await wifiSwitcherService.connectToConfiguredNetwork(best.ssid);
+    const success = await wifiSwitcherService.connectToConfiguredNetwork(best.id);
     if (success) {
       await deps.onReconnected(best.ssid);
     }
@@ -226,13 +224,13 @@ export async function executeStartupAutoConnect(
 }
 
 async function retryConnectToWifi(
-  ssid: string,
-  priority: number,
+  wifi: WifiConfig,
   maxRetries: number,
   failedList: WifiReconnectFailure[],
   deps: AutoReconnectDeps
 ): Promise<boolean> {
   const { logger, wifiSwitcherService, onProgress } = deps;
+  const { ssid, priority } = wifi;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     logger.info(`尝试连接 ${ssid} (第 ${attempt}/${maxRetries} 次)`);
@@ -244,7 +242,7 @@ async function retryConnectToWifi(
       }
 
       if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
-      const success = await wifiSwitcherService.connectToConfiguredNetwork(ssid);
+      const success = await wifiSwitcherService.connectToConfiguredNetwork(wifi.id);
       if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
 
       if (success) {

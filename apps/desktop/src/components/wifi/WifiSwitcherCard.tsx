@@ -1,18 +1,23 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { Wifi, RefreshCw } from 'lucide-react';
+import { matchWifiRule } from '@repo/shared';
 
 // WiFi 切换卡片组件
 export const WifiSwitcherCard: React.FC<{
   config: NonNullable<ReturnType<typeof useApp>['config']>;
   currentSsid: string | null;
-  onSwitch: (ssid: string) => Promise<void>;
+  onSwitch: (id: string) => Promise<void>;
   switching: boolean;
 }> = ({ config, currentSsid, onSwitch, switching }) => {
   // 按优先级排序WiFi列表
   const sortedWifiList = [...config.wifiList].sort(
     (a, b) => (a.priority || 10) - (b.priority || 10)
   );
+  const { status } = useApp();
+  const currentRule = currentSsid
+    ? matchWifiRule(config.wifiList, { ...status, ssid: currentSsid })
+    : null;
 
   // 如果只有一个或没有WiFi配置，不显示切换卡片
   if (sortedWifiList.length <= 1) {
@@ -36,7 +41,7 @@ export const WifiSwitcherCard: React.FC<{
         }}
       >
         {sortedWifiList.map((wifi) => {
-          const isCurrent = wifi.ssid === currentSsid;
+          const isCurrent = wifi.id === currentRule?.id;
           const priorityColor = (() => {
             const priority = wifi.priority || 10;
             if (priority <= 3) return '#ef4444';
@@ -49,7 +54,7 @@ export const WifiSwitcherCard: React.FC<{
           return (
             <button
               key={wifi.id}
-              onClick={() => !isCurrent && !switching && onSwitch(wifi.ssid)}
+              onClick={() => !isCurrent && !switching && onSwitch(wifi.id)}
               disabled={isCurrent || switching}
               style={{
                 padding: 12,
@@ -87,6 +92,13 @@ export const WifiSwitcherCard: React.FC<{
                   {wifi.ssid}
                 </span>
               </div>
+              {(wifi.security || wifi.bssid) && (
+                <div
+                  style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: 8 }}
+                >
+                  {[wifi.security, wifi.bssid].filter(Boolean).join(' · ')}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span
                   style={{

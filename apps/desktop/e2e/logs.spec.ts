@@ -29,7 +29,7 @@ test('清除日志后展示空态并禁用导出', async ({ appWindow: window })
   await expect(window.getByRole('button', { name: '导出 LOG' })).toBeDisabled();
   await expect(window.getByRole('button', { name: '导出 JSON' })).toBeDisabled();
   await window.evaluate(() => globalThis.window.electronAPI.network.getStatus());
-  await expect(window.getByText('网络状态获取成功')).toBeVisible();
+  await expect(window.getByText('网络状态检测完成').first()).toBeVisible();
   await expect(window.getByRole('button', { name: '导出 LOG' })).toBeEnabled();
 });
 
