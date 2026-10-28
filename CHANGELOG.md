@@ -46,6 +46,14 @@
 - 移动端 jest 转换与 pnpm 依赖解析配置。
 - 桌面端与 Android 发布构建、release 工作流初始化顺序等 CI 问题。
 
+## [v1.0.2] - 2026-10-28
+
+- 密码保存要求系统安全存储，修复切网后的旧认证重试以及 Windows/Linux 无线信息解析。
+- 同名 WiFi 按安全类型与 BSSID 匹配账号，修复 Android 网络建议更新、撤销及 WPA3 连接。
+- 自定义 HTTP 门户使用正式网络策略；Android 心跳间隔持久恢复并统一为 15–300 秒。
+- 日志采用稳定游标分页，保留已展开历史，清空后排除旧异步结果。
+- 补齐回归与 API 28/29/36 E2E，发布增加两轮完整 CI、安装包冒烟、旧版升级、草稿附件与校验和门禁。
+
 ## [v1.0.1] - 2026-10-27
 
 **Full Changelog**: https://github.com/Twiink/TUST-CampusNetwork-Login/compare/v1.0.0...v1.0.1

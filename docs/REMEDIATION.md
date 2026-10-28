@@ -1,3 +1,29 @@
+# v1.0.2 修复与验收记录
+
+日期：2026-10-28。实施基线：`06c8821`；分支：`codex/netmate-release-hardening`。此前 F1–F11 的修复保留在文末，本轮 H1–H11 来自后续审查，属于不同触发条件。
+
+| 编号 | 根因与修复                                                                                                                                                               | 长期回归                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| H1   | 加密不可用会保存明文；现在拒绝凭据持久化，Linux basic_text 同样拒绝。解密错误保留原文件，明文仅在钥匙串可用时原子迁移，文件和临时文件限制权限                            | 桌面 `store.test.ts`、`release-regressions.test.ts`；Linux E2E 使用真实隔离钥匙串                   |
+| H2   | 网络切换后的重试及账号回退仍沿用旧身份；现在请求前、响应后和发布前校验网络与配置代次，暂停立即使旧任务失效                                                               | 桌面 `release-regressions.test.ts`、共享 AuthService 回归、真实门户 E2E                             |
+| H3   | Windows 按 SSID 子串切分而误切 BSSID；改为完整 SSID 行分块，保留每个 BSSID 的信号与身份                                                                                  | 桌面 `release-regressions.test.ts`；E2E 注入原始命令输出后运行正式解析器                            |
+| H4   | nmcli 按冒号直切破坏转义 SSID；扫描与网络详情复用转义解析器                                                                                                              | 桌面 `release-regressions.test.ts`                                                                  |
+| H5   | Linux 忽略索引形式地址/DNS；兼容 IP4.ADDRESS[n]、IP4.DNS[n]，并修复 /0 掩码计算                                                                                          | 桌面 `release-regressions.test.ts` 与适配器测试                                                     |
+| H6   | 正式 Android HTTP 白名单与自定义门户矛盾；正式策略允许合法 HTTP 门户，请求继续绑定 WiFi，更新源及下载入口独立限制 HTTPS                                                  | `PlatformHardeningIntegrationTest` 运行正式 XML 策略及真实 HTTP transport；E2E 不再覆盖网络策略 XML |
+| H7   | 系统建议只增不删；集中对账、加密保存应用建议记录，启动恢复，删除/停用/密码修改撤销旧建议，拒绝时同步报错。自动规则和临时手动请求分别管理，断开/超时/配置变化清理临时请求 | `PlatformHardeningIntegrationTest`，API 29 删除重建与 API 30+ 系统集合对账                          |
+| H8   | 密码网络固定构造 WPA2；安全类型、稳定 ID、BSSID 贯穿桥接与原生，支持开放、WPA2、WPA3/过渡，WEP/企业认证提示系统配置                                                      | JVM `ReleaseHardeningTest` 和原生平台集成矩阵                                                       |
+| H9   | 前台周期检查不遵守开关；现在心跳只控制周期检查，首次/网络事件/回前台检查独立保留，变更取消并重排                                                                         | 移动端 `release-heartbeat.test.tsx`、`useAutoAuth.test.tsx`                                         |
+| H10  | 新日志截断已展开历史，offset 在并发新增时漂移；改用时间戳+ID 游标，保留展开历史、按 ID 去重。清空通过代次、串行持久化和原生日志 generation 排除旧分页及迟到事件          | 移动端 `release-logs.test.tsx`、JVM `LogPaginationTest`                                             |
+| H11  | 心跳间隔仅依赖启动 Intent，服务重建丢失；原生持久快照保存间隔，启动/重建/配置变更读取，Android 统一 15–300 秒并迁移旧值，桌面范围保持原约定                              | JVM `ReleaseHardeningTest`、`PlatformHardeningIntegrationTest` 缓存重建及前台设置回归               |
+
+同名 WiFi 的共享匹配顺序为 BSSID、安全类型、普通 SSID，组内保留优先级。已知不匹配的规则不回退；缺少身份字段且存在更具体规则时停止自动认证。桌面和移动主页、自动认证及手动账号序列均消费身份字段。WPA2/WPA3 过渡规则接受系统实际协商的模式。
+
+进一步审查修复：桌面主页遗漏安全类型参数、原生心跳修改后未立即重排、异步清空期间读回旧日志，以及 Playwright 默认 basic 密码参数掩盖 Linux 真实钥匙串行为。新增发布门禁测试覆盖提交漂移、缺失矩阵、失败/跳过、重试、附件缺失、版本及校验和不一致。
+
+本地验证证据包括 Linux 真实主进程 E2E 25/25、单元/组件回归、Android JVM 与 Release Kotlin/E2E 编译。最终发布以同一目标提交的两轮完整 CI、master CI 和 Release 安装包冒烟全部首次通过为准；证据通过公开 Actions、Release 的 `validation.json` 和 `release-smoke-*` artifact 保存。真实校园网、真实无线硬件连接及厂商后台保活尚未实机验证；自动化边界见 [TESTING.md](./TESTING.md)。
+
+---
+
 # F1–F11 修复与验证记录
 
 日期：2026-10-27。基线：v1.0.1 / `9e4b563`。实施分支：`codex/netmate-feature-completion`。

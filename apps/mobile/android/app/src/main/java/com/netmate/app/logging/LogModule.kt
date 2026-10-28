@@ -24,7 +24,11 @@ class LogModule(private val context: ReactApplicationContext) : ReactContextBase
             promise.resolve(array)
         } catch (_: Exception) { promise.reject("LOG_READ", "日志读取失败") }
     }
-    @ReactMethod fun clear(promise: Promise) { NetMateLogs.clear(context); promise.resolve(true) }
+    @ReactMethod fun clear(promise: Promise) { try { promise.resolve(NetMateLogs.clear(context)) } catch (_: Exception) { promise.reject("LOG_CLEAR", "日志清空失败") } }
+    @ReactMethod fun queryPage(cursor: String?, limit: Int, promise: Promise) {
+        try { promise.resolve(NetMateLogs.queryPage(context, cursor, limit).toNativeMap()) }
+        catch (_: Exception) { promise.reject("LOG_READ", "日志读取失败") }
+    }
     @ReactMethod fun export(promise: Promise) {
         try {
             val directory = File(context.cacheDir, "exports").apply { mkdirs() }

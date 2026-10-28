@@ -52,7 +52,7 @@ createServer(async (request, response) => {
   if (url.pathname === '/releases/latest') {
     response.end(
       JSON.stringify({
-        tag_name: updatesAvailable ? 'v1.0.2' : 'v1.0.1',
+        tag_name: updatesAvailable ? 'v1.0.3' : 'v1.0.2',
         name: 'E2E update',
         body: '受控更新验证',
         html_url: 'https://example.test/release',

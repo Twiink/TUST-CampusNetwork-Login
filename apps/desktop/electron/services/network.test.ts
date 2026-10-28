@@ -395,7 +395,7 @@ describe('enrichStatusAuthFields', () => {
     };
     enrichStatusAuthFields(status, wifiManager);
 
-    expect(wifiManager.resolveAuthRequirement).toHaveBeenCalledWith('TUST-Dorm', undefined);
+    expect(wifiManager.resolveAuthRequirement).toHaveBeenCalledWith('TUST-Dorm', undefined, status);
     expect(status).toMatchObject({
       isConfigured: true,
       requiresAuth: true,

@@ -73,16 +73,26 @@ export function compareVersions(v1: string, v2: string): number {
  */
 export async function checkForUpdate(throwOnError = false): Promise<ReleaseInfo | null> {
   try {
-    const response = await fetch(
+    const feed =
       NativeModules.NetMateUpdater?.updateFeedUrl ??
-        `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
-      {
-        headers: {
-          Accept: 'application/vnd.github.v3+json',
-        },
-      }
-    );
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
+    if (
+      !/^https:\/\//.test(feed) &&
+      !(NativeModules.NetMateUpdater?.testRuntime === true && /^http:\/\//.test(feed))
+    )
+      throw new Error('更新地址必须使用 HTTPS');
+    const response = await fetch(feed, {
+      headers: {
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
 
+    if (
+      response.url &&
+      !response.url.startsWith('https://') &&
+      NativeModules.NetMateUpdater?.testRuntime !== true
+    )
+      throw new Error('更新地址必须使用 HTTPS');
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.status}`);
     }

@@ -9,7 +9,7 @@ interface NmcliRow {
   fields: string[];
 }
 
-function splitNmcliLine(line: string): string[] {
+export function splitNmcliLine(line: string): string[] {
   const fields: string[] = [];
   let escaped = false;
   let current = '';
@@ -94,13 +94,13 @@ export async function resolveLinuxNetworkInfo(): Promise<NetworkInfo> {
     for (const rawLine of stdout.split('\n')) {
       const [key = '', value = ''] = splitNmcliLine(rawLine.trim());
       const normalizedKey = key.toUpperCase();
-      if (normalizedKey === 'IP4.ADDRESS') {
+      if (/^IP4\.ADDRESS(?:\[\d+\])?$/.test(normalizedKey)) {
         const [address, prefix] = value.split('/');
         if (address) {
           info.ipv4 = info.ipv4 ?? address;
           if (prefix) {
             const bits = Number.parseInt(prefix, 10);
-            const mask = Number.isFinite(bits) && bits >= 0 && bits <= 32 ? ~0 << (32 - bits) : 0;
+            const mask = Number.isFinite(bits) && bits > 0 && bits <= 32 ? ~0 << (32 - bits) : 0;
             info.subnetMask =
               info.subnetMask ??
               [(mask >>> 24) & 255, (mask >>> 16) & 255, (mask >>> 8) & 255, mask & 255].join('.');
@@ -109,7 +109,7 @@ export async function resolveLinuxNetworkInfo(): Promise<NetworkInfo> {
         }
       } else if (normalizedKey === 'IP4.GATEWAY') {
         info.gateway = info.gateway || value || undefined;
-      } else if (normalizedKey === 'IP4.DNS') {
+      } else if (/^IP4\.DNS(?:\[\d+\])?$/.test(normalizedKey)) {
         if (value && !dns.includes(value)) {
           dns.push(value);
         }

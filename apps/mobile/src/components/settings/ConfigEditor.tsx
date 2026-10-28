@@ -172,6 +172,28 @@ export function ConfigEditor({
                   value={wifi.ssid}
                   onChangeText={ssid => setWifi(previous => ({ ...previous, ssid }))}
                 />
+                <Text style={styles.label}>安全类型（留空自动识别）</Text>
+                <TextInput
+                  accessibilityLabel="编辑安全类型"
+                  style={styles.input}
+                  value={wifi.security ?? ''}
+                  placeholder="WPA2 / WPA3 / WPA2-WPA3 / Open"
+                  autoCapitalize="none"
+                  onChangeText={security =>
+                    setWifi(previous => ({ ...previous, security: security || undefined }))
+                  }
+                />
+                <Text style={styles.label}>BSSID（可选，限定接入点）</Text>
+                <TextInput
+                  accessibilityLabel="编辑 BSSID"
+                  style={styles.input}
+                  value={wifi.bssid ?? ''}
+                  placeholder="aa:bb:cc:dd:ee:ff"
+                  autoCapitalize="none"
+                  onChangeText={bssid =>
+                    setWifi(previous => ({ ...previous, bssid: bssid || undefined }))
+                  }
+                />
                 <Text style={styles.label}>优先级</Text>
                 <TextInput
                   accessibilityLabel="编辑优先级"

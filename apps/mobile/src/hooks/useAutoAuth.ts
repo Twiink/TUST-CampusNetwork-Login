@@ -135,12 +135,18 @@ export function useAutoAuth({
       const info = await getNetworkInfo();
       if (!info.connected || !info.ipv4) return;
 
-      const requirement = services.wifiManager.resolveAuthRequirement(info.ssid, info.ipv4);
+      const requirement = services.wifiManager.resolveAuthRequirement(info.ssid, info.ipv4, {
+        security: info.security ?? undefined,
+        bssid: info.bssid ?? undefined,
+      });
       if (!requirement.requiresAuth) return;
 
       const latest = services.configManager.getConfig();
       if (!latest || latest.settings.autoAuthPaused || !latest.settings.autoReconnect) return;
-      const loginAccounts = resolveLoginAccounts(latest, info.ssid);
+      const loginAccounts = resolveLoginAccounts(
+        latest,
+        info.ssid ? { ...info, ssid: info.ssid } : null
+      );
       if (loginAccounts.length === 0) return;
 
       if (await services.networkDetector.checkConnectivity()) {
@@ -173,12 +179,27 @@ export function useAutoAuth({
           return { success: false, message: '网络或自动认证设置已改变', attempts: [] };
         }
         return services.authService.loginWithAccounts(
-          resolveLoginAccounts(current, info.ssid),
+          resolveLoginAccounts(current, info.ssid ? { ...info, ssid: info.ssid } : null),
           {
             wlanUserIp: info.ipv4!,
             wlanUserIpv6: info.ipv6 || undefined,
           },
-          { shouldContinue: () => !services.configManager.getConfig()?.settings.autoAuthPaused }
+          {
+            shouldContinue: async () => {
+              const newest = services.configManager.getConfig(),
+                now = await getNetworkInfo();
+              return (
+                !!newest &&
+                newest.revision === current.revision &&
+                !newest.settings.autoAuthPaused &&
+                newest.settings.autoReconnect &&
+                now.connected &&
+                now.networkKey === info.networkKey &&
+                now.ssid === info.ssid &&
+                now.bssid === info.bssid
+              );
+            },
+          }
         );
       });
       if (result.success) {
@@ -216,7 +237,7 @@ export function useAutoAuth({
     let intervalTimer: ReturnType<typeof setInterval> | null = null;
 
     const startInterval = () => {
-      if (!intervalTimer) {
+      if (config.settings.enableHeartbeat && !intervalTimer) {
         intervalTimer = setInterval(() => check('foreground'), intervalMs);
       }
     };
@@ -253,7 +274,7 @@ export function useAutoAuth({
       appStateSubscription.remove();
       stopWatching().catch(() => undefined);
     };
-  }, [ready, enabled, intervalMs, nativeAvailable, servicesRef]);
+  }, [ready, enabled, intervalMs, nativeAvailable, servicesRef, config.settings.enableHeartbeat]);
 }
 
 export default useAutoAuth;

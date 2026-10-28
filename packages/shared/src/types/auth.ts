@@ -51,6 +51,7 @@ export interface LoginParams {
  * 登录结果
  */
 export interface LoginResult {
+  cancelled?: boolean;
   /** 是否成功 */
   success: boolean;
   /** 结果消息 */

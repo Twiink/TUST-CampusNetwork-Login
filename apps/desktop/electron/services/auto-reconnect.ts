@@ -62,6 +62,7 @@ export class AutoReconnectService {
   private callbacks: AutoReconnectCallbacks;
   private lastStatus: NetworkStatus | null = null;
   private isReconnecting = false;
+  private networkGeneration = 0;
   /** 当前 WiFi 曾确认在线；用于连续失败阈值与「认证恢复」判定 */
   private wasOnline = false;
   /** 已在线后连续检测到离线的次数 */
@@ -101,6 +102,13 @@ export class AutoReconnectService {
     status: NetworkStatus,
     trigger: StatusTrigger = 'heartbeat'
   ): Promise<void> {
+    if (
+      ['ssid', 'bssid', 'ip', 'wifiConnected'].some(
+        (key) =>
+          status[key as keyof NetworkStatus] !== this.lastStatus?.[key as keyof NetworkStatus]
+      )
+    )
+      this.networkGeneration++;
     // 换了 WiFi 或断开 WiFi：在线记录只对同一连接有效
     if (!status.wifiConnected || status.ssid !== this.lastStatus?.ssid) {
       this.resetConnectionState();
@@ -200,9 +208,18 @@ export class AutoReconnectService {
    * 尝试重连
    */
   private async attemptReconnect(): Promise<void> {
+    const generation = this.networkGeneration;
     const config = this.configManager?.getConfig();
+    const current = () =>
+      generation === this.networkGeneration &&
+      this.options.enabled &&
+      !this.configManager?.getSettings().autoAuthPaused &&
+      (this.configManager?.getConfig()?.revision ?? 0) === (config?.revision ?? 0);
     let loginAccounts: AccountConfig[] = config
-      ? resolveLoginAccounts(config, this.lastStatus?.ssid)
+      ? resolveLoginAccounts(
+          config,
+          this.lastStatus?.ssid ? (this.lastStatus as NetworkStatus & { ssid: string }) : null
+        )
       : [];
     if (!config) {
       const linked = this.lastStatus?.ssid
@@ -251,8 +268,7 @@ export class AutoReconnectService {
 
     try {
       await retryPolicy.execute(async () => {
-        if (!this.options.enabled || this.configManager?.getSettings().autoAuthPaused)
-          return { success: false };
+        if (!current()) return { success: false, cancelled: true };
         this.logger.debug('获取网络信息');
         const networkInfo = await resolveNetworkInfo();
         if (!networkInfo.ipv4) {
@@ -260,6 +276,7 @@ export class AutoReconnectService {
           throw new Error('无法获取本机 IP 地址');
         }
 
+        if (!current()) return { success: false, cancelled: true };
         this.logger.debug('准备登录配置', {
           IP: networkInfo.ipv4,
           IPv6: networkInfo.ipv6 || '无',
@@ -275,12 +292,12 @@ export class AutoReconnectService {
               wlanUserMac: networkInfo.mac || undefined,
             },
             {
-              shouldContinue: () =>
-                this.options.enabled && !this.configManager?.getSettings().autoAuthPaused,
+              shouldContinue: current,
             }
           )
         );
 
+        if (!current() || result.cancelled) return { ...result, cancelled: true };
         if (!result.success) {
           this.logger.warn('登录请求失败', { 消息: result.message });
           throw new Error(result.message);
@@ -294,7 +311,7 @@ export class AutoReconnectService {
         return result;
       });
 
-      if (!this.options.enabled || this.configManager?.getSettings().autoAuthPaused) return;
+      if (!current()) return;
       this.logger.log('success', '===== 自动重连成功 =====', {
         category: 'network',
         source: 'AutoReconnect',
@@ -305,6 +322,7 @@ export class AutoReconnectService {
       this.offlineStreak = 0;
       this.callbacks.onReconnectSuccess?.({ recovered });
     } catch (error) {
+      if (!current()) return;
       const errorMessage = error instanceof Error ? error.message : '未知错误';
       this.logger.log('error', `===== 自动重连失败 =====`, {
         category: 'network',

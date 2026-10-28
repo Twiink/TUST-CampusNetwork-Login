@@ -92,9 +92,9 @@ describe('审查回归：配置、认证与脱敏', () => {
       currentAccountId: 'a1',
       wifiList: [{ ...wifi, linkedAccountIds: ['missing', 'a2', 'a1'] }],
     });
-    expect(resolveLoginAccounts(config, wifi.ssid).map((value) => value.id)).toEqual(['a2', 'a1']);
+    expect(resolveLoginAccounts(config, wifi).map((value) => value.id)).toEqual(['a2', 'a1']);
     config.wifiList[0].linkedAccountIds = ['missing'];
-    expect(resolveLoginAccounts(config, wifi.ssid)).toEqual([account]);
+    expect(resolveLoginAccounts(config, wifi)).toEqual([account]);
   });
 
   it('恢复原生较新暂停状态时版本保持递增，后续修改不会被拒绝', async () => {

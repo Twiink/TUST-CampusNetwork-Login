@@ -1,5 +1,5 @@
 import { PauseBanner } from '../components/home/PauseBanner';
-import { resolveLoginAccounts } from '@repo/shared';
+import { matchWifiRule, resolveLoginAccounts } from '@repo/shared';
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useHeartbeat } from '../hooks/useHeartbeat';
@@ -204,7 +204,9 @@ export const Home: React.FC = () => {
   }
 
   // 第二优先级：检查 WiFi 是否在配置列表中
-  const wifiConfig = config?.wifiList?.find((w) => w.ssid === wifiSSID);
+  const wifiConfig = config
+    ? matchWifiRule(config.wifiList, { ...fullNetworkStatus, ssid: wifiSSID ?? '' })
+    : null;
 
   if (!wifiConfig) {
     return (
@@ -258,11 +260,16 @@ export const Home: React.FC = () => {
           icon={AlertCircle}
           iconColor="#f59e0b"
           tintRgb="245, 158, 11"
-          title="该 WiFi 未配置"
+          title={
+            config?.wifiList.some((w) => w.ssid === wifiSSID)
+              ? '请选择当前 WiFi 规则'
+              : '该 WiFi 未配置'
+          }
           description={
             <>
-              当前连接的 WiFi &quot;{wifiSSID}&quot; 尚未配置，请前往&quot;配置设置&quot;添加此 WiFi
-              的配置。
+              {config?.wifiList.some((w) => w.ssid === wifiSSID)
+                ? '同名 WiFi 身份信息不足或规则不匹配，请在配置设置中选择安全类型及 BSSID 后重试。'
+                : `当前连接的 WiFi "${wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。`}
             </>
           }
           hint={
@@ -354,7 +361,9 @@ export const Home: React.FC = () => {
   }
 
   // 第四优先级：检查是否有关联账户
-  const linkedAccount = config ? resolveLoginAccounts(config, wifiSSID)[0] : undefined;
+  const linkedAccount = config
+    ? resolveLoginAccounts(config, { ...fullNetworkStatus, ssid: wifiSSID ?? '' })[0]
+    : undefined;
 
   if (!linkedAccount) {
     return (

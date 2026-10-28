@@ -8,6 +8,7 @@ import { isCampusNetwork } from '../utils/campus';
 import { ErrorCode, AppError } from '../constants/errors';
 import { ConfigManager } from './ConfigManager';
 import type { Logger } from '../models/Logger';
+import { matchWifiRule, sameWifiFingerprint } from './wifi-identity';
 
 /** 认证需求解析结果：驱动自动重连的守卫字段 */
 export interface AuthRequirement {
@@ -23,14 +24,6 @@ export interface WifiMatchInput {
   ssid: string;
   security?: string;
   bssid?: string;
-}
-
-function sameFingerprint(left: WifiConfig, right: WifiMatchInput): boolean {
-  return (
-    left.ssid === right.ssid &&
-    (left.security || '') === (right.security || '') &&
-    (left.bssid || '') === (right.bssid || '')
-  );
 }
 
 function compareWifiPriority(left: WifiConfig, right: WifiConfig): number {
@@ -102,26 +95,7 @@ export class WifiManager {
    * 根据当前 WiFi 信息进行精确匹配
    */
   findMatchingWifi(input: WifiMatchInput): WifiConfig | null {
-    const candidates = this.getWifiBySsidList(input.ssid);
-    if (candidates.length === 0) {
-      return null;
-    }
-
-    const exactMatch = candidates.find((wifi) => sameFingerprint(wifi, input));
-    if (exactMatch) {
-      return exactMatch;
-    }
-
-    if (input.security) {
-      const securityMatch = candidates.find(
-        (wifi) => (wifi.security || '') === input.security && !wifi.bssid
-      );
-      if (securityMatch) {
-        return securityMatch;
-      }
-    }
-
-    return candidates[0] || null;
+    return matchWifiRule(this.getWifiConfigs(), input);
   }
 
   async addWifi(wifi: Omit<WifiConfig, 'id'> & { id?: string }): Promise<WifiConfig> {
@@ -133,7 +107,7 @@ export class WifiManager {
     };
     const config = await this.configManager.update((current) => {
       this.checkWifi(next);
-      if (current.wifiList.some((w) => sameFingerprint(w, next) || w.id === next.id))
+      if (current.wifiList.some((w) => sameWifiFingerprint(w, next) || w.id === next.id))
         throw new AppError(ErrorCode.INVALID_PARAMS, '该 WiFi 配置已存在');
       return { wifiList: [...current.wifiList, next].sort(compareWifiPriority) };
     });
@@ -157,7 +131,7 @@ export class WifiManager {
         id,
       };
       this.checkWifi(next);
-      if (current.wifiList.some((w) => w.id !== id && sameFingerprint(w, next)))
+      if (current.wifiList.some((w) => w.id !== id && sameWifiFingerprint(w, next)))
         throw new AppError(ErrorCode.INVALID_PARAMS, '存在相同指纹的 WiFi 配置');
       return {
         wifiList: current.wifiList.map((w) => (w.id === id ? next : w)).sort(compareWifiPriority),
@@ -192,12 +166,16 @@ export class WifiManager {
    *    使未配置的校园 WiFi 开箱即用）
    * 3. 否则 → 无需认证（家庭 WiFi/热点不误触发）
    */
-  resolveAuthRequirement(ssid: string | null | undefined, ipv4?: string | null): AuthRequirement {
+  resolveAuthRequirement(
+    ssid: string | null | undefined,
+    ipv4?: string | null,
+    identity?: Omit<WifiMatchInput, 'ssid'>
+  ): AuthRequirement {
     if (!ssid) {
       return { requiresAuth: false, isConfigured: false, hasLinkedAccount: false };
     }
 
-    const wifi = this.getWifiBySsid(ssid);
+    const wifi = this.findMatchingWifi({ ssid, ...identity });
     if (wifi) {
       return {
         requiresAuth: wifi.requiresAuth,
@@ -206,6 +184,8 @@ export class WifiManager {
       };
     }
 
+    if (this.getWifiBySsidList(ssid).length)
+      return { requiresAuth: false, isConfigured: true, hasLinkedAccount: false };
     return {
       requiresAuth: isCampusNetwork(ssid, ipv4),
       isConfigured: false,

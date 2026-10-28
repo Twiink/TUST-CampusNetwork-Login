@@ -9,6 +9,8 @@ describe('createElectronLaunchOptions', () => {
     });
 
     expect(options.args).toEqual([
+      '--password-store=gnome-libsecret',
+      '--ozone-platform=x11',
       '--no-sandbox',
       '--disable-dev-shm-usage',
       path.join('/tmp/netmate', 'dist-e2e', 'e2e-main.js'),

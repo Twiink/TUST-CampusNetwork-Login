@@ -5,6 +5,7 @@ import {
   validateAccountConfig,
   validateWifiConfig,
   resolveWifiSecurity,
+  sameWifiFingerprint,
   type AccountConfig,
   type WifiConfig,
 } from '@repo/shared';
@@ -115,7 +116,18 @@ export const Settings: React.FC = () => {
       setWifiError('请输入 WiFi 名称');
       return;
     }
-    if (config.wifiList.some((wifi) => wifi.ssid === ssid)) {
+    if (
+      config.wifiList.some(
+        (wifi) =>
+          wifi.ssid === ssid &&
+          ((!newWifi.security && !newWifi.bssid) ||
+            sameWifiFingerprint(wifi, {
+              ssid,
+              security: resolveWifiSecurity(newWifi.security, newWifi.password),
+              bssid: newWifi.bssid,
+            }))
+      )
+    ) {
       setWifiError('该 WiFi 配置已存在');
       return;
     }
@@ -131,6 +143,7 @@ export const Settings: React.FC = () => {
       ssid,
       password: newWifi.password,
       security: resolveWifiSecurity(newWifi.security, newWifi.password),
+      bssid: newWifi.bssid,
       autoConnect: newWifi.autoConnect,
       requiresAuth: newWifi.requiresAuth,
       linkedAccountIds:
@@ -254,6 +267,7 @@ export const Settings: React.FC = () => {
                 ...current,
                 ssid: network.ssid,
                 security: network.security,
+                bssid: network.bssid,
               }))
             }
             onEdit={(id) => setEditing({ kind: 'wifi', id })}

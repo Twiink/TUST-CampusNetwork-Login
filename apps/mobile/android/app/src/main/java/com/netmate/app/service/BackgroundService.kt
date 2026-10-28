@@ -55,6 +55,8 @@ class BackgroundService : Service() {
         @Volatile
         private var startupHandled = false
 
+        @Volatile private var active: BackgroundService? = null
+        fun configurationChanged() { active?.let { service -> service.handler.post { service.scheduleHeartbeat() } } }
         fun isServiceRunning(): Boolean = isRunning
     }
 
@@ -72,7 +74,7 @@ class BackgroundService : Service() {
             if (AutoAuthStore.loadProfile(this@BackgroundService)?.heartbeatEnabled != false) {
                 requestCheck("interval")
             }
-            handler.postDelayed(this, intervalMs)
+            scheduleHeartbeat()
         }
     }
 
@@ -90,6 +92,7 @@ class BackgroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        active = this
         createNotificationChannel()
         AutoAuthEngine.addListener(resultListener)
     }
@@ -102,17 +105,17 @@ class BackgroundService : Service() {
             return START_NOT_STICKY
         }
 
-        intent?.getLongExtra(EXTRA_INTERVAL, 0L)?.takeIf { it > 0 }?.let {
-            intervalMs = it.coerceAtLeast(MIN_INTERVAL_MS)
-        }
+        intervalMs = ((AutoAuthStore.loadProfile(this)?.heartbeatIntervalSeconds ?: 30) * 1000L).coerceIn(MIN_INTERVAL_MS, 300_000L)
 
         startInForeground(createNotification())
         isRunning = true
         com.netmate.app.logging.NetMateLogs.log(this, "info", "后台服务已启动", "service")
 
+        runCatching { AutoAuthStore.loadProfile(this)?.let { com.netmate.app.auth.WifiSuggestions.reconcile(this, it) } }.onFailure {
+            com.netmate.app.logging.NetMateLogs.log(this, "warn", "WiFi 建议未能恢复，请打开应用重试同步", "wifi")
+        }
         startNetworkWatch()
-        handler.removeCallbacks(periodicCheck)
-        handler.postDelayed(periodicCheck, intervalMs)
+        scheduleHeartbeat()
 
         if (!startupHandled) {
             startupHandled = true
@@ -122,12 +125,20 @@ class BackgroundService : Service() {
         return START_STICKY
     }
 
+    private fun scheduleHeartbeat() {
+        handler.removeCallbacks(periodicCheck)
+        val profile = AutoAuthStore.loadProfile(this)
+        intervalMs = ((profile?.heartbeatIntervalSeconds ?: 30) * 1000L).coerceIn(MIN_INTERVAL_MS, 300_000L)
+        if (profile?.heartbeatEnabled != false) handler.postDelayed(periodicCheck, intervalMs)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
         AutoAuthEngine.stopReconnect(this)
         stopEverything()
         AutoAuthEngine.removeListener(resultListener)
+        active = null
         super.onDestroy()
     }
 

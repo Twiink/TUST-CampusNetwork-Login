@@ -14,6 +14,7 @@ import {
   validateAccountConfig,
   validateWifiConfig,
   resolveWifiSecurity,
+  sameWifiFingerprint,
 } from '@repo/shared';
 import { GeneralSettingsCard } from '../components/settings/GeneralSettingsCard';
 import { AccountsCard } from '../components/settings/AccountsCard';
@@ -140,7 +141,18 @@ export const SettingsScreen: React.FC = () => {
       setWifiError('请输入 WiFi 名称');
       return;
     }
-    if (config.wifiList.some(wifi => wifi.ssid === ssid)) {
+    if (
+      config.wifiList.some(
+        wifi =>
+          wifi.ssid === ssid &&
+          ((!newWifi.security && !newWifi.bssid) ||
+            sameWifiFingerprint(wifi, {
+              ssid,
+              security: resolveWifiSecurity(newWifi.security, newWifi.password),
+              bssid: newWifi.bssid,
+            }))
+      )
+    ) {
       setWifiError('该 WiFi 配置已存在');
       return;
     }
@@ -318,7 +330,7 @@ export const SettingsScreen: React.FC = () => {
             const wifi = config.wifiList.find(item => item.id === id);
             if (!wifi) return;
             addLog?.('info', `正在连接 ${wifi.ssid}，请确认系统 WiFi 授权`);
-            connectToWifi(wifi.ssid, wifi.password)
+            connectToWifi(wifi.ssid, wifi.password, wifi.security, wifi.bssid, wifi.id)
               .then(success => {
                 if (!success) return openWifiSettings();
               })

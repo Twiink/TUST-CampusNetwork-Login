@@ -187,6 +187,32 @@ export const WifiConfigCard: React.FC<{
       </View>
 
       <View style={styles.formGroup}>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          安全类型（留空自动识别）
+        </Text>
+        <TextInput
+          accessibilityLabel="新增安全类型"
+          style={[styles.formControl, { color: theme.colors.text }]}
+          value={newWifi.security ?? ''}
+          placeholder="WPA2 / WPA3 / WPA2-WPA3 / Open"
+          autoCapitalize="none"
+          onChangeText={security => setNewWifi({ ...newWifi, security: security || undefined })}
+        />
+      </View>
+      <View style={styles.formGroup}>
+        <Text style={[styles.label, { color: theme.colors.textSecondary }]}>
+          BSSID（可选，限定接入点）
+        </Text>
+        <TextInput
+          accessibilityLabel="新增 BSSID"
+          style={[styles.formControl, { color: theme.colors.text }]}
+          value={newWifi.bssid ?? ''}
+          placeholder="aa:bb:cc:dd:ee:ff"
+          autoCapitalize="none"
+          onChangeText={bssid => setNewWifi({ ...newWifi, bssid: bssid || undefined })}
+        />
+      </View>
+      <View style={styles.formGroup}>
         <Text style={[styles.label, { color: theme.colors.textSecondary }]}>WiFi 密码</Text>
         <TextInput
           style={[

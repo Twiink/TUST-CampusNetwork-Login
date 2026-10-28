@@ -6,6 +6,7 @@ import type { scanAvailableNetworks, connectToNetwork } from './services/wifi-sw
 export const runtimePorts: {
   wifi?: WifiAdapter;
   scan?: typeof scanAvailableNetworks;
+  scanRaw?: () => Promise<{ platform: 'win32' | 'linux'; text: string }>;
   connect?: typeof connectToNetwork;
   connectivityUrls?: string[];
   seedConfig?: AppConfig;

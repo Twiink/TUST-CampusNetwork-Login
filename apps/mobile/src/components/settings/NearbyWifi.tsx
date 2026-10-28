@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Text, View, Pressable, StyleSheet } from 'react-native';
-import type { AppConfig } from '@repo/shared';
+import { matchWifiRule, type AppConfig } from '@repo/shared';
 import { scanWifiNetworks, type ScannedWifiNetwork } from '../../native/WifiModule';
 import { GlassView } from '../GlassView';
 import { useTheme } from '../../context/ThemeContext';
@@ -57,11 +57,12 @@ export function NearbyWifi({
         <Text style={styles.text}>未发现网络，请开启 WiFi 和定位服务，或手动添加。</Text>
       ) : null}
       {networks?.map((network, index) => {
-        const saved = config.wifiList.find(w => w.ssid === network.ssid);
+        const saved = matchWifiRule(config.wifiList, { ...network, ssid: network.ssid ?? '' });
         return (
           <View style={styles.row} key={`${network.ssid}-${index}`}>
             <Text style={styles.text}>
               {network.ssid} · {network.signalStrength}% · {network.security}
+              {network.bssid ? ` · ${network.bssid}` : ''}
               {saved ? ' · 已保存' : ''}
             </Text>
             <Pressable

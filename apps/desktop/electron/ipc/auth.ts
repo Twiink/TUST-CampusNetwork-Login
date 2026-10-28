@@ -23,7 +23,7 @@ export function registerAuthIPC(
       const result = await manualLogin(auth, config, detector);
       win?.webContents.send(
         IPC_EVENTS.AUTH_STATUS_CHANGED,
-        result.success ? 'authenticated' : 'failed'
+        result.cancelled ? 'idle' : result.success ? 'authenticated' : 'failed'
       );
       return result;
     } catch (error) {

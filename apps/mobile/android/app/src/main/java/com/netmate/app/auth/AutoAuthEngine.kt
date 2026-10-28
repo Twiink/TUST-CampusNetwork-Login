@@ -53,7 +53,7 @@ object AutoAuthEngine {
     fun snapshot(context: Context): JSONObject {
         val wifi = WifiEnvironment.snapshot(context)
         val profile = AutoAuthStore.loadProfile(context)
-        val requires = profile?.let { AutoAuthPolicy.decide(it.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive).requiresAuth } ?: false
+        val requires = profile?.let { AutoAuthPolicy.decide(it.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive, wifi.security, wifi.bssid).requiresAuth } ?: false
         val reachable = wifi.connected && (internetKey == wifi.key || (wifi.validated && !wifi.captive && loggedOutKey != wifi.key))
         val authenticated = wifi.connected && (authenticatedKey == wifi.key || reachable)
         return JSONObject().put("networkKey", wifi.key).put("ssid", wifi.ssid ?: JSONObject.NULL)
@@ -96,6 +96,7 @@ object AutoAuthEngine {
 
     private fun check(context: Context, trigger: String): AutoAuthResult? {
         val stored = AutoAuthStore.loadProfile(context) ?: return null
+        WifiSuggestions.expire(context, onlyDisconnected = true)
         val manual = trigger == TRIGGER_MANUAL
         val wifi = WifiEnvironment.snapshot(context)
         if (observedKey != wifi.key) { observedKey = wifi.key; wasOnline = false; offlineStreak = 0; failures = 0; lastLoginAt = 0 }
@@ -122,7 +123,7 @@ object AutoAuthEngine {
         publishStatus(context)
         if ((!stored.enabled || stored.authPaused) && !manual) return null
         if (trigger == "status") return null
-        val decision = AutoAuthPolicy.decide(stored.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive)
+        val decision = AutoAuthPolicy.decide(stored.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive, wifi.security, wifi.bssid)
         if (!decision.requiresAuth || wifi.ipv4 == null || decision.accounts.isEmpty()) {
             return if (manual) emit(context, AutoAuthResult(false, if (decision.accounts.isEmpty()) "请先配置认证账号" else "当前网络无需认证", trigger, null, 0, System.currentTimeMillis(), wifi.key)) else null
         }

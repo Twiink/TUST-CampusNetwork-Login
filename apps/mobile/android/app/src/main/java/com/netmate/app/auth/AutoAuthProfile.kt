@@ -26,6 +26,9 @@ data class AutoAuthWifiRule(
     val autoConnect: Boolean = false,
     /** 数字越小优先级越高 */
     val priority: Int = 10,
+    val id: String = ssid,
+    val security: String? = null,
+    val bssid: String? = null,
 )
 
 /** 对应 AppSettings.notificationSettings 的四个场景开关 */
@@ -44,6 +47,7 @@ data class AutoAuthProfile(
     val wifiRules: List<AutoAuthWifiRule>,
     /** settings.enableHeartbeat：是否按间隔定时检测（关闭后只由网络事件触发） */
     val heartbeatEnabled: Boolean = true,
+    val heartbeatIntervalSeconds: Int = 30,
     /** settings.heartbeatFailureThreshold：已在线后连续检测失败多少次才判定掉线 */
     val failureThreshold: Int = 3,
     /** settings.wifiReconnectRetries */
@@ -77,6 +81,9 @@ data class AutoAuthProfile(
             val wifiRules = root.optJSONArray("wifiRules").objects().map { item ->
                 AutoAuthWifiRule(
                     ssid = item.getString("ssid"),
+                    id = item.optString("id", item.getString("ssid")),
+                    security = item.optString("security").takeIf { it.isNotBlank() && it != "null" },
+                    bssid = item.optString("bssid").takeIf { it.isNotBlank() && it != "null" },
                     requiresAuth = item.optBoolean("requiresAuth", false),
                     linkedAccountIds = item.optJSONArray("linkedAccountIds").strings(),
                     password = item.optString("password", ""),
@@ -101,6 +108,7 @@ data class AutoAuthProfile(
                 accounts = accounts,
                 wifiRules = wifiRules,
                 heartbeatEnabled = root.optBoolean("heartbeatEnabled", true),
+                heartbeatIntervalSeconds = root.optInt("heartbeatIntervalSeconds", 30).coerceIn(15, 300),
                 failureThreshold = root.optInt("failureThreshold", 3).coerceAtLeast(1),
                 wifiRetries = root.optInt("wifiRetries", 3).coerceAtLeast(1),
                 wifiCooldownMinutes = root.optInt("wifiCooldownMinutes", 5).coerceAtLeast(0),

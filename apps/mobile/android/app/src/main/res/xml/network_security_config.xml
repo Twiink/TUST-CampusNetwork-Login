@@ -1,16 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  release 构建默认禁止明文 HTTP（RN Gradle 插件设置 usesCleartextTraffic=false），
-  而校园网认证门户与 generate_204 探测点只提供 HTTP，这里按域名白名单放行。
-  探测点列表需与 packages/shared/src/constants/defaults.ts 的 DEFAULT_CONNECTIVITY_CHECK_URLS
-  及 com.netmate.app.auth.PortalClient 保持一致。
--->
+<!-- 用户可配置 HTTP 校园门户；更新源及下载另外强制 HTTPS。 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.10.102.50</domain>
-        <domain includeSubdomains="false">connectivitycheck.platform.hicloud.com</domain>
-        <domain includeSubdomains="false">connect.rom.miui.com</domain>
-        <domain includeSubdomains="false">www.google.cn</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

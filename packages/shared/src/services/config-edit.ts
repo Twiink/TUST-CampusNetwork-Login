@@ -1,3 +1,4 @@
+import { sameWifiFingerprint } from './wifi-identity';
 import type { AccountConfig, AppConfig, WifiConfig } from '../types/config';
 import { validateAccountConfig, validateWifiConfig } from '../utils/validator';
 
@@ -52,15 +53,7 @@ export function editWifi(
     security: resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
     password: nextPassword,
   };
-  if (
-    config.wifiList.some(
-      (w) =>
-        w.id !== id &&
-        w.ssid === wifi.ssid &&
-        (w.security ?? '') === (wifi.security ?? '') &&
-        (w.bssid ?? '') === (wifi.bssid ?? '')
-    )
-  )
+  if (config.wifiList.some((w) => w.id !== id && sameWifiFingerprint(w, wifi)))
     throw new Error('该 WiFi 配置已存在');
   const validation = validateWifiConfig(wifi);
   if (!Number.isInteger(wifi.priority) || wifi.priority < 1 || wifi.priority > 99)

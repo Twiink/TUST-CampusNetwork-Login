@@ -76,7 +76,13 @@ interface WifiModuleInterface {
   isConnected(): Promise<boolean>;
   getNetworkInfo(): Promise<NetworkInfo>;
   checkLocationPermission(): Promise<boolean>;
-  connectToWifi(ssid: string, password?: string): Promise<boolean>;
+  connectToWifi(
+    ssid: string,
+    password?: string,
+    security?: string | null,
+    bssid?: string | null,
+    ruleId?: string | null
+  ): Promise<boolean>;
   disconnectWifi(): Promise<boolean>;
   scanWifiNetworks(): Promise<ScannedWifiNetwork[]>;
   startWatching(): Promise<boolean>;
@@ -285,7 +291,13 @@ export async function getNetworkInfo(): Promise<NetworkInfo> {
 /**
  * 连接到指定 WiFi
  */
-export async function connectToWifi(ssid: string, password?: string): Promise<boolean> {
+export async function connectToWifi(
+  ssid: string,
+  password?: string,
+  security?: string | null,
+  bssid?: string | null,
+  ruleId?: string | null
+): Promise<boolean> {
   if (!WifiModule) {
     console.warn('WifiModule is not available');
     return false;
@@ -299,10 +311,9 @@ export async function connectToWifi(ssid: string, password?: string): Promise<bo
   }
 
   try {
-    return await WifiModule.connectToWifi(ssid, password);
+    return await WifiModule.connectToWifi(ssid, password, security, bssid, ruleId);
   } catch (error) {
-    console.warn('connectToWifi error:', error);
-    return false;
+    throw error instanceof Error ? error : new Error('连接失败，请检查系统授权');
   }
 }
 

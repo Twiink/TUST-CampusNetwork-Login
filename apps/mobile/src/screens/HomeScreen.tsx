@@ -1,4 +1,4 @@
-import { resolveLoginAccounts } from '@repo/shared';
+import { matchWifiRule, resolveLoginAccounts } from '@repo/shared';
 import { AutoAuthStatus } from '../components/home/AutoAuthStatus';
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
@@ -152,7 +152,7 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第二优先级：检查 WiFi 是否在配置列表中
-  const wifiConfig = config.wifiList?.find(w => w.ssid === wifiSSID);
+  const wifiConfig = matchWifiRule(config.wifiList, { ...wifiInfo, ssid: wifiSSID });
 
   if (!wifiConfig) {
     return (
@@ -179,8 +179,16 @@ export const HomeScreen: React.FC = () => {
           <HomeNoticeCard
             icon="⚠️"
             tint={theme.colors.warning}
-            title="该 WiFi 未配置"
-            description={`当前连接的 WiFi "${wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。`}
+            title={
+              config?.wifiList.some(w => w.ssid === wifiSSID)
+                ? '请选择当前 WiFi 规则'
+                : '该 WiFi 未配置'
+            }
+            description={
+              config.wifiList.some(w => w.ssid === wifiSSID)
+                ? '同名 WiFi 身份信息不足或规则不匹配，请在配置设置中选择安全类型及 BSSID 后重试。'
+                : `当前连接的 WiFi "${wifiSSID}" 尚未配置，请前往"配置设置"添加此 WiFi 的配置。`
+            }
             hint='⚙️ 点击底部菜单的"配置设置"添加 WiFi 配置'
             theme={theme}
           />
@@ -226,7 +234,7 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第四优先级：按关联顺序取第一个仍存在的账户；兼容旧版单字段配置。
-  const linkedAccount = resolveLoginAccounts(config, wifiSSID)[0];
+  const linkedAccount = resolveLoginAccounts(config, { ...wifiInfo, ssid: wifiSSID })[0];
 
   if (!linkedAccount) {
     return (

@@ -33,6 +33,7 @@ const SENSITIVE_FIELDS = ['password', 'userPassword'];
 export class ElectronStorageAdapter implements StorageAdapter {
   private data: Record<string, unknown> = {};
   private loaded = false;
+  private loading: Promise<void> | null = null;
   private writes: Promise<void> = Promise.resolve();
 
   /**
@@ -41,20 +42,54 @@ export class ElectronStorageAdapter implements StorageAdapter {
   private async ensureLoaded(): Promise<void> {
     if (this.loaded) return;
 
-    try {
-      const filePath = getStoragePath();
-      if (fs.existsSync(filePath)) {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        this.data = JSON.parse(content);
-        // 解密敏感数据
-        this.decryptSensitiveData(this.data);
-      }
-    } catch (error) {
-      devLog.error('Failed to load storage:', error);
-      this.data = {};
+    if (!this.loading) {
+      this.loading = (async () => {
+        const filePath = getStoragePath();
+        let next: Record<string, unknown> = {};
+        if (fs.existsSync(filePath)) {
+          try {
+            next = JSON.parse(await fsp.readFile(filePath, 'utf-8'));
+            if (!next || typeof next !== 'object' || Array.isArray(next)) throw new Error();
+          } catch {
+            throw new Error('配置文件无法读取，已保留原文件，请恢复配置后重试');
+          }
+          const migrate = this.hasPlainPassword(next);
+          this.decryptSensitiveData(next);
+          if (migrate) await this.saveToFile(next);
+          else if (process.platform !== 'win32') await fsp.chmod(filePath, 0o600);
+        }
+        this.data = next;
+        this.loaded = true;
+      })().finally(() => {
+        this.loading = null;
+      });
     }
+    await this.loading;
+  }
 
-    this.loaded = true;
+  private requireEncryption(): void {
+    if (
+      !safeStorage.isEncryptionAvailable() ||
+      (process.platform === 'linux' && safeStorage.getSelectedStorageBackend?.() === 'basic_text')
+    ) {
+      devLog.warn(
+        '安全存储不可用',
+        process.platform === 'linux' ? safeStorage.getSelectedStorageBackend?.() : process.platform
+      );
+      throw new Error('系统钥匙串不可用，请解锁或启用钥匙串后重试；密码尚未保存');
+    }
+  }
+
+  private hasPlainPassword(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    return Object.entries(value).some(
+      ([key, item]) =>
+        (SENSITIVE_FIELDS.includes(key) &&
+          typeof item === 'string' &&
+          item.length > 0 &&
+          !item.startsWith(ENCRYPTED_PREFIX)) ||
+        this.hasPlainPassword(item)
+    );
   }
 
   /**
@@ -67,10 +102,12 @@ export class ElectronStorageAdapter implements StorageAdapter {
     const dataToSave = this.encryptSensitiveData(data);
     const content = JSON.stringify(dataToSave, null, 2);
     try {
-      await fsp.writeFile(tempPath, content, 'utf-8');
+      await fsp.writeFile(tempPath, content, { encoding: 'utf-8', mode: 0o600 });
+      if (process.platform !== 'win32') await fsp.chmod(tempPath, 0o600);
       await fsp.rename(tempPath, filePath);
     } catch (error) {
-      devLog.error('Failed to save storage:', error);
+      devLog.error('配置写入失败，原配置已保留');
+      await fsp.rm(tempPath, { force: true }).catch(() => undefined);
       throw error;
     }
   }
@@ -104,11 +141,8 @@ export class ElectronStorageAdapter implements StorageAdapter {
 
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
-      if (
-        SENSITIVE_FIELDS.includes(key) &&
-        typeof value === 'string' &&
-        safeStorage.isEncryptionAvailable()
-      ) {
+      if (SENSITIVE_FIELDS.includes(key) && typeof value === 'string' && value.length > 0) {
+        this.requireEncryption();
         // 加密敏感字段
         const encrypted = safeStorage.encryptString(value);
         result[key] = ENCRYPTED_PREFIX + encrypted.toString('base64');
@@ -134,16 +168,17 @@ export class ElectronStorageAdapter implements StorageAdapter {
 
     for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
       if (
+        SENSITIVE_FIELDS.includes(key) &&
         typeof value === 'string' &&
-        value.startsWith(ENCRYPTED_PREFIX) &&
-        safeStorage.isEncryptionAvailable()
+        value.startsWith(ENCRYPTED_PREFIX)
       ) {
+        this.requireEncryption();
         // 解密敏感字段
         try {
           const encrypted = Buffer.from(value.slice(ENCRYPTED_PREFIX.length), 'base64');
           (obj as Record<string, unknown>)[key] = safeStorage.decryptString(encrypted);
         } catch {
-          // 解密失败，保持原值
+          throw new Error('密码无法解密，原配置已保留，请解锁原钥匙串后重试');
         }
       } else if (typeof value === 'object' && value !== null) {
         this.decryptSensitiveData(value);

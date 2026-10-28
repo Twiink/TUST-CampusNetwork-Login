@@ -1,15 +1,22 @@
 import { NativeEventEmitter, NativeModules } from 'react-native';
 export interface PersistentLogEntry {
   id: string;
+  generation?: string;
   timestamp: number;
   level: 'info' | 'success' | 'warn' | 'error' | 'debug';
   message: string;
   source?: string;
 }
+export interface PersistentLogPage {
+  entries: PersistentLogEntry[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
 interface LogBridge {
+  queryPage(cursor: string | null, limit: number): Promise<PersistentLogPage>;
   append(json: string): Promise<PersistentLogEntry>;
   query(level: string | null, limit: number, offset: number): Promise<PersistentLogEntry[]>;
-  clear(): Promise<boolean>;
+  clear(): Promise<string | boolean>;
   export(): Promise<boolean>;
 }
 const module = (): LogBridge | undefined => NativeModules.LogModule;
@@ -24,8 +31,14 @@ export async function queryPersistentLogs(
 ): Promise<PersistentLogEntry[]> {
   return module()?.query(level, limit, offset) ?? [];
 }
-export async function clearPersistentLogs(): Promise<void> {
-  await module()?.clear();
+export async function queryPersistentLogPage(
+  cursor: string | null = null
+): Promise<PersistentLogPage> {
+  return module()?.queryPage(cursor, 500) ?? { entries: [], nextCursor: null, hasMore: false };
+}
+export async function clearPersistentLogs(): Promise<string | undefined> {
+  const generation = await module()?.clear();
+  return typeof generation === 'string' ? generation : undefined;
 }
 export async function exportPersistentLogs(): Promise<void> {
   if (!module()) throw new Error('当前平台不支持文件日志导出');

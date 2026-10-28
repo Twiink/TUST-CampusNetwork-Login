@@ -137,12 +137,12 @@ export const GeneralSettingsCard: React.FC<{
                 value={String(settings.heartbeatIntervalSeconds)}
                 onChangeText={text => {
                   const value = parseInt(text, 10) || 5;
-                  if (value >= 5 && value <= 300) {
+                  if (value >= 15 && value <= 300) {
                     onToggleSetting('heartbeatIntervalSeconds', value);
                   }
                 }}
                 keyboardType="number-pad"
-                placeholder="5-300"
+                placeholder="15-300"
                 placeholderTextColor={theme.colors.textSecondary}
               />
               <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>秒</Text>

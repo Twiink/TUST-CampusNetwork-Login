@@ -126,8 +126,13 @@ export class AuthService {
    */
   async login(
     config: LoginConfig,
-    options: { verifyConnectivity?: boolean } = {}
+    options: {
+      verifyConnectivity?: boolean;
+      shouldContinue?: () => boolean | Promise<boolean>;
+    } = {}
   ): Promise<LoginResult> {
+    if (options.shouldContinue && !(await options.shouldContinue()))
+      return { success: false, cancelled: true, message: '网络或配置已变化，认证已取消' };
     const userAccount = buildUserAccount(config.userAccount, config.isp);
     const ispName =
       config.isp === 'campus'
@@ -157,13 +162,17 @@ export class AuthService {
       });
 
       const response = await httpGet<string>(url, { timeout: 10000 });
+      if (options.shouldContinue && !(await options.shouldContinue()))
+        return { success: false, cancelled: true, message: '网络或配置已变化，认证已取消' };
       const result = this.parseLoginResponse(response.rawText);
 
       if (result.success) {
-        this.lastSuccessfulServerUrl = config.serverUrl || this.serverUrl;
         // 二次连通性校验：响应层成功后再确认是否真正联网。
         // 对齐参考实现的保守策略——连通性失败不推翻登录结果，仅在消息/日志标注。
         const reachable = options.verifyConnectivity !== false && (await this.verifyConnectivity());
+        if (options.shouldContinue && !(await options.shouldContinue()))
+          return { success: false, cancelled: true, message: '网络或配置已变化，认证已取消' };
+        this.lastSuccessfulServerUrl = config.serverUrl || this.serverUrl;
         if (reachable || options.verifyConnectivity === false) {
           this.logger?.log('success', `登录成功: ${result.message}`, {
             category: 'auth',
@@ -228,7 +237,12 @@ export class AuthService {
    */
   async loginWithRetry(
     config: LoginConfig,
-    options: { maxRetries?: number; delayMs?: number } = {}
+    options: {
+      maxRetries?: number;
+      delayMs?: number;
+      verifyConnectivity?: boolean;
+      shouldContinue?: () => boolean | Promise<boolean>;
+    } = {}
   ): Promise<LoginResult> {
     const maxRetries = options.maxRetries ?? 2; // 额外重试次数，总尝试 = maxRetries + 1
     const delayMs = options.delayMs ?? 2000;
@@ -248,7 +262,10 @@ export class AuthService {
       }
 
       try {
-        lastResult = await this.login(config);
+        if (options.shouldContinue && !(await options.shouldContinue()))
+          return { success: false, cancelled: true, message: '网络或配置已变化，认证已取消' };
+        lastResult = await this.login(config, options);
+        if (lastResult.cancelled) return lastResult;
         if (lastResult.success) {
           return lastResult;
         }
@@ -275,7 +292,7 @@ export class AuthService {
     networkConfig: Omit<LoginConfig, 'serverUrl' | 'userAccount' | 'userPassword' | 'isp'>,
     options: {
       verifyConnectivity?: boolean;
-      shouldContinue?: () => boolean;
+      shouldContinue?: () => boolean | Promise<boolean>;
       retrySingle?: boolean;
     } = {}
   ): Promise<MultiAccountLoginResult> {
@@ -291,8 +308,13 @@ export class AuthService {
     }
 
     for (const account of accounts) {
-      if (options.shouldContinue && !options.shouldContinue())
-        return { success: false, message: '自动认证已暂停', attempts };
+      if (options.shouldContinue && !(await options.shouldContinue()))
+        return {
+          success: false,
+          cancelled: true,
+          message: '网络或配置已变化，认证已取消',
+          attempts,
+        };
       let result: LoginResult;
       try {
         result = await (
@@ -307,7 +329,7 @@ export class AuthService {
             userPassword: account.password,
             isp: account.isp,
           },
-          { verifyConnectivity }
+          { verifyConnectivity, shouldContinue: options.shouldContinue }
         );
       } catch (error) {
         result = {
@@ -316,6 +338,13 @@ export class AuthService {
         };
       }
 
+      if (result.cancelled || (options.shouldContinue && !(await options.shouldContinue())))
+        return {
+          success: false,
+          cancelled: true,
+          message: '网络或配置已变化，认证已取消',
+          attempts,
+        };
       attempts.push({
         accountId: account.id,
         username: account.username,

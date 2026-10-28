@@ -121,7 +121,9 @@ export interface ElectronAPI {
     update: (id: string, updates: Partial<WifiConfig>) => Promise<WifiConfig>;
     remove: (id: string) => Promise<void>;
     switch: (ssid: string) => Promise<boolean>;
-    scan: () => Promise<Array<{ ssid: string; signalStrength: number; security: string }>>;
+    scan: () => Promise<
+      Array<{ ssid: string; signalStrength: number; security: string; bssid?: string }>
+    >;
   };
 
   network: {

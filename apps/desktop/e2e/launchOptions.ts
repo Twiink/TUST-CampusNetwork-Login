@@ -28,6 +28,11 @@ export function createElectronLaunchOptions(
     env.ELECTRON_DISABLE_SANDBOX = '1';
   }
 
+  if (platform === 'linux')
+    args.unshift('--password-store=gnome-libsecret', '--ozone-platform=x11');
+
+  if (baseEnv.E2E_CRYPTO_DEBUG === '1') args.unshift('--enable-logging=stderr', '--v=1');
+
   return {
     args,
     cwd: path.join(currentDir, '..'),

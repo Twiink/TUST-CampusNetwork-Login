@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { runtimePorts } from './runtime-ports';
-import { app, BrowserWindow, powerMonitor } from 'electron';
+import { app, BrowserWindow, powerMonitor, dialog } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -509,6 +509,11 @@ app.whenReady().then(async () => {
     });
   } catch (error) {
     devLog.error('Failed to initialize app:', error);
+    if (!runtimePorts.headlessShell)
+      dialog.showErrorBox(
+        'NetMate 配置加载失败',
+        error instanceof Error ? error.message : '请检查配置和系统钥匙串后重试'
+      );
     if (services) {
       services.logger.log('error', '应用初始化失败', {
         category: 'system',

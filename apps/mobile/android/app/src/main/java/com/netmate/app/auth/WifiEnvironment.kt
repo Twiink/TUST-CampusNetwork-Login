@@ -22,6 +22,7 @@ object WifiEnvironment {
         val captive: Boolean = false,
         val signal: Int? = null,
         val bssid: String? = null,
+        val security: String? = null,
         val frequency: Int? = null,
         val linkSpeed: Int? = null,
         val gateway: String? = null,
@@ -53,10 +54,11 @@ object WifiEnvironment {
         val ipv6 = LocalAddresses.selectIPv6(addresses)
         return Snapshot(
             enabled = wifi.isWifiEnabled, connected = true, ssid = ssid, ipv4 = ipv4, ipv6 = ipv6,
-            network = network, key = "${network.networkHandle}:${ssid ?: ""}:${ipv4 ?: ""}",
+            network = network, key = "${network.networkHandle}:${ssid ?: ""}:${ipv4 ?: ""}:${info?.bssid ?: ""}",
             validated = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true,
             captive = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) == true,
             signal = info?.rssi?.let { ((it + 100) * 100 / 60).coerceIn(0, 100) },
+            security = if (Build.VERSION.SDK_INT >= 31) when (info?.currentSecurityType) { WifiInfo.SECURITY_TYPE_OPEN -> "Open"; WifiInfo.SECURITY_TYPE_PSK -> "WPA2"; WifiInfo.SECURITY_TYPE_SAE -> "WPA3"; WifiInfo.SECURITY_TYPE_EAP -> "Enterprise"; WifiInfo.SECURITY_TYPE_WEP -> "WEP"; else -> null } else runCatching { wifi.scanResults }.getOrDefault(emptyList()).firstOrNull { it.BSSID == info?.bssid }?.capabilities?.let { WifiSecurity.normalize(it) },
             bssid = info?.bssid, frequency = info?.frequency, linkSpeed = info?.linkSpeed,
             gateway = properties?.routes?.firstOrNull { it.isDefaultRoute }?.gateway?.hostAddress,
             dns = properties?.dnsServers?.mapNotNull { it.hostAddress } ?: emptyList(),

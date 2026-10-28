@@ -51,6 +51,9 @@ export function registerLogIPC(logger: Logger) {
    * 清除日志
    */
   ipcMain.handle(IPC_CHANNELS.LOG_CLEAR, async (): Promise<void> => {
+    pendingEntries.length = 0;
+    if (flushTimer) clearTimeout(flushTimer);
+    flushTimer = null;
     logger.clearLogs();
   });
 

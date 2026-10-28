@@ -247,7 +247,15 @@ export class NetworkDetector {
   /**
    * 获取完整网络状态
    */
-  async getNetworkStatus(): Promise<NetworkStatus> {
+  private pendingStatus: Promise<NetworkStatus> | null = null;
+  getNetworkStatus(): Promise<NetworkStatus> {
+    if (!this.pendingStatus)
+      this.pendingStatus = this.computeNetworkStatus().finally(() => {
+        this.pendingStatus = null;
+      });
+    return this.pendingStatus;
+  }
+  private async computeNetworkStatus(): Promise<NetworkStatus> {
     return this.getCurrentWifiStatus();
   }
 

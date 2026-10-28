@@ -13,7 +13,7 @@ package com.netmate.app.auth
  */
 object WifiReconnectPolicy {
 
-    data class Candidate(val ssid: String, val password: String, val priority: Int)
+    data class Candidate(val ssid: String, val password: String, val priority: Int, val id: String = ssid, val security: String? = null, val bssid: String? = null)
 
     data class Settings(
         val enabled: Boolean,
@@ -25,7 +25,7 @@ object WifiReconnectPolicy {
     fun plan(disconnectedSsid: String?, candidates: List<Candidate>): List<Candidate> {
         val sorted = candidates.sortedWith(compareBy<Candidate> { it.priority }.thenBy { it.ssid })
         val disconnected = sorted.firstOrNull { it.ssid == disconnectedSsid }
-        return listOfNotNull(disconnected) + sorted.filter { it.ssid != disconnectedSsid }
+        return listOfNotNull(disconnected) + sorted.filter { it.id != disconnected?.id }
     }
 
     /** 冷却期判定：上次全部失败的时间 + 冷却时长 之前不再尝试 */

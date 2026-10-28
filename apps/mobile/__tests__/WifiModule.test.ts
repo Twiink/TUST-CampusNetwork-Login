@@ -49,7 +49,7 @@ describe('WifiModule bridge', () => {
       mac: null,
     });
     await expect(WifiModule.scanWifiNetworks()).rejects.toThrow('扫描失败');
-    await expect(WifiModule.connectToWifi('TUST', 'pass')).resolves.toBe(false);
+    await expect(WifiModule.connectToWifi('TUST', 'pass')).rejects.toThrow('native');
     await expect(WifiModule.disconnectWifi()).resolves.toBe(false);
   });
 
@@ -102,6 +102,12 @@ describe('WifiModule bridge', () => {
     nativeWifi.connectToWifi.mockResolvedValueOnce(true);
     await expect(WifiModule.connectToWifi('TUST', 'fake-password')).resolves.toBe(true);
     expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.NEARBY_WIFI_DEVICES);
-    expect(nativeWifi.connectToWifi).toHaveBeenCalledWith('TUST', 'fake-password');
+    expect(nativeWifi.connectToWifi).toHaveBeenCalledWith(
+      'TUST',
+      'fake-password',
+      undefined,
+      undefined,
+      undefined
+    );
   });
 });

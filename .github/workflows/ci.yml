@@ -189,11 +189,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: 安装隔离钥匙串依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gnome-keyring libsecret-1-0 dbus-x11
       - name: 运行真实主进程 E2E
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            xvfb-run -a pnpm test:e2e
+            bash shell/test-linux-e2e.sh
           else
             pnpm test:e2e
           fi
@@ -235,8 +238,8 @@ jobs:
       - name: 构建并验证原生单元测试
         working-directory: apps/mobile/android
         env:
-          ANDROID_VERSION_CODE: '1001'
-          ANDROID_VERSION_NAME: '1.0.1'
+          ANDROID_VERSION_CODE: '1002'
+          ANDROID_VERSION_NAME: '1.0.2'
         run: |
           chmod +x gradlew
           ./gradlew :app:testDebugUnitTest :app:compileReleaseKotlin :app:assembleE2e :app:assembleE2eAndroidTest -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
@@ -246,8 +249,8 @@ jobs:
       - name: 构建同签名更高版本更新包
         working-directory: apps/mobile/android
         env:
-          ANDROID_VERSION_CODE: '1002'
-          ANDROID_VERSION_NAME: '1.0.2'
+          ANDROID_VERSION_CODE: '1003'
+          ANDROID_VERSION_NAME: '1.0.3'
         run: |
           ./gradlew :app:assembleE2e -Pe2eBuild -PreactNativeArchitectures=x86_64 --console=plain
           cp app/build/outputs/apk/e2e/app-e2e.apk ../../../android-e2e-apks/update.apk
@@ -276,7 +279,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [28, 36]
+        api: [28, 29, 36]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6

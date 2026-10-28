@@ -16,7 +16,21 @@ export async function manualLogin(
   return auth.runExclusive(async () => {
     const status = detector ? await detector.getNetworkStatus() : null;
     const ssid = status?.ssid ?? (await getCurrentWifiSSID()).ssid;
-    const accounts = resolveLoginAccounts(config.getConfig()!, ssid);
+    const snapshot = config.getConfig()!;
+    const identity = status?.ssid ? { ...status, ssid: status.ssid } : ssid;
+    const accounts = resolveLoginAccounts(snapshot, identity);
+    const current = async () => {
+      if (config.getSettings().autoAuthPaused || config.getConfig()?.revision !== snapshot.revision)
+        return false;
+      const now = await detector?.getNetworkStatus();
+      return (
+        !detector ||
+        (!!now &&
+          ['ssid', 'bssid', 'ip', 'wifiConnected'].every(
+            (key) => now[key as keyof typeof now] === status?.[key as keyof typeof status]
+          ))
+      );
+    };
     if (!accounts.length) return { success: false, message: '请先选择或添加账户' };
     const network = status?.ip
       ? { ipv4: status.ip, ipv6: status.ipv6, mac: status.mac }
@@ -29,7 +43,7 @@ export async function manualLogin(
         wlanUserIpv6: network.ipv6 || undefined,
         wlanUserMac: network.mac || undefined,
       },
-      { retrySingle: true }
+      { retrySingle: true, shouldContinue: current }
     );
   });
 }

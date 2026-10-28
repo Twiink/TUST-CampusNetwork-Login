@@ -1,6 +1,6 @@
 {
   "name": "netmate",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packageManager": "pnpm@10.27.0",
   "description": "NetMate - 校园网自动登录助手",
   "main": "index.js",
@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "pnpm -r type-check",
-    "test": "pnpm test:shared && pnpm test:desktop && pnpm test:native && pnpm test:mobile",
+    "test": "pnpm test:shared && pnpm test:desktop && pnpm test:native && pnpm test:mobile && pnpm test:release",
     "test:shared": "pnpm -C packages/shared test",
     "test:network": "pnpm -C packages/shared test:network",
     "test:desktop": "pnpm -C apps/desktop test",
@@ -29,7 +29,8 @@
     "test:e2e": "pnpm -C apps/desktop test:e2e",
     "release:prepare-version": "node ./shell/prepare-release-version.mjs",
     "coverage": "pnpm test:shared -- --coverage && pnpm test:desktop -- --coverage",
-    "test:native": "pnpm -C packages/native test"
+    "test:native": "pnpm -C packages/native test",
+    "test:release": "node --test shell/*.test.mjs"
   },
   "repository": {
     "type": "git",

@@ -67,6 +67,13 @@ object AutoAuthStore {
         saveProfile(context, json.toString())
     }
     fun saveSession(context: Context, server: String) { prefs(context).edit().putString("session_server", server).commit() }
+    @Synchronized fun suggestionRules(context: Context): List<AutoAuthWifiRule>? {
+        val value = prefs(context).getString("suggestions", null) ?: return null
+        return AutoAuthProfile.fromJson(JSONObject().put("enabled", false).put("accounts", org.json.JSONArray()).put("wifiRules", org.json.JSONArray(decrypt(value))).toString()).wifiRules
+    }
+    @Synchronized fun saveSuggestionRules(context: Context, rules: List<AutoAuthWifiRule>) {
+        check(prefs(context).edit().putString("suggestions", encrypt(WifiSuggestions.encode(rules))).commit()) { "WiFi 建议状态保存失败" }
+    }
     fun sessionServer(context: Context): String? = prefs(context).getString("session_server", null)
     fun pendingSsid(context: Context): String? = prefs(context).getString("pending_wifi", null)
     fun savePendingSsid(context: Context, ssid: String?) { prefs(context).edit().putString("pending_wifi", ssid).apply() }

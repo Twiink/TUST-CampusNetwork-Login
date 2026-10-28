@@ -111,6 +111,22 @@ export function ConfigEditor({
               value={data.ssid}
               onChange={(e) => change({ ssid: e.target.value })}
             />
+            <label htmlFor="edit-security">安全类型（留空自动识别）</label>
+            <input
+              id="edit-security"
+              className="form-control"
+              value={data.security ?? ''}
+              placeholder="WPA2 / WPA3 / WPA2-WPA3 / Open"
+              onChange={(e) => change({ security: e.target.value || undefined })}
+            />
+            <label htmlFor="edit-bssid">BSSID（可选，限定接入点）</label>
+            <input
+              id="edit-bssid"
+              className="form-control"
+              value={data.bssid ?? ''}
+              placeholder="aa:bb:cc:dd:ee:ff"
+              onChange={(e) => change({ bssid: e.target.value || undefined })}
+            />
             <label htmlFor="edit-priority">优先级</label>
             <input
               id="edit-priority"

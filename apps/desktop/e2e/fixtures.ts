@@ -38,6 +38,9 @@ export const test = base.extend<ElectronFixtures>({
         })
       ));
 
+    const processOutput: string[] = [];
+    electronApp.process().stdout?.on('data', (chunk) => processOutput.push(String(chunk)));
+    electronApp.process().stderr?.on('data', (chunk) => processOutput.push(String(chunk)));
     try {
       // Electron contexts are created outside Playwright's built-in page fixture.
       await electronApp
@@ -54,6 +57,11 @@ export const test = base.extend<ElectronFixtures>({
         }
       }
     } finally {
+      if (testInfo.status !== testInfo.expectedStatus)
+        await testInfo.attach('main-process', {
+          body: processOutput.join(''),
+          contentType: 'text/plain',
+        });
       await test.step('Close Electron', () => electronApp.close().catch(() => undefined));
     }
   },

@@ -19,13 +19,14 @@ class LogJournal(
             .replace(Regex("""(?i)(\b(?:password|passwd|psk)\s+)(?:"[^"\n]*"|'[^'\n]*'|[^\s\n]+)"""), "$1[REDACTED]")
             .replace(Regex("""(?i)(https?://)[^\s/@]+:[^\s/@]+@"""), "$1[REDACTED]@")
     }
+    private var generation = UUID.randomUUID().toString()
     private var lastPrunedAt = Long.MIN_VALUE
     private fun file(index: Int = 0) = File(directory, if (index == 0) "netmate.log" else "netmate.$index.log")
 
     @Synchronized fun append(input: JSONObject): JSONObject {
         directory.mkdirs()
         prune()
-        val entry = JSONObject()
+        val entry = JSONObject().put("generation", generation)
             .put("id", safe(input.optString("id").ifBlank { UUID.randomUUID().toString() }).take(128))
             .put("timestamp", input.optLong("timestamp", now()))
             .put("level", input.optString("level", "info").takeIf { it in setOf("debug", "info", "success", "warn", "error") } ?: "info")
@@ -63,9 +64,18 @@ class LogJournal(
                 try { JSONObject(line).also { it.put("message", safe(it.optString("message"))) } } catch (_: Exception) { null }
             }
         }.filter { it.optLong("timestamp") >= threshold && (level == null || level == "all" || it.optString("level") == level) }
+            .sortedWith(compareByDescending<JSONObject> { it.optLong("timestamp") }.thenByDescending { it.optString("id") })
             .drop(offset.coerceAtLeast(0)).take(limit.coerceIn(1, 100_000))
     }
-    @Synchronized fun clear() { (0..history).forEach { file(it).delete() } }
+    @Synchronized fun queryPage(cursor: String?, limit: Int = 500): JSONObject {
+        val before = cursor?.let { JSONObject(it) }
+        val page = query(limit = 100_000).filter { entry -> before == null || entry.optLong("timestamp") < before.getLong("timestamp") || (entry.optLong("timestamp") == before.getLong("timestamp") && entry.optString("id") < before.getString("id")) }.take(limit.coerceIn(1, 500) + 1)
+        val entries = page.take(limit.coerceIn(1, 500))
+        val last = entries.lastOrNull()
+        return JSONObject().put("entries", org.json.JSONArray(entries)).put("hasMore", page.size > entries.size)
+            .put("nextCursor", last?.let { JSONObject().put("timestamp", it.optLong("timestamp")).put("id", it.optString("id")).toString() } ?: JSONObject.NULL)
+    }
+    @Synchronized fun clear(): String { (0..history).forEach { check(!file(it).exists() || file(it).delete()) { "日志清空失败" } }; generation = UUID.randomUUID().toString(); return generation }
     private fun prune(force: Boolean = false) {
         val timestamp = now()
         if (!force && lastPrunedAt != Long.MIN_VALUE && timestamp - lastPrunedAt < 3_600_000) return

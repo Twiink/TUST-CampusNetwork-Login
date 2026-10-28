@@ -22,7 +22,7 @@ export function enrichStatusAuthFields(status: NetworkStatus, wifiManager: WifiM
     return;
   }
 
-  const requirement = wifiManager.resolveAuthRequirement(status.ssid, status.ip);
+  const requirement = wifiManager.resolveAuthRequirement(status.ssid, status.ip, status);
   status.isConfigured = requirement.isConfigured;
   status.requiresAuth = requirement.requiresAuth;
   status.hasLinkedAccount = requirement.hasLinkedAccount;

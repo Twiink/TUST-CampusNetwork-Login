@@ -32,7 +32,10 @@ export interface AutoAuthProfile {
     serverUrl: string;
   }>;
   wifiRules: Array<{
+    id: string;
     ssid: string;
+    security?: string;
+    bssid?: string;
     requiresAuth: boolean;
     linkedAccountIds: string[];
     /** WiFi 自动重连用；仅在 Keystore 加密后落盘 */
@@ -41,6 +44,7 @@ export interface AutoAuthProfile {
     priority: number;
   }>;
   heartbeatEnabled: boolean;
+  heartbeatIntervalSeconds: number;
   failureThreshold: number;
   wifiRetries: number;
   wifiCooldownMinutes: number;
@@ -92,7 +96,10 @@ export function buildAutoAuthProfile(config: AppConfig): AutoAuthProfile {
         serverUrl: account.serverUrl,
       })),
     wifiRules: config.wifiList.map(wifi => ({
+      id: wifi.id,
       ssid: wifi.ssid,
+      security: wifi.security,
+      bssid: wifi.bssid,
       requiresAuth: wifi.requiresAuth,
       linkedAccountIds: wifi.linkedAccountIds,
       password: wifi.password,
@@ -100,6 +107,7 @@ export function buildAutoAuthProfile(config: AppConfig): AutoAuthProfile {
       priority: wifi.priority,
     })),
     heartbeatEnabled: settings.enableHeartbeat,
+    heartbeatIntervalSeconds: Math.max(15, Math.min(300, settings.heartbeatIntervalSeconds)),
     failureThreshold: settings.heartbeatFailureThreshold,
     wifiRetries: settings.wifiReconnectRetries,
     wifiCooldownMinutes: settings.wifiReconnectCooldownMinutes,

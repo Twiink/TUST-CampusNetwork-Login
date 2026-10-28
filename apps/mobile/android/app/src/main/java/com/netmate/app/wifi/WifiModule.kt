@@ -74,6 +74,7 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
             result.putBoolean("wifiEnabled", value.enabled); result.putBoolean("connected", value.connected)
             result.putString("ssid", value.ssid); result.putString("ipv4", value.ipv4); result.putString("ipv6", value.ipv6)
             result.putString("networkKey", value.key); result.putString("mac", null); result.putString("bssid", value.bssid)
+            result.putString("security", value.security)
             result.putString("gateway", value.gateway); result.putString("subnetMask", null)
             value.signal?.let { result.putInt("signalStrength", it) }
             value.frequency?.let { result.putInt("frequency", it); result.putInt("channel", channel(it)) }
@@ -83,15 +84,15 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
             promise.resolve(result)
         } catch (_: Exception) { promise.reject("WIFI_INFO", "读取 WiFi 信息失败，请检查权限") }
     }
-    @ReactMethod fun connectToWifi(ssid: String, password: String?, promise: Promise) {
+    @ReactMethod fun connectToWifi(ssid: String, password: String?, security: String?, bssid: String?, ruleId: String?, promise: Promise) {
         connections.execute {
             try {
-                if (!WifiConnector.connect(context, ssid, password)) { promise.resolve(false); return@execute }
+                if (!WifiConnector.connect(context, ssid, password, security, bssid, manual = true, ruleId = ruleId ?: ssid)) { promise.resolve(false); return@execute }
                 ReconnectEvents.publish(org.json.JSONObject().put("status", "awaiting-system").put("ssid", ssid))
-                WifiConnector.openSelection(context, ssid, password)
+                WifiConnector.openSelection(context, ssid, password, security, bssid)
                 for (attempt in 0 until 60) {
                     val value = state()
-                    if (value.connected && value.ssid == ssid && value.ipv4 != null) {
+                    if (value.connected && value.ssid == ssid && (bssid.isNullOrBlank() || WifiSecurity.bssid(value.bssid) == WifiSecurity.bssid(bssid)) && value.ipv4 != null) {
                         ReconnectEvents.publish(org.json.JSONObject().put("status", "success").put("ssid", ssid))
                         changed(); promise.resolve(true); return@execute
                     }
@@ -99,7 +100,8 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
                 }
                 ReconnectEvents.publish(org.json.JSONObject().put("status", "failed").put("ssid", ssid).put("message", "未连接目标 WiFi，请在系统 WiFi 设置中确认授权"))
                 promise.resolve(false)
-            } catch (_: Exception) { promise.reject("WIFI_CONNECT", "连接失败，请检查密码或系统授权") }
+            } catch (e: IllegalArgumentException) { promise.reject("WIFI_SECURITY", e.message ?: "请通过系统设置连接此网络") }
+            catch (_: Exception) { promise.reject("WIFI_CONNECT", "连接失败，请检查密码或系统授权") }
         }
     }
     @ReactMethod fun openWifiSettings(promise: Promise) {
@@ -108,7 +110,8 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
     }
     @ReactMethod fun disconnectWifi(promise: Promise) {
         @Suppress("DEPRECATION")
-        promise.resolve(wifi.disconnect())
+        try { WifiSuggestions.expire(context); promise.resolve(wifi.disconnect()) }
+        catch (_: Exception) { promise.reject("WIFI_DISCONNECT", "临时网络建议撤销失败，请重试") }
     }
     @ReactMethod fun scanWifiNetworks(promise: Promise) {
         scans.execute {
@@ -136,10 +139,10 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
                         if (!accepted) { promise.reject("WIFI_SCAN_THROTTLED", "系统暂时限制扫描，请稍后重试并确认定位服务已开启"); return@execute }
                         if (!completed.await(15, java.util.concurrent.TimeUnit.SECONDS)) { promise.reject("WIFI_SCAN_TIMEOUT", "扫描超时，请稍后刷新"); return@execute }
                         if (!updated.get()) { promise.reject("WIFI_SCAN_STALE", "系统未能更新附近网络，请稍后重试"); return@execute }
-                        wifi.scanResults.filter { it.SSID.isNotBlank() }.distinctBy { it.SSID to it.capabilities }.sortedByDescending { it.level }.forEach { scan ->
+                        wifi.scanResults.filter { it.SSID.isNotBlank() }.distinctBy { Triple(it.SSID, it.capabilities, it.BSSID) }.sortedByDescending { it.level }.forEach { scan ->
                             val item = Arguments.createMap(); item.putString("ssid", scan.SSID); item.putString("bssid", scan.BSSID)
                             item.putInt("signalStrength", ((scan.level + 100) * 100 / 60).coerceIn(0, 100)); item.putInt("frequency", scan.frequency); item.putInt("channel", channel(scan.frequency))
-                            item.putString("security", when { scan.capabilities.contains("EAP") -> "Enterprise"; scan.capabilities.contains("SAE") -> "WPA3"; scan.capabilities.contains("WPA2") -> "WPA2"; scan.capabilities.contains("WPA") -> "WPA"; scan.capabilities.contains("WEP") -> "WEP"; else -> "Open" }); output.pushMap(item)
+                            item.putString("security", when { scan.capabilities.contains("EAP") -> "Enterprise"; scan.capabilities.contains("SAE") -> if (scan.capabilities.contains("PSK")) "WPA2-WPA3" else "WPA3"; scan.capabilities.contains("WPA2") -> "WPA2"; scan.capabilities.contains("WPA") -> "WPA"; scan.capabilities.contains("WEP") -> "WEP"; else -> "Open" }); output.pushMap(item)
                         }
                     } finally { context.unregisterReceiver(scanReceiver) }
                 }

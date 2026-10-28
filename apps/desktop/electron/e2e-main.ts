@@ -7,6 +7,8 @@ import { EventEmitter } from 'node:events';
 import { createDefaultAppConfig, type WifiAdapter, type WifiDetails } from '@repo/shared';
 import { runtimePorts } from './runtime-ports';
 
+// Playwright's loader appends --password-store=basic; restore real isolated libsecret.
+if (process.platform === 'linux') app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 const directory = process.env.NETMATE_E2E_USER_DATA_DIR;
 if (!directory) throw new Error('An isolated userData directory is required');
 app.setPath('userData', directory);
@@ -140,12 +142,16 @@ runtimePorts.wifi = {
   },
   scan: async () => [],
 } satisfies WifiAdapter;
-runtimePorts.scan = async () =>
-  ['TUST-WIFI', 'Home-WIFI', 'TUST-Backup', 'Nearby-WIFI'].map((ssid) => ({
-    ssid,
-    signal: 80,
-    security: 'WPA2',
-  }));
+runtimePorts.scanRaw = async () => ({
+  platform: process.platform === 'win32' ? 'win32' : 'linux',
+  text: ['TUST-WIFI', 'Home-WIFI', 'TUST-Backup', 'Nearby-WIFI']
+    .map((ssid, index) =>
+      process.platform === 'win32'
+        ? `SSID ${index + 1} : ${ssid}\r\n    Authentication : WPA2-Personal\r\n    BSSID 1 : 00:11:22:33:44:55\r\n    Signal : 80%\r\n`
+        : `${ssid}:80:WPA2`
+    )
+    .join('\n'),
+});
 runtimePorts.connect = async (ssid) => runtimePorts.wifi!.connect(ssid, '');
 runtimePorts.connectivityUrls = [`${portal}/generate_204`];
 runtimePorts.headlessShell = true;

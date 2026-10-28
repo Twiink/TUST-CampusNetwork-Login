@@ -1,0 +1,36 @@
+appId: com.netmate.app
+---
+- launchApp
+- extendedWaitUntil:
+    visible: '配置设置|跳过|暂不'
+    timeout: 30000
+- repeat:
+    while:
+      visible: '跳过|暂不'
+    commands:
+      - tapOn: '跳过|暂不'
+- tapOn: '配置设置'
+- scrollUntilVisible:
+    element: '编辑账号 upgrade-fixture'
+    direction: DOWN
+    timeout: 60000
+    centerElement: true
+- assertVisible: '配置已保存并同步'
+- tapOn: '编辑账号 upgrade-fixture'
+- assertVisible: { id: 'edit-username', text: 'upgrade-fixture' }
+- scrollUntilVisible:
+    element: { id: 'save-edit' }
+    direction: DOWN
+    timeout: 60000
+    centerElement: true
+- tapOn: { id: 'save-edit' }
+- assertVisible: '编辑账号 upgrade-fixture'
+- stopApp
+- launchApp
+- tapOn: { id: 'tab-settings' }
+- scrollUntilVisible:
+    element: '编辑账号 upgrade-fixture'
+    direction: DOWN
+    timeout: 60000
+    centerElement: true
+- assertVisible: '编辑账号 upgrade-fixture'

@@ -26,6 +26,9 @@ jest.mock('../src/native/AppUpdater', () => ({
 jest.mock('../src/native/BackgroundService', () => ({ isBackgroundServiceAvailable: () => false }));
 jest.mock('../src/native/AutoStart', () => ({ isAutoStartAvailable: () => false }));
 jest.mock('../src/native/Logs', () => ({
+  queryPersistentLogPage: jest
+    .fn()
+    .mockResolvedValue({ entries: [], nextCursor: null, hasMore: false }),
   queryPersistentLogs: jest.fn().mockResolvedValue([]),
   appendPersistentLog: jest.fn().mockResolvedValue(undefined),
   clearPersistentLogs: jest.fn().mockResolvedValue(undefined),
@@ -197,7 +200,7 @@ test('关联账号按顺序登录，注销失败也保留暂停并跨重启恢�
   expect(view.auth.loginWithAccounts).toHaveBeenCalledWith(
     [expect.objectContaining({ id: 'a2' }), expect.objectContaining({ id: 'a1' })],
     expect.objectContaining({ wlanUserIp: network.ipv4 }),
-    { retrySingle: true }
+    { retrySingle: true, shouldContinue: expect.any(Function) }
   );
   await act(async () => {
     await view.result.current.logout();

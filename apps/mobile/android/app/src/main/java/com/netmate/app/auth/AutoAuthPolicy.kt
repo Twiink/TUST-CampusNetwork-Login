@@ -28,7 +28,7 @@ object AutoAuthPolicy {
         return CAMPUS_SSID_PREFIXES.any { normalized.startsWith(it) } && ipv4.startsWith("10.")
     }
 
-    fun decide(profile: AutoAuthProfile, ssid: String?, ipv4: String?, captivePortal: Boolean): Decision {
+    fun decide(profile: AutoAuthProfile, ssid: String?, ipv4: String?, captivePortal: Boolean, security: String? = null, bssid: String? = null): Decision {
         if (!profile.enabled || profile.authPaused) {
             return Decision(false, emptyList(), "自动认证已关闭")
         }
@@ -47,7 +47,15 @@ object AutoAuthPolicy {
             )
         }
 
-        val rule = profile.wifiRules.firstOrNull { it.ssid == ssid }
+        val rule = profile.wifiRules.filter { WifiSecurity.match(it, ssid, security, bssid) > 0 }
+            .sortedWith(compareByDescending<AutoAuthWifiRule> { WifiSecurity.match(it, ssid, security, bssid) }.thenBy { it.priority }).firstOrNull()
+        val unresolved = profile.wifiRules.any { it.ssid == ssid &&
+            (if (!it.bssid.isNullOrBlank()) 3 else if (!it.security.isNullOrBlank()) 2 else 1) > (rule?.let { WifiSecurity.match(it, ssid, security, bssid) } ?: 0) &&
+            (WifiSecurity.normalize(it.security).isEmpty() || WifiSecurity.normalize(security).isEmpty() || WifiSecurity.matches(WifiSecurity.normalize(it.security), WifiSecurity.normalize(security))) &&
+            (it.bssid.isNullOrBlank() || WifiSecurity.bssid(bssid).isEmpty() || WifiSecurity.bssid(it.bssid) == WifiSecurity.bssid(bssid)) &&
+            ((!it.bssid.isNullOrBlank() && WifiSecurity.bssid(bssid).isEmpty()) || (!it.security.isNullOrBlank() && WifiSecurity.normalize(security).isEmpty() && WifiSecurity.bssid(it.bssid).isEmpty())) }
+        if (unresolved) return Decision(false, emptyList(), "WiFi 身份信息不足，请选择安全类型或 BSSID")
+        if (rule == null && profile.wifiRules.any { it.ssid == ssid }) return Decision(false, emptyList(), "同名 WiFi 无匹配规则，请确认安全类型或 BSSID")
         if (rule != null) {
             if (!rule.requiresAuth) {
                 return Decision(false, emptyList(), "WiFi \"$ssid\" 配置为无需认证")

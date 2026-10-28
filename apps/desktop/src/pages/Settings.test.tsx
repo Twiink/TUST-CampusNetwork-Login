@@ -215,6 +215,26 @@ describe('Settings', () => {
     expect((screen.getByLabelText('WiFi 名称') as HTMLInputElement).value).toBe('');
   });
 
+  it('同名网络可以用明确安全类型和 BSSID 保存为独立规则', async () => {
+    renderSettings();
+    fireEvent.change(screen.getByLabelText('WiFi 名称'), { target: { value: 'TUST-WIFI' } });
+    fireEvent.change(screen.getByLabelText('安全类型（留空自动识别）'), {
+      target: { value: 'WPA3' },
+    });
+    fireEvent.change(screen.getByLabelText('BSSID（可选，限定接入点）'), {
+      target: { value: 'aa:bb:cc:dd:ee:ff' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /需要校园网认证/ }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 WiFi' }));
+    await waitFor(() => expect(setConfig).toHaveBeenCalledTimes(1));
+    expect(savedConfig().wifiList).toHaveLength(2);
+    expect(savedConfig().wifiList[1]).toMatchObject({
+      ssid: 'TUST-WIFI',
+      security: 'WPA3',
+      bssid: 'aa:bb:cc:dd:ee:ff',
+    });
+  });
+
   it('支持切换自动重连、删除 WiFi 与修改通用设置', async () => {
     renderSettings();
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { AppConfig } from '@repo/shared';
+import { matchWifiRule, type AppConfig } from '@repo/shared';
 type Network = Awaited<ReturnType<Window['electronAPI']['wifi']['scan']>>[number];
 export function NearbyWifi({
   config,
@@ -37,11 +37,12 @@ export function NearbyWifi({
       ) : null}
       <ul className="nearby-list">
         {networks?.map((network, index) => {
-          const saved = config.wifiList.find((w) => w.ssid === network.ssid);
+          const saved = matchWifiRule(config.wifiList, { ...network, ssid: network.ssid ?? '' });
           return (
             <li key={`${network.ssid}-${index}`}>
               <span>
                 {network.ssid} · {network.signalStrength}% · {network.security}
+                {network.bssid ? ` · ${network.bssid}` : ''}
                 {saved ? ' · 已保存' : ''}
               </span>
               <button

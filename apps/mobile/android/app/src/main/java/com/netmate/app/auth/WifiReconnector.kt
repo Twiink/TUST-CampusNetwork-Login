@@ -58,7 +58,7 @@ internal class WifiReconnector(
         }
 
         val candidates = profile.autoConnectWifis.map {
-            WifiReconnectPolicy.Candidate(it.ssid, it.password, it.priority)
+            WifiReconnectPolicy.Candidate(it.ssid, it.password, it.priority, it.id, it.security, it.bssid)
         }
         // 断开的 WiFi 未开启自动连接时，与桌面端一致：不触发重连
         if (disconnectedSsid != null && candidates.none { it.ssid == disconnectedSsid }) {
@@ -74,16 +74,16 @@ internal class WifiReconnector(
             for (attempt in 1..settings.retriesPerWifi) {
                 if (attempt > 1) sleeper(RETRY_GAP_MS)
                 val current = AutoAuthStore.loadProfile(context)
-                if (!shouldContinue() || !WifiConnector.state(context).enabled || current?.enabled != true || current.autoConnectWifis.none { it.ssid == candidate.ssid }) return false
+                if (!shouldContinue() || !WifiConnector.state(context).enabled || current?.enabled != true || current.autoConnectWifis.none { it.id == candidate.id }) return false
                 ReconnectEvents.publish(JSONObject().put("status", "connecting").put("ssid", candidate.ssid).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi))
 
                 val accepted = try {
-                    WifiConnector.connect(context, candidate.ssid, candidate.password)
+                    WifiConnector.connect(context, candidate.ssid, candidate.password, candidate.security, candidate.bssid, ruleId = candidate.id)
                 } catch (e: Exception) {
                     NetMateLogs.log(context, "warn", "提交 WiFi 连接失败", "wifi")
                     false
                 }
-                if (accepted && waitForConnection(context, candidate.ssid, shouldContinue)) {
+                if (accepted && waitForConnection(context, candidate, shouldContinue)) {
                     val connectedSsid = WifiConnector.state(context).ssid ?: candidate.ssid
                     lastAllFailedAt = 0L
                     EventNotifier.notify(
@@ -115,16 +115,16 @@ internal class WifiReconnector(
         return false
     }
 
-    private fun waitForConnection(context: Context, targetSsid: String, shouldContinue: () -> Boolean): Boolean {
+    private fun waitForConnection(context: Context, target: WifiReconnectPolicy.Candidate, shouldContinue: () -> Boolean): Boolean {
         var waited = 0L
         while (waited < CONNECT_WAIT_MS) {
             val state = WifiEnvironment.snapshot(context)
-            if (!shouldContinue() || !state.enabled || AutoAuthStore.loadProfile(context)?.let { it.enabled && it.autoConnectWifis.any { candidate -> candidate.ssid == targetSsid } } != true) return false
-            if (state.connected && state.ssid == targetSsid && state.ipv4 != null) return true
+            if (!shouldContinue() || !state.enabled || AutoAuthStore.loadProfile(context)?.let { it.enabled && it.autoConnectWifis.any { candidate -> candidate.id == target.id } } != true) return false
+            if (state.connected && state.ssid == target.ssid && (target.bssid.isNullOrBlank() || WifiSecurity.bssid(state.bssid) == WifiSecurity.bssid(target.bssid)) && state.ipv4 != null) return true
             sleeper(POLL_MS)
             waited += POLL_MS
         }
         val state = WifiEnvironment.snapshot(context)
-        return state.connected && state.ssid == targetSsid && state.ipv4 != null
+        return state.connected && state.ssid == target.ssid && (target.bssid.isNullOrBlank() || WifiSecurity.bssid(state.bssid) == WifiSecurity.bssid(target.bssid)) && state.ipv4 != null
     }
 }

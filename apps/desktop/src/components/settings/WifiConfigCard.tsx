@@ -222,6 +222,26 @@ export const WifiConfigCard: React.FC<{
         />
       </div>
       <div className="form-group">
+        <label htmlFor="add-security">安全类型（留空自动识别）</label>
+        <input
+          id="add-security"
+          className="form-control"
+          value={newWifi.security ?? ''}
+          placeholder="WPA2 / WPA3 / WPA2-WPA3 / Open"
+          onChange={(e) => setNewWifi({ ...newWifi, security: e.target.value || undefined })}
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="add-bssid">BSSID（可选，限定接入点）</label>
+        <input
+          id="add-bssid"
+          className="form-control"
+          value={newWifi.bssid ?? ''}
+          placeholder="aa:bb:cc:dd:ee:ff"
+          onChange={(e) => setNewWifi({ ...newWifi, bssid: e.target.value || undefined })}
+        />
+      </div>
+      <div className="form-group">
         <label>
           <Lock size={14} style={{ marginRight: 6 }} />
           WiFi 密码

@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 /** Only the e2e source set can install these controlled radio / portal boundaries. */
 object PlatformRuntime {
     private const val BASE = "http://10.0.2.2:38081"
-    val constants: Map<String, Any> = mapOf("updateFeedUrl" to "$BASE/releases/latest")
+    val constants: Map<String, Any> = mapOf("testRuntime" to true, "updateFeedUrl" to "$BASE/releases/latest")
     @Volatile private var state = JSONObject().put("ssid", "TUST-WIFI").put("enabled", true).put("failConnections", false)
     private val clock = Executors.newSingleThreadScheduledExecutor()
     fun install(context: Context) {
@@ -19,9 +19,11 @@ object PlatformRuntime {
             val current = state
             val ssid = current.optString("ssid").takeIf { it.isNotBlank() }
             WifiEnvironment.Snapshot(enabled = current.optBoolean("enabled", true), connected = ssid != null, ssid = ssid,
-                ipv4 = if (ssid != null) "10.1.2.3" else null, key = "fixture:${ssid ?: "none"}", signal = 80)
+                ipv4 = if (ssid != null) "10.1.2.3" else null, security = "WPA2", key = "fixture:${ssid ?: "none"}", signal = 80)
         }
         WifiEnvironment.scanPort = { listOf(Triple("TUST-WIFI", 80, "WPA2"), Triple("TUST-Backup", 60, "Open"), Triple("Nearby-WIFI", 40, "WPA2")) }
+        com.netmate.app.auth.WifiSuggestions.addPort = { android.net.wifi.WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS }
+        com.netmate.app.auth.WifiSuggestions.removePort = { android.net.wifi.WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS }
         WifiEnvironment.connectPort = { _, ssid, _ ->
             if (state.optBoolean("failConnections")) false else {
                 state = JSONObject(state.toString()).put("ssid", ssid)

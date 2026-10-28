@@ -13,6 +13,7 @@ import path from 'node:path';
 import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
 import { createDesktopWifiAdapter } from './wifi-adapter';
+import { splitNmcliLine } from './wifi-adapter/linux';
 import { execWindowsText, execWindowsFileText } from '../utils/win-exec';
 
 const execAsync = promisify(exec);
@@ -23,12 +24,17 @@ export interface AvailableNetwork {
   ssid: string;
   signal: number;
   security: string;
+  bssid?: string;
 }
 
 /**
  * 获取可用的 WiFi 网络列表
  */
 export async function scanAvailableNetworks(): Promise<AvailableNetwork[]> {
+  if (runtimePorts.scanRaw) {
+    const raw = await runtimePorts.scanRaw();
+    return raw.platform === 'win32' ? parseWindowsScan(raw.text) : parseLinuxScan(raw.text);
+  }
   if (runtimePorts.scan) return runtimePorts.scan();
   switch (process.platform) {
     case 'darwin':
@@ -54,6 +60,7 @@ async function scanMacOS(): Promise<AvailableNetwork[]> {
         ssid: network.ssid!,
         signal: Math.max(0, Math.min(100, Math.round((((network.rssi ?? -100) + 100) * 100) / 60))),
         security: network.security ?? 'Unknown',
+        bssid: network.bssid ?? undefined,
       }));
   }
   try {
@@ -80,6 +87,7 @@ async function scanMacOS(): Promise<AvailableNetwork[]> {
           networks.push({
             ssid,
             signal,
+            bssid: match[2],
             security: line.includes('WPA') ? 'WPA' : line.includes('WEP') ? 'WEP' : 'Open',
           });
         }
@@ -96,33 +104,35 @@ async function scanMacOS(): Promise<AvailableNetwork[]> {
  * Windows: 扫描可用 WiFi 网络
  * 输出按 GBK 解码（中文系统「信号」「身份验证」等字段才可正确匹配）
  */
+export function parseWindowsScan(text: string): AvailableNetwork[] {
+  const networks: AvailableNetwork[] = [];
+  for (const block of text.split(/^\s*SSID\s+\d+\s*:/im).slice(1)) {
+    const ssid = block.match(/^\s*(.+?)[\r\n]/)?.[1].trim();
+    if (!ssid) continue;
+    const security =
+      (block.match(/Authentication\s*:\s*(.+?)[\r\n]/i) ||
+        block.match(/身份验证\s*:\s*(.+?)[\r\n]/))?.[1].trim() ?? 'Unknown';
+    const accessPoints = [
+      ...block.matchAll(
+        /^\s*BSSID\s+\d+\s*:\s*([0-9a-f:]+)([\s\S]*?)(?=^\s*BSSID\s+\d+\s*:|$(?![\s\S]))/gim
+      ),
+    ];
+    for (const point of accessPoints) {
+      const signal = Number(point[2].match(/(?:Signal|信号)\s*:\s*(\d+)%/i)?.[1] ?? 0);
+      networks.push({ ssid, signal, security, bssid: point[1] });
+    }
+    if (!accessPoints.length)
+      networks.push({
+        ssid,
+        security,
+        signal: Number(block.match(/(?:Signal|信号)\s*:\s*(\d+)%/i)?.[1] ?? 0),
+      });
+  }
+  return networks;
+}
 async function scanWindows(): Promise<AvailableNetwork[]> {
   try {
-    const text = await execWindowsText('netsh wlan show networks mode=bssid');
-    const networks: AvailableNetwork[] = [];
-
-    // 解析 netsh 输出
-    const blocks = text.split(/SSID\s+\d+\s*:/i);
-
-    for (const block of blocks.slice(1)) {
-      const ssidMatch = block.match(/^\s*(.+?)[\r\n]/);
-      const signalMatch = block.match(/Signal\s*:\s*(\d+)%/i) || block.match(/信号\s*:\s*(\d+)%/);
-      const authMatch =
-        block.match(/Authentication\s*:\s*(.+?)[\r\n]/i) ||
-        block.match(/身份验证\s*:\s*(.+?)[\r\n]/);
-
-      if (ssidMatch) {
-        const ssid = ssidMatch[1].trim();
-        const signal = signalMatch ? parseInt(signalMatch[1], 10) : 0;
-        const security = authMatch ? authMatch[1].trim() : 'Unknown';
-
-        if (ssid && ssid !== '') {
-          networks.push({ ssid, signal, security });
-        }
-      }
-    }
-
-    return networks;
+    return parseWindowsScan(await execWindowsText('netsh wlan show networks mode=bssid'));
   } catch {
     throw new Error('WiFi 扫描失败，请检查系统权限和无线设备');
   }
@@ -131,29 +141,31 @@ async function scanWindows(): Promise<AvailableNetwork[]> {
 /**
  * Linux: 扫描可用 WiFi 网络
  */
-async function scanLinux(): Promise<AvailableNetwork[]> {
-  try {
-    const { stdout } = await execAsync('nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list', {
-      timeout: 10000,
-    });
+export function parseLinuxScan(stdout: string): AvailableNetwork[] {
+  const networks: AvailableNetwork[] = [];
+  const lines = stdout.trim().split('\n');
 
-    const networks: AvailableNetwork[] = [];
-    const lines = stdout.trim().split('\n');
+  for (const line of lines) {
+    const parts = splitNmcliLine(line);
+    if (parts.length >= 3) {
+      const ssid = parts[0];
+      const signal = parseInt(parts[1], 10) || 0;
+      const security = parts[2] || 'Open';
 
-    for (const line of lines) {
-      const parts = line.split(':');
-      if (parts.length >= 3) {
-        const ssid = parts[0];
-        const signal = parseInt(parts[1], 10) || 0;
-        const security = parts[2] || 'Open';
-
-        if (ssid && ssid !== '') {
-          networks.push({ ssid, signal, security });
-        }
+      if (ssid && ssid !== '') {
+        networks.push({ ssid, signal, security, ...(parts[3] ? { bssid: parts[3] } : {}) });
       }
     }
+  }
 
-    return networks;
+  return networks;
+}
+async function scanLinux(): Promise<AvailableNetwork[]> {
+  try {
+    const { stdout } = await execAsync('nmcli -t -f SSID,SIGNAL,SECURITY,BSSID dev wifi list', {
+      timeout: 10000,
+    });
+    return parseLinuxScan(stdout);
   } catch {
     throw new Error('WiFi 扫描失败，请检查系统权限和无线设备');
   }

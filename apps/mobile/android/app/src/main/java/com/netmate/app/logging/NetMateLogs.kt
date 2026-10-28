@@ -19,5 +19,6 @@ object NetMateLogs {
         append(context, JSONObject().put("level", level).put("message", message).put("source", source))
     }
     fun query(context: Context, level: String?, limit: Int, offset: Int = 0): List<JSONObject> { initialize(context); return journal!!.query(level, limit, offset) }
-    fun clear(context: Context) { initialize(context); journal!!.clear() }
+    fun clear(context: Context): String { initialize(context); return journal!!.clear() }
+    fun queryPage(context: Context, cursor: String?, limit: Int): JSONObject { initialize(context); return journal!!.queryPage(cursor, limit) }
 }

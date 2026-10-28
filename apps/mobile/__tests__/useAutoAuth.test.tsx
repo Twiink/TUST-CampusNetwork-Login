@@ -50,7 +50,10 @@ describe('buildAutoAuthProfile', () => {
       // WiFi 密码供后台重连使用，原生层以 Keystore 加密落盘
       wifiRules: [
         {
+          id: 'w1',
           ssid: 'TUST-5G',
+          security: undefined,
+          bssid: undefined,
           requiresAuth: true,
           linkedAccountIds: ['a2'],
           password: 'secret',
@@ -59,6 +62,7 @@ describe('buildAutoAuthProfile', () => {
         },
       ],
       heartbeatEnabled: DEFAULT_APP_SETTINGS.enableHeartbeat,
+      heartbeatIntervalSeconds: DEFAULT_APP_SETTINGS.heartbeatIntervalSeconds,
       failureThreshold: DEFAULT_APP_SETTINGS.heartbeatFailureThreshold,
       wifiRetries: DEFAULT_APP_SETTINGS.wifiReconnectRetries,
       wifiCooldownMinutes: DEFAULT_APP_SETTINGS.wifiReconnectCooldownMinutes,

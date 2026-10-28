@@ -50,7 +50,7 @@ import {
 } from '../native/AutoAuth';
 import {
   appendPersistentLog,
-  queryPersistentLogs,
+  queryPersistentLogPage,
   onPersistentLog,
   clearPersistentLogs,
   exportPersistentLogs,
@@ -143,14 +143,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [accounts, setAccounts] = useState<AccountConfig[]>([]);
   const [currentAccount, setCurrentAccount] = useState<AccountConfig | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logEpoch = useRef(0);
+  const logWrites = useRef<Promise<void>>(Promise.resolve());
+  const logClearPending = useRef<Promise<void> | null>(null);
+  const logGeneration = useRef<string | undefined>(undefined);
+  const pendingNativeLogs = useRef<PersistentLogEntry[]>([]);
+  const logCursor = useRef<string | null>(null);
+  const logHasMore = useRef(true);
+  const logPagePending = useRef(false);
   const mounted = useRef(true);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isModuleAvailable = isNativeModuleAvailable();
 
   const receiveLog = useCallback((entry: PersistentLogEntry) => {
     if (!mounted.current) return;
+    if (entry.generation && logClearPending.current) {
+      pendingNativeLogs.current.push(entry);
+      return;
+    }
+    if (entry.generation && logGeneration.current && entry.generation !== logGeneration.current)
+      return;
     const value = displayLog(entry);
-    setLogs(previous => [value, ...previous.filter(log => log.id !== value.id)].slice(0, 500));
+    setLogs(previous => [value, ...previous.filter(log => log.id !== value.id)]);
   }, []);
   const addLog = useCallback(
     (level: LogEntry['level'], message: string) => {
@@ -162,21 +176,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         source: 'app',
       };
       receiveLog(entry);
-      appendPersistentLog(entry).catch(() => undefined);
+      logWrites.current = logWrites.current
+        .then(() => appendPersistentLog(entry))
+        .catch(() => undefined);
     },
     [receiveLog]
   );
   const clearLogs = useCallback(() => {
+    logEpoch.current++;
+    logCursor.current = null;
+    logHasMore.current = true;
     setLogs([]);
-    clearPersistentLogs().catch(() => addLog('error', '日志清空失败，请重试'));
-  }, [addLog]);
-  const loadMoreLogs = useCallback(async () => {
-    const entries = await queryPersistentLogs(null, 500, logs.length);
-    setLogs(previous => {
-      const ids = new Set(previous.map(log => log.id));
-      return [...previous, ...entries.filter(entry => !ids.has(entry.id)).map(displayLog)];
+    const pending = logWrites.current.then(async () => {
+      logGeneration.current = await clearPersistentLogs();
     });
-  }, [logs.length]);
+    logWrites.current = pending.catch(() => undefined);
+    logClearPending.current = pending;
+    pending
+      .catch(() => addLog('error', '日志清空失败，请重试'))
+      .finally(() => {
+        if (logClearPending.current !== pending) return;
+        logClearPending.current = null;
+        const queued = pendingNativeLogs.current;
+        pendingNativeLogs.current = [];
+        queued.forEach(receiveLog);
+      });
+  }, [addLog, receiveLog]);
+  const loadMoreLogs = useCallback(async () => {
+    if (logPagePending.current || !logHasMore.current) return;
+    const epoch = logEpoch.current;
+    logPagePending.current = true;
+    try {
+      await logClearPending.current;
+      if (epoch !== logEpoch.current) return;
+      const page = await queryPersistentLogPage(logCursor.current);
+      if (!mounted.current || epoch !== logEpoch.current) return;
+      logCursor.current = page.nextCursor;
+      logHasMore.current = page.hasMore;
+      setLogs(previous => {
+        const ids = new Set(previous.map(log => log.id));
+        return [...previous, ...page.entries.filter(entry => !ids.has(entry.id)).map(displayLog)];
+      });
+    } finally {
+      logPagePending.current = false;
+    }
+  }, []);
   const applyConfigState = useCallback((next: AppConfig) => {
     if ((next.revision ?? 0) < (configRef.current.revision ?? 0)) return;
     configRef.current = next;
@@ -262,7 +306,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       commitAction(async () => {
         const manager = servicesRef.current?.configManager;
         if (!manager) throw new Error('服务未初始化');
-        await manager.update(current => (typeof update === 'function' ? update(current) : update));
+        await manager.update(current => {
+          const next = typeof update === 'function' ? update(current) : update;
+          return {
+            ...next,
+            settings: {
+              ...next.settings,
+              heartbeatIntervalSeconds: Math.max(
+                15,
+                Math.min(300, next.settings.heartbeatIntervalSeconds)
+              ),
+            },
+          };
+        });
       }),
     [commitAction]
   );
@@ -315,12 +371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const subscription = onPersistentLog(receiveLog);
     (async () => {
       try {
-        const history = await queryPersistentLogs();
-        if (mounted.current)
-          setLogs(previous => [
-            ...previous,
-            ...history.filter(entry => !previous.some(log => log.id === entry.id)).map(displayLog),
-          ]);
+        await loadMoreLogs();
         const services = createMobileServices();
         servicesRef.current = services;
         unsubscribe = services.logger.addListener(entry =>
@@ -330,6 +381,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           )
         );
         await services.configManager.load();
+        const interval = services.configManager.getSettings().heartbeatIntervalSeconds;
+        if (interval < 15 || interval > 300)
+          await services.configManager.updateSettings({
+            heartbeatIntervalSeconds: Math.max(15, Math.min(300, interval)),
+          });
         const native = isAutoAuthAvailable() ? await getAuthSnapshot() : null;
         const loaded = services.configManager.getConfig()!;
         if (
@@ -360,7 +416,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       servicesRef.current?.logger.stopAutoCleanup();
       servicesRef.current = null;
     };
-  }, [addLog, receiveLog, refreshNetworkInfo, syncConfiguration]);
+  }, [addLog, loadMoreLogs, receiveLog, refreshNetworkInfo, syncConfiguration]);
 
   useEffect(() => {
     if (!ready || !isModuleAvailable) return;
@@ -432,7 +488,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
       setNetworkStatus('connecting');
-      const selected = resolveLoginAccounts(services.configManager.getConfig()!, info.ssid);
+      const snapshot = services.configManager.getConfig()!;
+      const current = async () => {
+        const now = await getNetworkInfo();
+        return (
+          services.configManager.getConfig()?.revision === snapshot.revision &&
+          !services.configManager.getSettings().autoAuthPaused &&
+          now.connected &&
+          now.networkKey === info.networkKey &&
+          now.ssid === info.ssid &&
+          now.bssid === info.bssid &&
+          now.ipv4 === info.ipv4
+        );
+      };
+      const selected = resolveLoginAccounts(
+        snapshot,
+        info.ssid ? { ...info, ssid: info.ssid } : null
+      );
       if (!selected.length) {
         setNetworkStatus('disconnected');
         addLog('error', '请先选择账户');
@@ -447,10 +519,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 wlanUserIp: info.ipv4!,
                 wlanUserIpv6: info.ipv6 || undefined,
               },
-              { retrySingle: true }
+              { retrySingle: true, shouldContinue: current }
             )
           );
       if (!result) throw new Error('认证引擎未返回结果');
+      if (!(await current())) return;
       if (
         networkRef.current.networkKey !== info.networkKey ||
         networkRef.current.ssid !== info.ssid
