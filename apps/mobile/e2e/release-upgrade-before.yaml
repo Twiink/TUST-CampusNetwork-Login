@@ -18,6 +18,10 @@ appId: com.netmate.app
 - tapOn: '请输入学号/用户名'
 - inputText: 'upgrade-fixture'
 - pressKey: enter
+# v1.0.1's ScrollView consumes the first outside tap after text input.
+# End that input explicitly before attempting another control's action.
+- tapOn: '用户名'
+- assertVisible: 'upgrade-fixture'
 - scrollUntilVisible:
     element: '请输入密码'
     direction: DOWN
@@ -26,6 +30,7 @@ appId: com.netmate.app
 - tapOn: '请输入密码'
 - inputText: 'upgrade-fixture-password'
 - pressKey: enter
+- tapOn: '密码'
 - scrollUntilVisible:
     element: '保存并添加账号'
     direction: DOWN
@@ -35,6 +40,16 @@ appId: com.netmate.app
 - scrollUntilVisible:
     element: '删除账号 upgrade-fixture'
     direction: UP
+    timeout: 60000
+    centerElement: true
+- assertVisible: '删除账号 upgrade-fixture'
+- takeScreenshot: upgrade-saved-v1.0.1
+- stopApp
+- launchApp
+- tapOn: '配置设置'
+- scrollUntilVisible:
+    element: '删除账号 upgrade-fixture'
+    direction: DOWN
     timeout: 60000
     centerElement: true
 - assertVisible: '删除账号 upgrade-fixture'

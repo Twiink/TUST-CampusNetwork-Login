@@ -325,6 +325,11 @@ jobs:
         with:
           name: android-e2e-apks
           path: android-e2e-apks
+      - name: 下载真实 v1.0.1 升级夹具
+        if: matrix.api == 29
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download v1.0.1 --pattern app-universal-release.apk --dir previous-release
       - name: 安装固定 Maestro 2.12.0
         run: |
           curl --fail --location --retry 3 -o /tmp/maestro.zip https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.12.0/maestro.zip
@@ -340,6 +345,7 @@ jobs:
         env:
           API_LEVEL: ${{ matrix.api }}
           MAESTRO_CLI_NO_ANALYTICS: 'true'
+          NETMATE_UPGRADE_ARTIFACTS: test-results/android/production-upgrade-seed
         with:
           api-level: ${{ matrix.api }}
           target: google_apis
@@ -347,7 +353,9 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: bash apps/mobile/e2e/run-ci.sh
+          script: |
+            if [ "$API_LEVEL" = 29 ]; then bash shell/smoke-android-upgrade.sh --prepare-only; fi
+            bash apps/mobile/e2e/run-ci.sh
       - name: 归档模拟器诊断
         if: always()
         uses: actions/upload-artifact@v7

@@ -46,4 +46,6 @@ CI 构建基础版本 1.0.2-e2e（10020）和同签名 1.0.3-e2e（10030），�
 
 Release 工作流安装 Windows EXE、将 macOS DMG 内的应用复制安装后启动、解包 Linux AppImage 运行正式应用，验证版本、原生模块和测试入口隔离。Android 校验五个 APK 的正式签名、递增版本码、正式网络策略，并在独立模拟器上安装 v1.0.1、通过界面保存测试账号、覆盖升级新通用包并再次重启核验保留配置。安装包冒烟结果归档为 `release-smoke-*`。
 
+日常 API 29 CI 额外下载公开的 v1.0.1 通用 APK，执行 `smoke-android-upgrade.sh --prepare-only`：通过实际界面保存账号并重启旧版，确认升级夹具已持久保存。旧版表单通过字段标签显式结束输入，再点击保存，避免首次外部点击被输入状态消费。诊断归档在 Android artifact 的 `production-upgrade-seed/`；正式 Release 保留完整覆盖升级及逐步命令、截图、键盘和安装信息。
+
 全部附件先上传草稿。更新 YAML 的版本、文件名和 SHA-512 必须对应实际安装包；SHA256SUMS 覆盖所有附件。工作流下载草稿附件逐项校验，再设为 Latest 并核验公开下载地址。`validation.json` 保存目标 SHA 和两次验收 CI 链接。iOS、真实校园网和厂商保活仍须独立验证。
