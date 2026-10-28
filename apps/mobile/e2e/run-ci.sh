@@ -11,6 +11,10 @@ adb() { command adb -s "$ANDROID_SERIAL" "$@"; }
 cd "$(dirname "$0")/../../.."
 E2E_ARTIFACTS="$PWD/test-results/android"
 mkdir -p "$E2E_ARTIFACTS"
+if curl -fsS http://127.0.0.1:38081/radio >/dev/null 2>&1; then
+  echo 'Dedicated E2E portal port 38081 is occupied.' >&2
+  exit 1
+fi
 node apps/mobile/e2e/portal.mjs "$PWD/android-e2e-apks" >"$E2E_ARTIFACTS/portal.log" 2>&1 &
 PORTAL_PID=$!
 capture() {

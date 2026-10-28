@@ -19,12 +19,15 @@ object WifiConnector {
 
     data class WifiState(val enabled: Boolean, val connected: Boolean, val ssid: String?)
 
+    fun needsSystemProfile(rule: AutoAuthWifiRule) = rule.password.isEmpty() && WifiSecurity.normalize(rule.security) in setOf("wpa2", "wpa3", "wpa2-wpa3")
     /** 提交连接请求；返回系统是否接受（不代表已连上） */
     fun connect(context: Context, ssid: String, password: String?, security: String? = null, bssid: String? = null, manual: Boolean = false, ruleId: String = ssid): Boolean {
         if (ssid.isBlank()) return false
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val rule = AutoAuthWifiRule(ssid, false, emptyList(), password.orEmpty(), id = ruleId, security = security, bssid = bssid)
+            if (WifiSecurity.normalize(security) == "wpa3") require(wifiManager(context).isWpa3SaeSupported) { "设备不支持 WPA3，请使用系统 WiFi 设置" }
+            if (needsSystemProfile(rule)) return true
             suggestion(context, rule)
             WifiEnvironment.connectPort?.let { return it(context, ssid, password) }
             if (manual) WifiSuggestions.request(context, rule)
@@ -63,7 +66,7 @@ object WifiConnector {
 
     fun openSelection(context: Context, ssid: String, password: String?, security: String? = null, bssid: String? = null) {
         if (Build.VERSION.SDK_INT < 29 || WifiEnvironment.connectPort != null) return
-        val intent = if (Build.VERSION.SDK_INT >= 30) {
+        val intent = if (Build.VERSION.SDK_INT >= 30 && !needsSystemProfile(AutoAuthWifiRule(ssid, false, emptyList(), password.orEmpty(), security = security))) {
             val suggestion = suggestion(context, AutoAuthWifiRule(ssid, false, emptyList(), password.orEmpty(), security = security, bssid = bssid))
             android.content.Intent(android.provider.Settings.ACTION_WIFI_ADD_NETWORKS)
                 .putParcelableArrayListExtra(android.provider.Settings.EXTRA_WIFI_NETWORK_LIST, arrayListOf(suggestion))

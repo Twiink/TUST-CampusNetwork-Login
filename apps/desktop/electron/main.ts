@@ -507,6 +507,7 @@ app.whenReady().then(async () => {
       category: 'system',
       source: 'Main',
     });
+    runtimePorts.onReady?.();
   } catch (error) {
     devLog.error('Failed to initialize app:', error);
     if (!runtimePorts.headlessShell)

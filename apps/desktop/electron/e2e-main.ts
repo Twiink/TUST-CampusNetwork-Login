@@ -181,6 +181,7 @@ const updater = Object.assign(new EventEmitter(), {
 runtimePorts.updater = updater as unknown as NonNullable<typeof runtimePorts.updater>;
 runtimePorts.saveLogPath = async (extension) => path.join(directory, `export.${extension}`);
 runtimePorts.openPath = async () => '';
-Object.assign(globalThis, { netmateHardware: radio });
+Object.assign(globalThis, { netmateHardware: radio, netmateReady: false });
+runtimePorts.onReady = () => Object.assign(globalThis, { netmateReady: true });
 app.on('will-quit', () => server.close());
 await import('./main');

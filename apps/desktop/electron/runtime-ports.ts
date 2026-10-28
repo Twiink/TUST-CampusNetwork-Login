@@ -15,4 +15,5 @@ export const runtimePorts: {
   saveLogPath?: (extension: string) => Promise<string>;
   openPath?: (path: string) => Promise<string>;
   headlessShell?: boolean;
+  onReady?: () => void;
 } = {};

@@ -78,6 +78,13 @@ export const test = base.extend<ElectronFixtures>({
 
     await page.waitForLoadState('domcontentloaded');
     await page.waitForFunction(() => Boolean(window.electronAPI));
+    await expect
+      .poll(() =>
+        electronApp.evaluate(
+          () => (globalThis as unknown as { netmateReady?: boolean }).netmateReady
+        )
+      )
+      .toBe(true);
 
     try {
       await provide(page);

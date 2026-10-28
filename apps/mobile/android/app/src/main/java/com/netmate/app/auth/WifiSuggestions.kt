@@ -27,7 +27,7 @@ object WifiSuggestions {
         if (configChanged) temporary.clear()
         val previous = AutoAuthStore.suggestionRules(context)
         val wanted = (if (profile.enabled) profile.autoConnectWifis else emptyList()) + temporary.values
-        val distinct = wanted.distinctBy { Triple(it.ssid, WifiSecurity.normalize(it.security), WifiSecurity.bssid(it.bssid)) }
+        val distinct = wanted.filterNot { WifiConnector.needsSystemProfile(it) }.distinctBy { Triple(it.ssid, WifiSecurity.normalize(it.security), WifiSecurity.bssid(it.bssid)) }
         val wifi = manager(context)
         val applied = if (Build.VERSION.SDK_INT >= 30 && WifiEnvironment.connectPort == null) (queryPort?.invoke() ?: wifi.networkSuggestions) else if (Build.VERSION.SDK_INT >= 30) queryPort?.invoke() else null
         if (!initialized && previous == null && applied == null) {
