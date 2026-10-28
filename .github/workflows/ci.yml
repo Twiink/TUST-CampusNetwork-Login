@@ -172,6 +172,27 @@ jobs:
       - name: 构建 shared + desktop
         run: pnpm build
 
+      - name: 打包并启动正式桌面程序
+        shell: bash
+        env:
+          DEBUG: pw:browser,pw:protocol
+        run: |
+          mkdir -p release-smoke
+          pnpm -C apps/desktop exec electron-builder --dir --publish never
+          version=$(node -p "require('./apps/desktop/package.json').version")
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            xvfb-run -a node shell/packaged-smoke.mjs apps/desktop/release "$version" > release-smoke/launch.log 2>&1
+          else
+            node shell/packaged-smoke.mjs apps/desktop/release "$version" > release-smoke/launch.log 2>&1
+          fi
+      - name: 归档正式程序启动证据
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: packaged-smoke-${{ matrix.os }}
+          path: release-smoke
+          if-no-files-found: error
+
   desktop-e2e:
     name: 桌面 E2E (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

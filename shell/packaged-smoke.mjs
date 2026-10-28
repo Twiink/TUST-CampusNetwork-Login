@@ -1,6 +1,16 @@
 import { _electron as electron } from 'playwright';
 import { createRequire } from 'node:module';
-import { readdirSync, existsSync, mkdirSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  readdirSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  mkdtempSync,
+  rmSync,
+  cpSync,
+} from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 const [location, version] = process.argv.slice(2);
@@ -36,16 +46,35 @@ if (/netmateHardware|受控网络|10\.0\.2\.2:38081/.test(main)) throw new Error
 if (!find(path.join(resources, 'app.asar.unpacked')).some((file) => file.endsWith('.node')))
   throw new Error('安装包未包含解包原生模块');
 const userData = mkdtempSync(path.join(tmpdir(), 'netmate-package-smoke-'));
-const application = await electron.launch({
-  executablePath: executable,
-  args: [
-    `--user-data-dir=${userData}`,
-    ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : []),
-  ],
-  timeout: 45000,
-});
 mkdirSync('release-smoke', { recursive: true });
+const run = promisify(execFile);
+let application;
+let startupDiagnostics;
+// Capture the running process before Playwright terminates a timed-out launch.
+// In particular, native system dialogs and a blocked main thread are invisible
+// to a renderer-only screenshot or a Playwright trace.
+const startupWatchdog = setTimeout(() => {
+  if (process.platform !== 'darwin') return;
+  startupDiagnostics = (async () => {
+    await run('screencapture', ['-x', 'release-smoke/darwin-startup.png']).catch(() => {});
+    const { stdout } = await run('pgrep', ['-f', userData]).catch(() => ({ stdout: '' }));
+    for (const pid of stdout.trim().split(/\s+/).filter(Boolean)) {
+      await run('sample', [pid, '3', '1', '-file', `release-smoke/darwin-${pid}.sample.txt`]).catch(
+        () => {}
+      );
+    }
+  })();
+}, 20000);
 try {
+  application = await electron.launch({
+    executablePath: executable,
+    args: [
+      `--user-data-dir=${userData}`,
+      ...(process.platform === 'linux' ? ['--no-sandbox', '--ozone-platform=x11'] : []),
+    ],
+    timeout: 45000,
+  });
+  clearTimeout(startupWatchdog);
   const page = await application.firstWindow();
   await page.getByRole('button', { name: '运行状态', exact: true }).waitFor({ timeout: 45000 });
   await page.getByRole('button', { name: '关于', exact: true }).click();
@@ -70,7 +99,14 @@ try {
     JSON.stringify({ version: actual, native, archiveEntries: entries.length }, null, 2) + '\n'
   );
   console.log(`安装包冒烟通过: ${process.platform} ${actual}`);
+} catch (error) {
+  writeFileSync(`release-smoke/${process.platform}-error.txt`, String(error) + '\n');
+  throw error;
 } finally {
-  await application.close();
+  clearTimeout(startupWatchdog);
+  await startupDiagnostics;
+  if (application) await application.close();
+  const logs = path.join(userData, 'logs');
+  if (existsSync(logs)) cpSync(logs, `release-smoke/${process.platform}-logs`, { recursive: true });
   rmSync(userData, { recursive: true, force: true });
 }
