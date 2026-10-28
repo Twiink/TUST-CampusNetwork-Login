@@ -21,7 +21,7 @@ class PlatformHardeningIntegrationTest {
     private val oldRemove = WifiSuggestions.removePort
     private val oldQuery = WifiSuggestions.queryPort
     private val applied = mutableListOf<WifiNetworkSuggestion>()
-    private val rule = AutoAuthWifiRule("NetMateFixture", false, emptyList(), "fixture-password", true, id = "fixture", security = "WPA2", bssid = "aa:bb:cc:dd:ee:01")
+    private val rule = AutoAuthWifiRule("NetMateFixture", true, listOf("account"), "fixture-password", true, id = "fixture", security = "WPA2", bssid = "aa:bb:cc:dd:ee:01")
     @Before fun prepare() {
         WifiSuggestions.addPort = { entries -> events.add("add"); applied.addAll(entries); WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS }
         WifiSuggestions.removePort = { entries -> events.add("remove"); if (entries.isEmpty()) applied.clear() else applied.removeAll(entries.toSet()); WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS }
@@ -39,6 +39,8 @@ class PlatformHardeningIntegrationTest {
             assertTrue(WifiConnector.connect(context, rule.ssid, rule.password, rule.security, rule.bssid))
             assertTrue(events.isEmpty()); return
         }
+        WifiSuggestions.reconcile(context, profile)
+        assertEquals(listOf("add"), events)
         WifiSuggestions.reconcile(context, profile)
         assertEquals(listOf("add"), events)
         WifiSuggestions.reconcile(context, profile.copy(wifiRules = listOf(rule.copy(password = "replacement-password"))), true)

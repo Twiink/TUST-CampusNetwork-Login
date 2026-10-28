@@ -17,6 +17,9 @@ object WifiSuggestions {
     @Volatile var addPort: ((List<WifiNetworkSuggestion>) -> Int)? = null
     @Volatile var queryPort: (() -> List<WifiNetworkSuggestion>)? = null
     @Volatile var removePort: ((List<WifiNetworkSuggestion>) -> Int)? = null
+    private fun sameSuggestion(left: AutoAuthWifiRule, right: AutoAuthWifiRule) =
+        left.ssid == right.ssid && left.password == right.password && left.priority == right.priority &&
+        WifiSecurity.normalize(left.security) == WifiSecurity.normalize(right.security) && WifiSecurity.bssid(left.bssid) == WifiSecurity.bssid(right.bssid)
     private fun manager(context: Context) = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
 
     @Synchronized fun reconcile(context: Context, profile: AutoAuthProfile, configChanged: Boolean = false) {
@@ -33,12 +36,12 @@ object WifiSuggestions {
         }
         val old = previous.orEmpty()
         val removed = if (applied != null) applied.filter { suggestion -> distinct.none { WifiConnector.suggestion(context, it) == suggestion } }
-            else old.filter { it !in distinct }.map { WifiConnector.suggestion(context, it) }
+            else old.filter { previousRule -> distinct.none { sameSuggestion(it, previousRule) } }.map { WifiConnector.suggestion(context, it) }
         if (removed.isNotEmpty()) {
             val result = removePort?.invoke(removed) ?: wifi.removeNetworkSuggestions(removed)
             check(result == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS || result == WifiManager.STATUS_NETWORK_SUGGESTIONS_ERROR_REMOVE_INVALID) { "WiFi 建议撤销失败，请重试同步" }
         }
-        val added = distinct.filter { it !in old || applied?.contains(WifiConnector.suggestion(context, it)) == false }.map { WifiConnector.suggestion(context, it) }
+        val added = distinct.filter { wantedRule -> old.none { sameSuggestion(it, wantedRule) } || applied?.contains(WifiConnector.suggestion(context, wantedRule)) == false }.map { WifiConnector.suggestion(context, it) }
         if (added.isNotEmpty()) {
             val result = addPort?.invoke(added) ?: wifi.addNetworkSuggestions(added)
             check(result == WifiManager.STATUS_NETWORK_SUGGESTIONS_SUCCESS) { "WiFi 建议未获系统接受，请确认授权后重试" }
