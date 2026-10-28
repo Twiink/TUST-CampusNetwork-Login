@@ -160,5 +160,11 @@ appId: com.netmate.app.e2e
 - tapOn: { id: 'tab-logs' }
 - assertVisible: '导出日志'
 - tapOn: '导出日志'
+- extendedWaitUntil:
+    visible: { id: 'android:id/resolver_list' }
+    timeout: 30000
 - back
+- extendedWaitUntil:
+    visible: { id: 'tab-home' }
+    timeout: 30000
 - tapOn: { id: 'tab-home' }

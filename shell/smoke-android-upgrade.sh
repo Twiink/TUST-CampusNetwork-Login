@@ -15,7 +15,7 @@ adb shell pm grant com.netmate.app android.permission.ACCESS_COARSE_LOCATION
 adb shell pm grant com.netmate.app android.permission.ACCESS_FINE_LOCATION
 adb shell pm grant com.netmate.app android.permission.ACCESS_BACKGROUND_LOCATION
 run_flow() {
-  maestro --device "$serial" test --format junit --output "release-smoke/$1.xml" "apps/mobile/e2e/$1.yaml"
+  maestro --device "$serial" test --driver-host-port 7001 --format junit --output "release-smoke/$1.xml" "apps/mobile/e2e/$1.yaml"
   python3 - "release-smoke/$1.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
 root=ET.parse(sys.argv[1]).getroot()

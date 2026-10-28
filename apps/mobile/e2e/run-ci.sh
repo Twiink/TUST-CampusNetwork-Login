@@ -51,7 +51,7 @@ fi
 adb shell dumpsys deviceidle whitelist +com.netmate.app.e2e
 adb shell settings put secure location_mode 3
 run_flow() {
-  maestro --device "$ANDROID_SERIAL" test --format junit --output "$E2E_ARTIFACTS/$1.xml" --debug-output "$E2E_ARTIFACTS/$1" --test-output-dir "$E2E_ARTIFACTS/$1" "apps/mobile/e2e/$1.yaml"
+  maestro --device "$ANDROID_SERIAL" test --driver-host-port 7001 --format junit --output "$E2E_ARTIFACTS/$1.xml" --debug-output "$E2E_ARTIFACTS/$1" --test-output-dir "$E2E_ARTIFACTS/$1" "apps/mobile/e2e/$1.yaml"
   python3 - "$E2E_ARTIFACTS/$1.xml" <<'PY'
 import sys, xml.etree.ElementTree as ET
 root = ET.parse(sys.argv[1]).getroot()
