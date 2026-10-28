@@ -6,7 +6,7 @@ use napi::threadsafe_function::ErrorStrategy;
 use napi::threadsafe_function::ThreadsafeFunction;
 use objc2::msg_send;
 use objc2::runtime::AnyObject;
-use objc2_core_wlan::CWWiFiClient;
+use objc2_core_wlan::{CWSecurity, CWWiFiClient};
 use std::collections::HashMap;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -17,20 +17,47 @@ static WATCHING: AtomicBool = AtomicBool::new(false);
 pub fn scan_wifi() -> Result<Vec<NativeWifiInfo>> {
     unsafe {
         let client = CWWiFiClient::sharedWiFiClient();
-        let interface = client.interface().ok_or_else(|| Error::from_reason("WiFi interface unavailable"))?;
-        let networks = interface.scanForNetworksWithSSID_error(None)
-            .map_err(|_| Error::from_reason("WiFi scan denied; check Location Services permission"))?;
+        let interface = client
+            .interface()
+            .ok_or_else(|| Error::from_reason("WiFi interface unavailable"))?;
+        let networks = interface.scanForNetworksWithSSID_error(None).map_err(|_| {
+            Error::from_reason("WiFi scan denied; check Location Services permission")
+        })?;
         let mut result = Vec::new();
         for network in networks.iter() {
-            let Some(ssid) = network.ssid().map(|value| value.to_string()) else { continue; };
-            if ssid.is_empty() { continue; }
-            use objc2_core_wlan::CWSecurity;
-            let security = if network.supportsSecurity(CWSecurity::WPA3Personal) { "WPA3" }
-                else if network.supportsSecurity(CWSecurity::WPA2Personal) { "WPA2" }
-                else if network.supportsSecurity(CWSecurity::None) { "Open" }
-                else { "Enterprise" };
-            result.push(NativeWifiInfo { ssid: Some(ssid), bssid: network.bssid().map(|value| value.to_string()),
-                rssi: Some(network.rssiValue() as i32), link_speed: None, channel: None, frequency: None, security: Some(security.into()) });
+            let Some(ssid) = network.ssid().map(|value| value.to_string()) else {
+                continue;
+            };
+            if ssid.is_empty() {
+                continue;
+            }
+            let security = [
+                CWSecurity::WPA3Enterprise,
+                CWSecurity::WPA2Enterprise,
+                CWSecurity::WPAEnterprise,
+                CWSecurity::DynamicWEP,
+                CWSecurity::WEP,
+                CWSecurity::WPA3Transition,
+                CWSecurity::WPA3Personal,
+                CWSecurity::WPA2Personal,
+                CWSecurity::WPAPersonal,
+                CWSecurity::OWETransition,
+                CWSecurity::OWE,
+                CWSecurity::None,
+            ]
+            .into_iter()
+            .find(|security| network.supportsSecurity(*security))
+            .map(security_name)
+            .unwrap_or("Unknown");
+            result.push(NativeWifiInfo {
+                ssid: Some(ssid),
+                bssid: network.bssid().map(|value| value.to_string()),
+                rssi: Some(network.rssiValue() as i32),
+                link_speed: None,
+                channel: None,
+                frequency: None,
+                security: Some(security.into()),
+            });
         }
         Ok(result)
     }
@@ -63,6 +90,24 @@ fn nsstring_to_string(value: *mut AnyObject) -> Option<String> {
     }
 }
 
+fn security_name(security: CWSecurity) -> &'static str {
+    match security {
+        CWSecurity::None => "Open",
+        CWSecurity::WEP | CWSecurity::DynamicWEP => "WEP",
+        CWSecurity::WPAPersonal => "WPA",
+        CWSecurity::WPAPersonalMixed | CWSecurity::WPA2Personal | CWSecurity::Personal => "WPA2",
+        CWSecurity::WPA3Personal => "WPA3",
+        CWSecurity::WPA3Transition => "WPA2/WPA3",
+        CWSecurity::WPAEnterprise
+        | CWSecurity::WPAEnterpriseMixed
+        | CWSecurity::WPA2Enterprise
+        | CWSecurity::WPA3Enterprise
+        | CWSecurity::Enterprise => "Enterprise",
+        CWSecurity::OWE | CWSecurity::OWETransition => "OWE",
+        _ => "Unknown",
+    }
+}
+
 pub fn current_wifi() -> Option<NativeWifiInfo> {
     unsafe {
         let client = CWWiFiClient::sharedWiFiClient();
@@ -90,7 +135,7 @@ pub fn current_wifi() -> Option<NativeWifiInfo> {
             msg_send![channel, channelNumber]
         };
         let bssid_obj: *mut AnyObject = msg_send![interface, bssid];
-        let security_raw: i64 = msg_send![interface, security];
+        let security = interface_ref.security();
 
         Some(NativeWifiInfo {
             ssid: Some(ssid),
@@ -103,16 +148,7 @@ pub fn current_wifi() -> Option<NativeWifiInfo> {
                 None
             },
             frequency: if frequency > 0 { Some(frequency) } else { None },
-            security: Some(match security_raw {
-                0 => "Open".into(),
-                1 => "WEP".into(),
-                2 => "WPA".into(),
-                3 => "WPA Personal".into(),
-                4 => "WPA Enterprise".into(),
-                5 => "WPA2".into(),
-                6 => "WPA2 Enterprise".into(),
-                _ => "Unknown".into(),
-            }),
+            security: Some(security_name(security).into()),
         })
     }
 }
@@ -183,12 +219,18 @@ fn read_interfaces() -> (
 
         let family = unsafe { *entry.ifa_addr }.sa_family;
         let length = unsafe { *entry.ifa_addr }.sa_len as usize;
-        if family == AF_INET_MACOS && ipv4.is_none() && length >= std::mem::size_of::<libc::sockaddr_in>() {
+        if family == AF_INET_MACOS
+            && ipv4.is_none()
+            && length >= std::mem::size_of::<libc::sockaddr_in>()
+        {
             let addr = unsafe { &*(entry.ifa_addr.cast::<libc::sockaddr_in>()) };
             if addr.sin_addr.s_addr.to_ne_bytes()[0] != 127 {
                 ipv4 = Some(Ipv4Addr::from(addr.sin_addr.s_addr.to_ne_bytes()).to_string());
                 selected_name = Some(name.clone());
-                if !entry.ifa_netmask.is_null() && unsafe { *entry.ifa_netmask }.sa_len as usize >= std::mem::size_of::<libc::sockaddr_in>() {
+                if !entry.ifa_netmask.is_null()
+                    && unsafe { *entry.ifa_netmask }.sa_len as usize
+                        >= std::mem::size_of::<libc::sockaddr_in>()
+                {
                     let netmask = unsafe { &*(entry.ifa_netmask.cast::<libc::sockaddr_in>()) };
                     mask = Some(Ipv4Addr::from(netmask.sin_addr.s_addr.to_ne_bytes()).to_string());
                 }
@@ -202,11 +244,19 @@ fn read_interfaces() -> (
                     name.to_string(),
                     format!(
                         "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                        bytes[0] as u8, bytes[1] as u8, bytes[2] as u8, bytes[3] as u8, bytes[4] as u8, bytes[5] as u8
+                        bytes[0] as u8,
+                        bytes[1] as u8,
+                        bytes[2] as u8,
+                        bytes[3] as u8,
+                        bytes[4] as u8,
+                        bytes[5] as u8
                     ),
                 );
             }
-        } else if family == AF_INET6_MACOS && ipv6.is_none() && length >= std::mem::size_of::<libc::sockaddr_in6>() {
+        } else if family == AF_INET6_MACOS
+            && ipv6.is_none()
+            && length >= std::mem::size_of::<libc::sockaddr_in6>()
+        {
             let addr = unsafe { &*(entry.ifa_addr.cast::<libc::sockaddr_in6>()) };
             let text = Ipv6Addr::from(addr.sin6_addr.s6_addr).to_string();
             if !text.starts_with("fe80") && text != "::1" {
@@ -259,7 +309,9 @@ fn read_default_gateway() -> Option<String> {
 fn parse_default_gateway(bytes: &[u8]) -> Option<String> {
     let mut offset = 0;
     while offset + std::mem::size_of::<libc::rt_msghdr>() <= bytes.len() {
-        let header = unsafe { std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<libc::rt_msghdr>()) };
+        let header = unsafe {
+            std::ptr::read_unaligned(bytes.as_ptr().add(offset).cast::<libc::rt_msghdr>())
+        };
         let message_len = usize::from(header.rtm_msglen);
         if message_len < std::mem::size_of::<libc::rt_msghdr>()
             || offset + message_len > bytes.len()
@@ -268,7 +320,10 @@ fn parse_default_gateway(bytes: &[u8]) -> Option<String> {
         }
 
         let flags = header.rtm_flags;
-        if header.rtm_version != libc::RTM_VERSION as u8 { offset += message_len; continue; }
+        if header.rtm_version != libc::RTM_VERSION as u8 {
+            offset += message_len;
+            continue;
+        }
         let addrs = header.rtm_addrs;
         let body = &bytes[offset + std::mem::size_of::<libc::rt_msghdr>()..offset + message_len];
         if flags & RTF_UP != 0
@@ -284,7 +339,9 @@ fn parse_default_gateway(bytes: &[u8]) -> Option<String> {
                     continue;
                 }
                 let address_len = *body.get(cursor)?;
-                if address_len < 2 { return None; }
+                if address_len < 2 {
+                    return None;
+                }
                 let len = sockaddr_rounded_len(address_len);
                 let sockaddr = &body.get(cursor..cursor + len)?;
                 match index {
@@ -308,7 +365,9 @@ fn sockaddr_rounded_len(length: u8) -> usize {
 }
 
 fn sockaddr_family_prefix_len(sockaddr: &[u8]) -> Option<usize> {
-    if usize::from(*sockaddr.first()?) > sockaddr.len() { return None; }
+    if usize::from(*sockaddr.first()?) > sockaddr.len() {
+        return None;
+    }
     match *sockaddr.get(1)? {
         AF_INET_MACOS => sockaddr.get(4..8).map(|bytes| {
             u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]).count_ones() as usize
@@ -325,7 +384,10 @@ fn sockaddr_family_prefix_len(sockaddr: &[u8]) -> Option<usize> {
 }
 
 fn sockaddr_ipv4(sockaddr: &[u8]) -> Option<String> {
-    if sockaddr.get(1)? != &AF_INET_MACOS || usize::from(*sockaddr.first()?) > sockaddr.len() || *sockaddr.first()? < 8 {
+    if sockaddr.get(1)? != &AF_INET_MACOS
+        || usize::from(*sockaddr.first()?) > sockaddr.len()
+        || *sockaddr.first()? < 8
+    {
         return None;
     }
     let bytes = sockaddr.get(4..8)?;
@@ -334,91 +396,6 @@ fn sockaddr_ipv4(sockaddr: &[u8]) -> Option<String> {
         return None;
     }
     Some(Ipv4Addr::from(address).to_string())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_route_message(flags: i32, addrs: i32, dst_mask: u32, gateway: [u8; 4]) -> Vec<u8> {
-        let mut message = vec![0u8; std::mem::size_of::<libc::rt_msghdr>()];
-        let header = message.as_mut_slice();
-        header[2] = libc::RTM_VERSION as u8;
-        header[3] = libc::RTM_GET as u8;
-        header[8..12].copy_from_slice(&flags.to_ne_bytes());
-        header[12..16].copy_from_slice(&addrs.to_ne_bytes());
-
-        let mut dst = vec![0u8; 16];
-        dst[0] = 16;
-        dst[1] = AF_INET_MACOS;
-        dst[4..8].copy_from_slice(&dst_mask.to_be_bytes());
-        message.extend_from_slice(&dst);
-
-        let mut gateway_sockaddr = vec![0u8; 16];
-        gateway_sockaddr[0] = 16;
-        gateway_sockaddr[1] = AF_INET_MACOS;
-        gateway_sockaddr[4..8].copy_from_slice(&gateway);
-        message.extend_from_slice(&gateway_sockaddr);
-
-        let len = message.len() as u16;
-        message[0..2].copy_from_slice(&len.to_ne_bytes());
-        message
-    }
-
-    #[test]
-    fn darwin_address_layouts_match_system_abi() {
-        assert_eq!(std::mem::offset_of!(libc::sockaddr_in, sin_addr), 4);
-        assert_eq!(std::mem::offset_of!(libc::sockaddr_in6, sin6_addr), 8);
-        assert_eq!(std::mem::offset_of!(libc::sockaddr_dl, sdl_data), 8);
-        let bytes = [16, AF_INET_MACOS, 0, 0, 10, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert_eq!(sockaddr_ipv4(&bytes).as_deref(), Some("10.1.2.3"));
-    }
-
-    #[test]
-    fn rejects_truncated_and_invalid_route_messages() {
-        let bytes = make_route_message(RTF_UP | RTF_GATEWAY, RTA_DST | RTA_GATEWAY, 0, [10, 1, 2, 1]);
-        for length in 0..bytes.len() { assert_eq!(parse_default_gateway(&bytes[..length]), None); }
-        let mut invalid = bytes.clone();
-        invalid[std::mem::size_of::<libc::rt_msghdr>()] = 0;
-        assert_eq!(parse_default_gateway(&invalid), None);
-    }
-
-    #[test]
-    fn parses_default_ipv4_gateway() {
-        let mut bytes = make_route_message(
-            RTF_UP | RTF_GATEWAY,
-            RTA_DST | RTA_GATEWAY,
-            0,
-            [192, 168, 1, 1],
-        );
-        bytes.extend_from_slice(&make_route_message(
-            RTF_UP | RTF_GATEWAY,
-            RTA_DST | RTA_GATEWAY,
-            0xffffff00,
-            [10, 0, 0, 1],
-        ));
-
-        assert_eq!(
-            parse_default_gateway(&bytes).as_deref(),
-            Some("192.168.1.1")
-        );
-    }
-
-    #[test]
-    fn ignores_subnet_routes_and_non_gateway_routes() {
-        let bytes = [
-            make_route_message(
-                RTF_UP | RTF_GATEWAY,
-                RTA_DST | RTA_GATEWAY,
-                0xffffff00,
-                [10, 0, 0, 1],
-            ),
-            make_route_message(RTF_UP, RTA_DST, 0, [192, 168, 1, 1]),
-        ]
-        .concat();
-
-        assert_eq!(parse_default_gateway(&bytes), None);
-    }
 }
 
 fn read_dns() -> Vec<String> {
@@ -470,4 +447,111 @@ pub fn watch_network(
     });
     WATCHING.store(true, Ordering::SeqCst);
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn security_modes_use_core_wlan_constants() {
+        for (mode, expected) in [
+            (CWSecurity::WPA2Personal, "WPA2"),
+            (CWSecurity::WPA3Personal, "WPA3"),
+            (CWSecurity::WPA3Transition, "WPA2/WPA3"),
+            (CWSecurity::WPA2Enterprise, "Enterprise"),
+            (CWSecurity::DynamicWEP, "WEP"),
+            (CWSecurity::None, "Open"),
+            (CWSecurity::Unknown, "Unknown"),
+        ] {
+            assert_eq!(security_name(mode), expected);
+        }
+    }
+
+    fn make_route_message(flags: i32, addrs: i32, dst_mask: u32, gateway: [u8; 4]) -> Vec<u8> {
+        let mut message = vec![0u8; std::mem::size_of::<libc::rt_msghdr>()];
+        let header = message.as_mut_slice();
+        header[2] = libc::RTM_VERSION as u8;
+        header[3] = libc::RTM_GET as u8;
+        header[8..12].copy_from_slice(&flags.to_ne_bytes());
+        header[12..16].copy_from_slice(&addrs.to_ne_bytes());
+
+        let mut dst = vec![0u8; 16];
+        dst[0] = 16;
+        dst[1] = AF_INET_MACOS;
+        dst[4..8].copy_from_slice(&dst_mask.to_be_bytes());
+        message.extend_from_slice(&dst);
+
+        let mut gateway_sockaddr = vec![0u8; 16];
+        gateway_sockaddr[0] = 16;
+        gateway_sockaddr[1] = AF_INET_MACOS;
+        gateway_sockaddr[4..8].copy_from_slice(&gateway);
+        message.extend_from_slice(&gateway_sockaddr);
+
+        let len = message.len() as u16;
+        message[0..2].copy_from_slice(&len.to_ne_bytes());
+        message
+    }
+
+    #[test]
+    fn darwin_address_layouts_match_system_abi() {
+        assert_eq!(std::mem::offset_of!(libc::sockaddr_in, sin_addr), 4);
+        assert_eq!(std::mem::offset_of!(libc::sockaddr_in6, sin6_addr), 8);
+        assert_eq!(std::mem::offset_of!(libc::sockaddr_dl, sdl_data), 8);
+        let bytes = [16, AF_INET_MACOS, 0, 0, 10, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert_eq!(sockaddr_ipv4(&bytes).as_deref(), Some("10.1.2.3"));
+    }
+
+    #[test]
+    fn rejects_truncated_and_invalid_route_messages() {
+        let bytes = make_route_message(
+            RTF_UP | RTF_GATEWAY,
+            RTA_DST | RTA_GATEWAY,
+            0,
+            [10, 1, 2, 1],
+        );
+        for length in 0..bytes.len() {
+            assert_eq!(parse_default_gateway(&bytes[..length]), None);
+        }
+        let mut invalid = bytes.clone();
+        invalid[std::mem::size_of::<libc::rt_msghdr>()] = 0;
+        assert_eq!(parse_default_gateway(&invalid), None);
+    }
+
+    #[test]
+    fn parses_default_ipv4_gateway() {
+        let mut bytes = make_route_message(
+            RTF_UP | RTF_GATEWAY,
+            RTA_DST | RTA_GATEWAY,
+            0,
+            [192, 168, 1, 1],
+        );
+        bytes.extend_from_slice(&make_route_message(
+            RTF_UP | RTF_GATEWAY,
+            RTA_DST | RTA_GATEWAY,
+            0xffffff00,
+            [10, 0, 0, 1],
+        ));
+
+        assert_eq!(
+            parse_default_gateway(&bytes).as_deref(),
+            Some("192.168.1.1")
+        );
+    }
+
+    #[test]
+    fn ignores_subnet_routes_and_non_gateway_routes() {
+        let bytes = [
+            make_route_message(
+                RTF_UP | RTF_GATEWAY,
+                RTA_DST | RTA_GATEWAY,
+                0xffffff00,
+                [10, 0, 0, 1],
+            ),
+            make_route_message(RTF_UP, RTA_DST, 0, [192, 168, 1, 1]),
+        ]
+        .concat();
+
+        assert_eq!(parse_default_gateway(&bytes), None);
+    }
 }

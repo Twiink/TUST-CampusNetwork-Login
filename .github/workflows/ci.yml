@@ -178,11 +178,21 @@ jobs:
           DEBUG: pw:browser,pw:protocol
         run: |
           mkdir -p release-smoke
-          pnpm -C apps/desktop exec electron-builder --dir --publish never
           version=$(node -p "require('./apps/desktop/package.json').version")
-          if [ "${{ runner.os }}" = "Linux" ]; then
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            pnpm -C apps/desktop exec electron-builder --mac dmg --publish never
+            image=$(find apps/desktop/release -name '*.dmg' -type f | head -n 1)
+            mountpoint=$(mktemp -d /tmp/netmate-dmg.XXXXXX)
+            installation=$(mktemp -d /tmp/netmate-installed.XXXXXX)
+            hdiutil attach "$image" -nobrowse -mountpoint "$mountpoint"
+            ditto "$mountpoint/NetMate.app" "$installation/NetMate.app"
+            hdiutil detach "$mountpoint"
+            node shell/packaged-smoke.mjs "$installation/NetMate.app" "$version" > release-smoke/launch.log 2>&1
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            pnpm -C apps/desktop exec electron-builder --dir --publish never
             xvfb-run -a node shell/packaged-smoke.mjs apps/desktop/release "$version" > release-smoke/launch.log 2>&1
           else
+            pnpm -C apps/desktop exec electron-builder --dir --publish never
             node shell/packaged-smoke.mjs apps/desktop/release "$version" > release-smoke/launch.log 2>&1
           fi
       - name: 归档正式程序启动证据

@@ -35,6 +35,7 @@ const ATTR_STA_INFO: u16 = 21;
 const ATTR_BSS: u16 = 47;
 const BSS_BSSID: u16 = 1;
 const BSS_FREQUENCY: u16 = 2;
+const BSS_CAPABILITY: u16 = 5;
 const BSS_INFORMATION_ELEMENTS: u16 = 6;
 const BSS_STATUS: u16 = 9;
 const BSS_STATUS_ASSOCIATED: u32 = 1;
@@ -367,29 +368,63 @@ fn channel_from_freq(freq: u32) -> i32 {
     }
 }
 
+fn rsn_security(body: &[u8]) -> Option<&'static str> {
+    if body.get(..2)? != [1, 0] {
+        return None;
+    }
+    // RSN: version, group cipher, pairwise count/list, AKM count/list.
+    let count = u16::from_le_bytes(body.get(6..8)?.try_into().ok()?) as usize;
+    let akm_offset = 8usize.checked_add(count.checked_mul(4)?)?;
+    let akm_count =
+        u16::from_le_bytes(body.get(akm_offset..akm_offset + 2)?.try_into().ok()?) as usize;
+    let suites = body.get(akm_offset + 2..akm_offset + 2 + akm_count.checked_mul(4)?)?;
+    let mut psk = false;
+    let mut sae = false;
+    let mut enterprise = false;
+    let mut owe = false;
+    for suite in suites.as_chunks::<4>().0 {
+        if suite[..3] != [0, 15, 172] {
+            continue;
+        }
+        match suite[3] {
+            2 | 4 | 6 => psk = true,
+            8 | 9 | 24 => sae = true,
+            1 | 3 | 5 | 11 | 12 | 13 => enterprise = true,
+            18 => owe = true,
+            _ => {}
+        }
+    }
+    if enterprise {
+        Some("Enterprise")
+    } else if sae && psk {
+        Some("WPA2/WPA3")
+    } else if sae {
+        Some("WPA3")
+    } else if psk {
+        Some("WPA2")
+    } else if owe {
+        Some("OWE")
+    } else {
+        None
+    }
+}
+
 fn parse_security_from_ies(ies: &[u8]) -> Option<String> {
-    // 遍历 beacon IE：类型 48=RSN，221=vendor（微软 WPA）
     let mut off = 0;
-    let mut parts: Vec<&str> = Vec::new();
+    let mut legacy_wpa = false;
     while off + 2 <= ies.len() {
         let typ = ies[off];
         let len = ies[off + 1] as usize;
-        if off + 2 + len > ies.len() {
-            break;
-        }
-        let body = &ies[off + 2..off + 2 + len];
+        let body = ies.get(off + 2..off + 2 + len)?;
         if typ == 48 {
-            parts.push("WPA2");
-        } else if typ == 221 && body.len() >= 6 && &body[..6] == b"\x00\x50\xf2\x01\x01\x00" {
-            parts.push("WPA");
+            // Do not downgrade an unknown or truncated RSN suite to WPA2.
+            return rsn_security(body).map(str::to_owned);
+        } else if typ == 221 && body.starts_with(b"\x00\x50\xf2\x01\x01\x00") {
+            legacy_wpa = true;
         }
         off += 2 + len;
     }
-    if parts.is_empty() {
-        None
-    } else {
-        Some(parts.join("/"))
-    }
+    legacy_wpa.then(|| "WPA".into())
 }
 
 pub fn current_wifi() -> Option<NativeWifiInfo> {
@@ -922,6 +957,8 @@ fn wifi_snapshot() -> Result<NativeWifiInfo> {
             let mut cur_ssid = None;
             let mut cur_freq = None;
             let mut cur_security = None;
+            let mut capability = None;
+            let mut has_security_ie = false;
             parse_attrs(data, &mut |btyp, bdata| match btyp {
                 BSS_STATUS if bdata.len() >= 4 => {
                     status = u32::from_ne_bytes([bdata[0], bdata[1], bdata[2], bdata[3]])
@@ -931,8 +968,27 @@ fn wifi_snapshot() -> Result<NativeWifiInfo> {
                     let f = u32::from_ne_bytes([bdata[0], bdata[1], bdata[2], bdata[3]]);
                     cur_freq = Some(f);
                 }
+                BSS_CAPABILITY if bdata.len() >= 2 => {
+                    capability = Some(u16::from_ne_bytes([bdata[0], bdata[1]]));
+                }
                 BSS_INFORMATION_ELEMENTS => {
                     cur_security = parse_security_from_ies(bdata);
+                    let mut cursor = 0;
+                    while cursor + 2 <= bdata.len() {
+                        let size = bdata[cursor + 1] as usize;
+                        if cursor + 2 + size > bdata.len() {
+                            has_security_ie = true;
+                            break;
+                        }
+                        if bdata[cursor] == 48
+                            || (bdata[cursor] == 221
+                                && bdata[cursor + 2..cursor + 2 + size]
+                                    .starts_with(b"\x00\x50\xf2\x01"))
+                        {
+                            has_security_ie = true;
+                        }
+                        cursor += 2 + size;
+                    }
                     let mut off = 0;
                     while off + 2 <= bdata.len() {
                         let ie = bdata[off];
@@ -959,7 +1015,14 @@ fn wifi_snapshot() -> Result<NativeWifiInfo> {
                     frequency = Some(f as i32);
                     channel = Some(channel_from_freq(f));
                 }
-                security = cur_security;
+                security = cur_security.or_else(|| {
+                    if has_security_ie {
+                        None
+                    } else {
+                        capability
+                            .map(|flags| if flags & 0x10 == 0 { "Open" } else { "WEP" }.into())
+                    }
+                });
             }
         });
     });
@@ -1024,4 +1087,60 @@ fn wifi_snapshot() -> Result<NativeWifiInfo> {
         security,
     })
     .ok_or_else(|| Error::new(Status::GenericFailure, "no wifi"))
+}
+
+#[cfg(test)]
+mod security_tests {
+    use super::*;
+    fn rsn(suites: &[u8]) -> Vec<u8> {
+        let mut body = vec![
+            1,
+            0,
+            0,
+            15,
+            172,
+            4,
+            1,
+            0,
+            0,
+            15,
+            172,
+            4,
+            suites.len() as u8,
+            0,
+        ];
+        for suite in suites {
+            body.extend_from_slice(&[0, 15, 172, *suite]);
+        }
+        let mut ie = vec![48, body.len() as u8];
+        ie.extend(body);
+        ie
+    }
+    #[test]
+    fn rsn_suites_distinguish_wpa2_wpa3_transition_and_enterprise() {
+        for (suites, expected) in [
+            (vec![2], "WPA2"),
+            (vec![8], "WPA3"),
+            (vec![2, 8], "WPA2/WPA3"),
+            (vec![1], "Enterprise"),
+            (vec![12], "Enterprise"),
+            (vec![18], "OWE"),
+        ] {
+            assert_eq!(
+                parse_security_from_ies(&rsn(&suites)).as_deref(),
+                Some(expected)
+            );
+        }
+    }
+    #[test]
+    fn truncated_or_unknown_rsn_never_becomes_wpa2() {
+        let ie = rsn(&[8]);
+        for size in 0..ie.len() {
+            assert_eq!(parse_security_from_ies(&ie[..size]), None);
+        }
+        assert_eq!(parse_security_from_ies(&rsn(&[255])), None);
+        let mut invalid = ie.clone();
+        invalid[8] = 255;
+        assert_eq!(parse_security_from_ies(&invalid), None);
+    }
 }

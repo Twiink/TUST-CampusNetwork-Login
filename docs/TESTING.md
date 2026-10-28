@@ -8,15 +8,15 @@
 
 `.github/workflows/ci.yml` 响应所有分支 push、PR 和 workflow_dispatch。
 
-| 门禁               | 内容                                                                               |
-| ------------------ | ---------------------------------------------------------------------------------- |
-| quality            | lint、类型、普通测试、Prettier                                                     |
-| network-simulation | 共享网络模拟和 netem 链路检查                                                      |
-| desktop-build      | Windows/macOS/Linux Rust 测试、原生 API 加载和生产构建；macOS 执行 Darwin 专属用例 |
-| desktop-e2e        | 三平台 Playwright；Linux 使用独立 D-Bus、真实 libsecret 和 xvfb                    |
-| android-build      | JVM 单测、独立 E2E APK、instrumentation APK、同签名更高版本 APK、错误签名 APK      |
-| android-e2e        | API 28/29/36，原生引擎集成测试和 Maestro 2.12.0 用户流程                           |
-| acceptance         | 所有依赖 job 必须 success；失败、跳过和取消均不能通过                              |
+| 门禁               | 内容                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| quality            | lint、类型、普通测试、Prettier                                                       |
+| network-simulation | 共享网络模拟和 netem 链路检查                                                        |
+| desktop-build      | Windows/macOS/Linux Rust 测试、原生 API、生产构建和正式包启动；macOS 从 DMG 复制安装 |
+| desktop-e2e        | 三平台 Playwright；Linux 使用独立 D-Bus、真实 libsecret 和 xvfb                      |
+| android-build      | JVM 单测、独立 E2E APK、instrumentation APK、同签名更高版本 APK、错误签名 APK        |
+| android-e2e        | API 28/29/36，原生引擎集成测试和 Maestro 2.12.0 用户流程                             |
+| acceptance         | 所有依赖 job 必须 success；失败、跳过和取消均不能通过                                |
 
 ## 桌面 E2E 边界
 
@@ -44,6 +44,6 @@ CI 构建基础版本 1.0.2-e2e（10020）和同签名 1.0.3-e2e（10030），�
 
 最终候选必须在同一 SHA 完整运行两轮 CI，所有矩阵 job 首次通过，无失败、跳过或重试后通过；master 最终提交也必须完成 CI。`shell/release-gate.mjs` 用 GitHub API 检查实际提交、版本、矩阵及 run_attempt，自动发布、手动发布和产物复用都执行同一门禁。
 
-Release 工作流安装 Windows EXE、挂载 macOS DMG、解包 Linux AppImage 运行正式应用，验证版本、原生模块和测试入口隔离。Android 校验五个 APK 的正式签名、递增版本码、正式网络策略，并在独立模拟器上安装 v1.0.1、通过界面保存测试账号、覆盖升级新通用包并再次重启核验保留配置。安装包冒烟结果归档为 `release-smoke-*`。
+Release 工作流安装 Windows EXE、将 macOS DMG 内的应用复制安装后启动、解包 Linux AppImage 运行正式应用，验证版本、原生模块和测试入口隔离。Android 校验五个 APK 的正式签名、递增版本码、正式网络策略，并在独立模拟器上安装 v1.0.1、通过界面保存测试账号、覆盖升级新通用包并再次重启核验保留配置。安装包冒烟结果归档为 `release-smoke-*`。
 
 全部附件先上传草稿。更新 YAML 的版本、文件名和 SHA-512 必须对应实际安装包；SHA256SUMS 覆盖所有附件。工作流下载草稿附件逐项校验，再设为 Latest 并核验公开下载地址。`validation.json` 保存目标 SHA 和两次验收 CI 链接。iOS、真实校园网和厂商保活仍须独立验证。

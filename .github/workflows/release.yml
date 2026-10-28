@@ -362,8 +362,10 @@ jobs:
           image=$(find apps/desktop/release -name '*.dmg' -type f | head -n 1)
           mkdir -p /tmp/netmate-release-smoke
           hdiutil attach "$image" -nobrowse -mountpoint /tmp/netmate-release-smoke
-          node shell/packaged-smoke.mjs /tmp/netmate-release-smoke "${{ needs.resolve-release.outputs.version }}"
+          installation=$(mktemp -d /tmp/netmate-installed.XXXXXX)
+          ditto /tmp/netmate-release-smoke/NetMate.app "$installation/NetMate.app"
           hdiutil detach /tmp/netmate-release-smoke
+          node shell/packaged-smoke.mjs "$installation/NetMate.app" "${{ needs.resolve-release.outputs.version }}"
           archive=$(find apps/desktop/release -name '*-Mac-*.zip' -type f | head -n 1)
           unzip -t "$archive" > /tmp/netmate-mac-zip-check.txt
       - uses: actions/upload-artifact@v7
@@ -577,9 +579,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p previous-release
+          mkdir -p release-smoke
           gh release download v1.0.1 --pattern '*universal*.apk' --dir previous-release
           previous=$(find previous-release -name '*.apk' -type f | head -n 1)
-          bash shell/verify-android-apks.sh apps/mobile/android/app/build/outputs/apk/release "$previous" "${{ needs.resolve-release.outputs.version }}"
+          bash shell/verify-android-apks.sh apps/mobile/android/app/build/outputs/apk/release "$previous" "${{ needs.resolve-release.outputs.version }}" 2>&1 | tee release-smoke/android-apk-verification.txt
 
       - name: 安装固定 Maestro 2.12.0
         run: |

@@ -14,9 +14,9 @@ use windows::Win32::NetworkManagement::IpHelper::{
 };
 use windows::Win32::NetworkManagement::WiFi::{
     dot11_BSS_type_infrastructure, wlan_interface_state_connected,
-    wlan_intf_opcode_current_connection, WlanEnumInterfaces, WlanGetNetworkBssList, WlanOpenHandle,
-    WlanQueryInterface, WlanRegisterNotification, L2_NOTIFICATION_DATA,
-    WLAN_NOTIFICATION_SOURCE_ALL,
+    wlan_intf_opcode_current_connection, WlanCloseHandle, WlanEnumInterfaces, WlanFreeMemory,
+    WlanGetNetworkBssList, WlanOpenHandle, WlanQueryInterface, WlanRegisterNotification,
+    L2_NOTIFICATION_DATA, WLAN_BSS_ENTRY, WLAN_CONNECTION_ATTRIBUTES, WLAN_NOTIFICATION_SOURCE_ALL,
 };
 
 static WATCHER: OnceLock<Watcher> = OnceLock::new();
@@ -26,115 +26,180 @@ struct Watcher {
     callback: ThreadsafeFunction<(), ErrorStrategy::CalleeHandled>,
 }
 
-fn open_wlan_handle() -> Result<HANDLE> {
+struct WlanHandle(HANDLE);
+impl Drop for WlanHandle {
+    fn drop(&mut self) {
+        unsafe {
+            WlanCloseHandle(self.0, None);
+        }
+    }
+}
+
+fn open_wlan_handle() -> Result<WlanHandle> {
     let mut negotiated_version = 0u32;
     let mut handle = HANDLE::default();
     let result = unsafe { WlanOpenHandle(2, None, &mut negotiated_version, &mut handle) };
     if result != 0 {
         return Err(Error::new(Status::GenericFailure, "WlanOpenHandle failed"));
     }
-    Ok(handle)
+    Ok(WlanHandle(handle))
 }
 
-fn query_connection_ssid(handle: HANDLE, guid: *const u8) -> Option<String> {
+fn query_connection(
+    handle: HANDLE,
+    guid: &windows::core::GUID,
+) -> Option<WLAN_CONNECTION_ATTRIBUTES> {
     let mut data_size = 0u32;
     let mut data = std::ptr::null_mut();
-    let mut opcode_type = Default::default();
     let result = unsafe {
         WlanQueryInterface(
             handle,
-            guid as *const _,
+            guid,
             wlan_intf_opcode_current_connection,
             None,
             &mut data_size,
             &mut data,
-            Some(&mut opcode_type),
+            None,
         )
     };
-    if result != 0 || data.is_null() {
+    if data.is_null() {
         return None;
     }
-    // WLAN_CONNECTION_ATTRIBUTES 布局： isState(4) + strProfileName[WLAN_MAX_NAME_LENGTH=256]wchar
-    // + wlanAssociationAttributes + wlanSecurityAttributes
-    // SSID 位于 assocAttributes dot11Ssid（4 字节长度 + 32 字节缓冲）。
-    let base = data.cast::<u8>();
+    let attributes =
+        if result == 0 && data_size as usize >= std::mem::size_of::<WLAN_CONNECTION_ATTRIBUTES>() {
+            Some(unsafe { *data.cast::<WLAN_CONNECTION_ATTRIBUTES>() })
+        } else {
+            None
+        };
     unsafe {
-        let assoc_offset = 4 + 256 * 2;
-        let ssid_len_ptr = base.add(assoc_offset) as *const u32;
-        let len = *ssid_len_ptr as usize;
-        if len == 0 || len > 32 {
-            windows::Win32::NetworkManagement::WiFi::WlanFreeMemory(base.cast());
-            return None;
+        WlanFreeMemory(data);
+    }
+    attributes
+}
+
+fn decode_connection(attributes: &WLAN_CONNECTION_ATTRIBUTES) -> Option<NativeWifiInfo> {
+    if attributes.isState != wlan_interface_state_connected {
+        return None;
+    }
+    let association = &attributes.wlanAssociationAttributes;
+    let bytes = association
+        .dot11Ssid
+        .ucSSID
+        .get(..association.dot11Ssid.uSSIDLength as usize)?;
+    if bytes.is_empty() {
+        return None;
+    }
+    let security = &attributes.wlanSecurityAttributes;
+    let mode = if !security.bSecurityEnabled.as_bool() {
+        "Open"
+    } else if security.bOneXEnabled.as_bool() {
+        "Enterprise"
+    } else {
+        match security.dot11AuthAlgorithm.0 {
+            1 | 2 => "WEP",
+            3 | 6 | 8 | 11 => "Enterprise",
+            4 | 5 => "WPA",
+            7 => "WPA2",
+            9 => "WPA3",
+            10 => "OWE",
+            _ => "Unknown",
         }
-        let bytes = std::slice::from_raw_parts(base.add(assoc_offset + 4), len);
-        let ssid = String::from_utf8_lossy(bytes).trim().to_string();
-        windows::Win32::NetworkManagement::WiFi::WlanFreeMemory(base.cast());
-        Some(ssid).filter(|s| !s.is_empty())
+    };
+    let bssid = association.dot11Bssid;
+    Some(NativeWifiInfo {
+        ssid: Some(String::from_utf8_lossy(bytes).into_owned()),
+        bssid: Some(format!(
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5]
+        )),
+        rssi: Some((association.wlanSignalQuality.min(100) / 2) as i32 - 100),
+        link_speed: Some((association.ulRxRate / 1000) as i32),
+        channel: None,
+        frequency: None,
+        security: Some(mode.into()),
+    })
+}
+
+fn associated_bss<'a>(
+    entries: &'a [WLAN_BSS_ENTRY],
+    bssid: &[u8; 6],
+) -> Option<&'a WLAN_BSS_ENTRY> {
+    entries.iter().find(|entry| entry.dot11Bssid == *bssid)
+}
+
+fn channel_from_frequency(frequency: u32) -> Option<i32> {
+    match frequency {
+        2484 => Some(14),
+        2412..=2472 => Some(((frequency - 2407) / 5) as i32),
+        5160..=5885 => Some(((frequency - 5000) / 5) as i32),
+        5955..=7115 => Some(((frequency - 5950) / 5) as i32),
+        _ => None,
     }
 }
 
 pub fn current_wifi() -> Option<NativeWifiInfo> {
     let handle = open_wlan_handle().ok()?;
     let mut interface_list = std::ptr::null_mut();
-    let result = unsafe { WlanEnumInterfaces(handle, None, &mut interface_list) };
-    if result != 0 || interface_list.is_null() {
+    let result = unsafe { WlanEnumInterfaces(handle.0, None, &mut interface_list) };
+    if interface_list.is_null() {
         return None;
     }
-    unsafe {
-        let list = &*interface_list;
-        for index in 0..list.dwNumberOfItems as usize {
-            let info = &list.InterfaceInfo[index];
-            if info.isState != wlan_interface_state_connected {
-                continue;
-            }
-            let guid_ptr = &info.InterfaceGuid as *const _ as *const u8;
-            let ssid = query_connection_ssid(handle, guid_ptr);
-            if ssid.is_none() {
-                continue;
-            }
-
-            // BSS 列表包含 RSSI/信道/频率/链路速率。
-            let mut bss_list = std::ptr::null_mut();
-            if WlanGetNetworkBssList(
-                handle,
-                &info.InterfaceGuid,
-                None,
-                dot11_BSS_type_infrastructure,
-                false,
-                None,
-                &mut bss_list,
-            ) == 0
-                && !bss_list.is_null()
-            {
-                let bss = &*bss_list;
-                if bss.dwNumberOfItems > 0 {
-                    let entry = &bss.wlanBssEntries[0];
-                    let out = NativeWifiInfo {
-                        ssid,
-                        bssid: Some(format!(
-                            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                            entry.dot11Bssid[0],
-                            entry.dot11Bssid[1],
-                            entry.dot11Bssid[2],
-                            entry.dot11Bssid[3],
-                            entry.dot11Bssid[4],
-                            entry.dot11Bssid[5]
-                        )),
-                        rssi: Some(entry.lRssi),
-                        link_speed: None,
-                        channel: Some(((entry.ulChCenterFrequency / 1000 - 2407) / 5) as i32),
-                        frequency: Some((entry.ulChCenterFrequency / 1000) as i32),
-                        security: None,
-                    };
-                    windows::Win32::NetworkManagement::WiFi::WlanFreeMemory(interface_list.cast());
-                    windows::Win32::NetworkManagement::WiFi::WlanFreeMemory(bss_list.cast());
-                    return Some(out);
+    let mut snapshot = None;
+    if result == 0 {
+        unsafe {
+            let list = &*interface_list;
+            // Windows returns a variable-length array; indexing its [T; 1] binding
+            // would panic on the second wireless adapter.
+            let interfaces = std::slice::from_raw_parts(
+                list.InterfaceInfo.as_ptr(),
+                list.dwNumberOfItems as usize,
+            );
+            for info in interfaces {
+                if info.isState != wlan_interface_state_connected {
+                    continue;
                 }
+                let Some(attributes) = query_connection(handle.0, &info.InterfaceGuid) else {
+                    continue;
+                };
+                let Some(mut wifi) = decode_connection(&attributes) else {
+                    continue;
+                };
+                let association = &attributes.wlanAssociationAttributes;
+                let mut bss_list = std::ptr::null_mut();
+                let result = WlanGetNetworkBssList(
+                    handle.0,
+                    &info.InterfaceGuid,
+                    Some(&association.dot11Ssid),
+                    dot11_BSS_type_infrastructure,
+                    attributes.wlanSecurityAttributes.bSecurityEnabled.as_bool(),
+                    None,
+                    &mut bss_list,
+                );
+                if !bss_list.is_null() {
+                    if result == 0 {
+                        let list = &*bss_list;
+                        let entries = std::slice::from_raw_parts(
+                            list.wlanBssEntries.as_ptr(),
+                            list.dwNumberOfItems as usize,
+                        );
+                        if let Some(entry) = associated_bss(entries, &association.dot11Bssid) {
+                            let frequency = entry.ulChCenterFrequency / 1000;
+                            wifi.rssi = Some(entry.lRssi);
+                            wifi.frequency = Some(frequency as i32);
+                            wifi.channel = channel_from_frequency(frequency);
+                        }
+                    }
+                    WlanFreeMemory(bss_list.cast());
+                }
+                snapshot = Some(wifi);
+                break;
             }
         }
-        windows::Win32::NetworkManagement::WiFi::WlanFreeMemory(interface_list.cast());
     }
-    None
+    unsafe {
+        WlanFreeMemory(interface_list.cast());
+    }
+    snapshot
 }
 
 pub fn network_info() -> Option<NativeNetworkInfo> {
@@ -301,7 +366,7 @@ pub fn watch_network(
     let mut notification_handle = 0u32;
     let result = unsafe {
         WlanRegisterNotification(
-            handle,
+            handle.0,
             WLAN_NOTIFICATION_SOURCE_ALL,
             true,
             Some(wlan_notification_callback),
@@ -316,7 +381,7 @@ pub fn watch_network(
     }
 
     // 句柄与注册需要存活到进程结束；napi 模块无卸载场景，泄漏是刻意的生命周期管理。
-    let _ = (handle, notification_handle);
+    std::mem::forget(handle);
     Ok(true)
 }
 
@@ -330,5 +395,91 @@ unsafe extern "system" fn wlan_notification_callback(
             Ok(()),
             napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
         );
+    }
+}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::*;
+    use windows::Win32::NetworkManagement::WiFi::{DOT11_AUTH_ALGORITHM, WLAN_SECURITY_ATTRIBUTES};
+
+    #[test]
+    fn connection_identity_uses_sdk_layout_and_preserves_ssid() {
+        assert_eq!(
+            std::mem::offset_of!(WLAN_CONNECTION_ATTRIBUTES, wlanAssociationAttributes),
+            520
+        );
+        let mut attributes = WLAN_CONNECTION_ATTRIBUTES {
+            isState: wlan_interface_state_connected,
+            ..Default::default()
+        };
+        attributes.wlanAssociationAttributes.dot11Ssid.uSSIDLength = 8;
+        attributes.wlanAssociationAttributes.dot11Ssid.ucSSID[..8].copy_from_slice(b" Campus ");
+        attributes.wlanAssociationAttributes.dot11Bssid = [1, 2, 3, 4, 5, 6];
+        attributes.wlanSecurityAttributes = WLAN_SECURITY_ATTRIBUTES {
+            bSecurityEnabled: true.into(),
+            dot11AuthAlgorithm: DOT11_AUTH_ALGORITHM(9),
+            ..Default::default()
+        };
+        let snapshot = decode_connection(&attributes).unwrap();
+        assert_eq!(snapshot.ssid.as_deref(), Some(" Campus "));
+        assert_eq!(snapshot.bssid.as_deref(), Some("01:02:03:04:05:06"));
+        assert_eq!(snapshot.security.as_deref(), Some("WPA3"));
+        attributes.wlanAssociationAttributes.dot11Ssid.uSSIDLength = 33;
+        assert!(decode_connection(&attributes).is_none());
+    }
+
+    #[test]
+    fn authentication_modes_distinguish_personal_enterprise_and_open() {
+        let mut attributes = WLAN_CONNECTION_ATTRIBUTES {
+            isState: wlan_interface_state_connected,
+            ..Default::default()
+        };
+        attributes.wlanAssociationAttributes.dot11Ssid.uSSIDLength = 1;
+        attributes.wlanAssociationAttributes.dot11Ssid.ucSSID[0] = b'x';
+        for (algorithm, expected) in [
+            (1, "WEP"),
+            (7, "WPA2"),
+            (9, "WPA3"),
+            (6, "Enterprise"),
+            (8, "Enterprise"),
+            (10, "OWE"),
+        ] {
+            attributes.wlanSecurityAttributes.bSecurityEnabled = true.into();
+            attributes.wlanSecurityAttributes.dot11AuthAlgorithm = DOT11_AUTH_ALGORITHM(algorithm);
+            assert_eq!(
+                decode_connection(&attributes).unwrap().security.as_deref(),
+                Some(expected)
+            );
+        }
+        attributes.wlanSecurityAttributes.bSecurityEnabled = false.into();
+        assert_eq!(
+            decode_connection(&attributes).unwrap().security.as_deref(),
+            Some("Open")
+        );
+    }
+
+    #[test]
+    fn bss_details_follow_associated_bssid_instead_of_first_scan_entry() {
+        let other = WLAN_BSS_ENTRY {
+            dot11Bssid: [9; 6],
+            ulChCenterFrequency: 2412000,
+            ..Default::default()
+        };
+        let actual = WLAN_BSS_ENTRY {
+            dot11Bssid: [1; 6],
+            ulChCenterFrequency: 5180000,
+            ..Default::default()
+        };
+        let entries = [other, actual];
+        assert_eq!(
+            associated_bss(&entries, &[1; 6])
+                .unwrap()
+                .ulChCenterFrequency,
+            5180000
+        );
+        assert!(associated_bss(&entries, &[2; 6]).is_none());
+        assert_eq!(channel_from_frequency(5180), Some(36));
+        assert_eq!(channel_from_frequency(5955), Some(1));
     }
 }

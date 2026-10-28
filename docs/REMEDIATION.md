@@ -26,7 +26,11 @@ Android 日志导出 E2E 等待系统分享面板的 `android:id/resolver_list` 
 
 同轮 API 29 在用户流程开始前遇到 Maestro 随机端口 `44317` 绑定失败。Android 驱动实际监听设备端口，主机随机空闲端口可能与设备临时端口冲突；本地/CI E2E 和正式升级冒烟统一指定 `--driver-host-port 7001`，避开临时端口范围，详见 [Maestro #3684](https://github.com/mobile-dev-inc/Maestro/issues/3684)。不增加流程重试，任何失败仍由门禁拒绝。
 
-本地验证包括共享 118、桌面 205、移动 84、原生加载 2、发布门禁 2 项普通测试及 17 项网络模拟；Android JVM 38 项及 Release Kotlin/E2E 编译通过。Linux 真实主进程 E2E 25/25；专用 Android API 36 模拟器通过 7 项原生引擎/平台集成、1 项日志导出及全部 7 个 Maestro 流程，并核验实际覆盖安装至 1.0.3-e2e / 10030。正式 Linux AppImage 启动、版本、原生模块和测试文件排除冒烟通过；DEB 版本及原生文件已核对。真实 v1.0.1 APK 的界面保存账号流程已在专用模拟器通过；正式签名覆盖升级由 Release 工作流验证。
+原生身份复审继续修复三平台遗漏：Windows 改用 SDK 的 `WLAN_CONNECTION_ATTRIBUTES`，修正漏读连接模式引起的 SSID 偏移，直接读取关联 BSSID 和认证类型；BSS 详情只采集实际关联接入点，多网卡使用系统变长数组，短期 WLAN 句柄及时释放。macOS 使用 `CWSecurity` 常量识别个人、企业、WPA3 和过渡模式，扫描保留过渡身份。Linux 解析 RSN AKM 套件，区分 WPA2、WPA3、过渡、企业和 OWE，截断或未知套件不能降级猜测 WPA2；无安全 IE 时结合 privacy 标志识别开放/WEP。各平台 Rust 回归覆盖结构布局、错误长度、关联 BSSID、安全模式及截断报文。
+
+正式程序启动验证纳入日常三平台 CI，macOS 从实际 DMG 复制安装后启动。启动失败保留主进程文件日志，macOS 另保留超时前屏幕和线程采样。Android APK 校验从 Manifest 的资源 ID 查询资源表，支持资源压缩后的 XML 路径；校验实际 `base-config`，域名特例不能掩盖默认 HTTP 禁止。发布脚本保存明确的 APK 校验证据，资源解析及默认策略增加长期回归。
+
+本地验证包括共享 118、桌面 205、移动 84、原生加载 2、发布门禁 4 项普通测试及 17 项网络模拟；Android JVM 38 项及 Release Kotlin/E2E 编译通过。Linux 真实主进程 E2E 25/25；专用 Android API 36 模拟器通过 7 项原生引擎/平台集成、1 项日志导出及全部 7 个 Maestro 流程，并核验实际覆盖安装至 1.0.3-e2e / 10030。正式 Linux AppImage 启动、版本、原生模块和测试文件排除冒烟通过；DEB 版本及原生文件已核对。真实 v1.0.1 APK 的界面保存账号流程已在专用模拟器通过；正式签名覆盖升级由 Release 工作流验证。
 
 最终发布以同一目标提交的两轮完整 CI、master CI 和 Release 安装包冒烟全部首次通过为准；证据通过公开 Actions、Release 的 `validation.json` 和 `release-smoke-*` artifact 保存。真实校园网、真实无线硬件连接及厂商后台保活尚未实机验证；自动化边界见 [TESTING.md](./TESTING.md)。
 

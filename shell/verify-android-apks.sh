@@ -8,17 +8,16 @@ old_code=$("$sdk_tools/aapt" dump badging "$previous_apk" | sed -n "s/.*versionC
 old_certificate=$("$sdk_tools/apksigner" verify --print-certs "$previous_apk" | sed -n '/certificate SHA-256 digest:/p')
 [[ -n "$old_code" && -n "$old_certificate" ]]
 count=0
+fail() { printf 'APK verification failed: %s\n' "$*" >&2; exit 1; }
 for apk in "$apk_root"/*.apk; do
+  printf 'Verifying %s\n' "$(basename "$apk")"
   badge=$("$sdk_tools/aapt" dump badging "$apk" | sed -n '1p')
-  [[ "$badge" == *"name='com.netmate.app'"* && "$badge" == *"versionName='$version'"* ]]
+  [[ "$badge" == *"name='com.netmate.app'"* && "$badge" == *"versionName='$version'"* ]] || fail 'package identity/version'
   code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badge")
-  (( code > old_code ))
+  (( code > old_code )) || fail 'versionCode does not permit upgrade'
   certificate=$("$sdk_tools/apksigner" verify --print-certs "$apk" | sed -n '/certificate SHA-256 digest:/p')
-  [[ "$certificate" == "$old_certificate" ]]
-  manifest=$("$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" manifest print "$apk")
-  [[ "$manifest" != *'android:debuggable="true"'* && "$manifest" == *'@xml/network_security_config'* ]]
-  policy=$("$sdk_tools/aapt" dump xmltree "$apk" res/xml/network_security_config.xml)
-  [[ "$policy" == *'base-config'* && "$policy" == *'0xffffffff'* ]]
+  [[ "$certificate" == "$old_certificate" ]] || fail 'production signing certificate mismatch'
+  node shell/android-apk-policy.mjs "$sdk_tools/aapt" "$apk"
   python3 - "$apk" <<'PYCODE'
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as archive:
