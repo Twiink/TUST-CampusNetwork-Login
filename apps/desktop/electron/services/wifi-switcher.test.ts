@@ -169,10 +169,49 @@ describe('connectToNetwork', () => {
 
   it('macOS: 系统连接到同名的其他接入点时明确失败', async () => {
     setPlatform('darwin');
-    const read = async () => ({ connected: true, ssid: 'Campus', bssid: 'aa:bb:cc:dd:ee:02' });
-    await expect(
-      connectToNetwork('Campus', 'pw', 'WPA2', read, 'aa:bb:cc:dd:ee:01')
-    ).rejects.toThrow('系统未连接到指定 BSSID');
+    vi.useFakeTimers();
+    const read = async () => ({
+      connected: true,
+      ssid: 'Campus',
+      bssid: 'aa:bb:cc:dd:ee:02',
+      ip: '192.0.2.10',
+    });
+    try {
+      const result = expect(
+        connectToNetwork('Campus', 'pw', 'WPA2', read, 'aa:bb:cc:dd:ee:01')
+      ).rejects.toThrow('系统未连接到指定 BSSID');
+      await vi.runAllTimersAsync();
+      await result;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('macOS: 同 SSID 的切换等待目标 BSSID 和有效地址后再成功', async () => {
+    setPlatform('darwin');
+    vi.useFakeTimers();
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({
+        connected: true,
+        ssid: 'Campus',
+        bssid: 'aa:bb:cc:dd:ee:02',
+        ip: '192.0.2.10',
+      })
+      .mockResolvedValue({
+        connected: true,
+        ssid: 'Campus',
+        bssid: 'aa:bb:cc:dd:ee:01',
+        ip: '192.0.2.11',
+      });
+    try {
+      const result = connectToNetwork('Campus', 'pw', 'WPA2', read, 'aa:bb:cc:dd:ee:01');
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toBe(true);
+      expect(read).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('Linux: 带密码连接经 execFile 参数数组调用 nmcli', async () => {
     setPlatform('linux');

@@ -199,9 +199,14 @@ export async function connectToNetwork(
       return false;
   }
   if (connected && bssid) {
-    const current = await (readConnection ?? readConnectionSnapshot)();
-    if (normalizeBssid(current.bssid) !== normalizeBssid(bssid))
-      throw new Error('系统未连接到指定 BSSID，请在系统网络设置中选择目标接入点');
+    const selected = await waitForTargetNetwork(ssid, async () => {
+      const current = await (readConnection ?? readConnectionSnapshot)();
+      return {
+        ...current,
+        connected: current.connected && normalizeBssid(current.bssid) === normalizeBssid(bssid),
+      };
+    });
+    if (!selected) throw new Error('系统未连接到指定 BSSID，请在系统网络设置中选择目标接入点');
   }
   return connected;
 }
