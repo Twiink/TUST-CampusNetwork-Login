@@ -40,9 +40,9 @@ pub fn run() {
             .build();
         window.add_css_class("netmate");
         let provider = gtk::CssProvider::new();
-        provider.load_from_data(include_str!("netmate.css"));
+        provider.load_from_string(include_str!("netmate.css"));
         gtk::style_context_add_provider_for_display(
-            &window.display(),
+            &gtk::prelude::WidgetExt::display(&window),
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );

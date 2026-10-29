@@ -1,7 +1,8 @@
 plugins { id 'com.android.application' }
 def nativeVersion = (rootProject.file('../../../Cargo.toml').text =~ /(?m)^version = "([^"]+)"$/)[0][1]
 def nativeParts = nativeVersion.tokenize('.').collect { it.toInteger() }
-def nativeCode = nativeParts[0] * 10000 + nativeParts[1] * 100 + nativeParts[2]
+// Keep every native release above the previous per-ABI versionCode range.
+def nativeCode = (nativeParts[0] * 10000 + nativeParts[1] * 100 + nativeParts[2]) * 10
 def signingFile = System.getenv('ANDROID_KEYSTORE_FILE')
 def signedRelease = signingFile && System.getenv('ANDROID_KEYSTORE_PASSWORD') && System.getenv('ANDROID_KEY_ALIAS') && System.getenv('ANDROID_KEY_PASSWORD')
 android {
