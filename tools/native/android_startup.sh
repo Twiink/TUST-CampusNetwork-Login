@@ -8,4 +8,7 @@ for permission in ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION NEARBY_WIFI_DEVICE
   adb shell pm grant com.netmate.app "android.permission.$permission"
 done
 python3 tools/native/prepare_android_profile.py
-python3 tools/native/startup_android.py --compilation baseline-profile --apk "$apk" --out dist-native/android-startup.json
+if ! python3 tools/native/startup_android.py --compilation baseline-profile --apk "$apk" --out dist-native/android-startup.json; then
+  python3 tools/native/trace_android_startup.py || true
+  exit 1
+fi

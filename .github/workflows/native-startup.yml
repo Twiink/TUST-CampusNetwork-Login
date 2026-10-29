@@ -38,7 +38,7 @@ jobs:
         with:
           api-level: '37.0'
           arch: x86_64
-          target: google_apis_playstore
+          target: google_apis
           profile: pixel_7
           cores: 2
           ram-size: 2048M

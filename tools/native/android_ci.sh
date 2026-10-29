@@ -14,7 +14,10 @@ for permission in ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION NEARBY_WIFI_DEVICE
 done
 adb shell am start -W -n com.netmate.app/.MainActivity
 python3 tools/native/prepare_android_profile.py
-python3 tools/native/startup_android.py --compilation baseline-profile --apk apps/mobile/android/app/build/outputs/apk/benchmark/app-benchmark.apk --out dist-native/android-startup.json
+if ! python3 tools/native/startup_android.py --compilation baseline-profile --apk apps/mobile/android/app/build/outputs/apk/benchmark/app-benchmark.apk --out dist-native/android-startup.json; then
+  python3 tools/native/trace_android_startup.py || true
+  exit 1
+fi
 python3 tools/native/measure_android.py --ui --seconds 120 --out dist-native/android-foreground.json
 python3 tools/native/check_budget.py --android dist-native/android-foreground.json
 adb shell input keyevent KEYCODE_HOME

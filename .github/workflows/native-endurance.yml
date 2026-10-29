@@ -113,7 +113,7 @@ jobs:
         with:
           api-level: '37.0'
           arch: x86_64
-          target: google_apis_playstore
+          target: google_apis
           profile: pixel_7
           ram-size: 2048M
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
