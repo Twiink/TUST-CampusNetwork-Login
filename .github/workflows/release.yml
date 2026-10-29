@@ -22,10 +22,13 @@ jobs:
     uses: ./.github/workflows/native.yml
     with:
       release: true
-      endurance: true
+      endurance: false
     secrets: inherit
+  endurance:
+    needs: build
+    uses: ./.github/workflows/native-endurance.yml
   draft:
-    needs: [prepare, build]
+    needs: [prepare, build, endurance]
     runs-on: ubuntu-latest
     permissions:
       contents: write
