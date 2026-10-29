@@ -84,8 +84,10 @@ jobs:
         include:
           - runner: windows-2025
             arch: x64
+            target: x86_64-pc-windows-msvc
           - runner: windows-11-arm
             arch: arm64
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     steps:
@@ -95,8 +97,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-      - run: cargo test --locked -p netmate-core -p netmate-platform
-      - run: cargo build --locked --release -p netmate-agent -p netmate-ui
+      - run: cargo test --locked -p netmate-core -p netmate-platform --target ${{ matrix.target }}
+      - run: cargo build --locked --release -p netmate-agent -p netmate-ui --target ${{ matrix.target }}
+      - name: Verify standalone Windows binaries
+        run: |
+          python tools/native/check_windows_imports.py target/${{ matrix.target }}/release
+          New-Item -ItemType Directory -Force target/release | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/netmate-*.exe target/release/
       - run: python -m pip install pywinauto psutil pillow
       - run: python tools/native/smoke_windows.py
       - run: choco install nsis -y --no-progress

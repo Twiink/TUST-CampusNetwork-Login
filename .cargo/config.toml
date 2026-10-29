@@ -1,0 +1,7 @@
+# Keep the Windows product independent of a separately installed VC runtime.
+# Build with an explicit --target so host proc macros keep their native linkage.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

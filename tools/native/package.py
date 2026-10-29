@@ -25,6 +25,8 @@ def main():
     parser.add_argument('--skip-build', action='store_true')
     args = parser.parse_args()
     host = platform.system()
+    if host == 'Windows' and not args.target:
+        args.target = ('aarch64' if platform.machine().lower() in ('aarch64', 'arm64') else 'x86_64') + '-pc-windows-msvc'
     arch = 'arm64' if platform.machine().lower() in ('aarch64', 'arm64') else 'x64'
     target = ['--target', args.target] if args.target else []
     if args.target:

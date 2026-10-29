@@ -13,6 +13,10 @@ def main():
     parser.add_argument('--run',action='store_true')
     args=parser.parse_args()
     command=['cargo','build','--locked','-p','netmate-agent']
+    target=None
+    if platform.system()=='Windows':
+        target=('aarch64'if platform.machine().lower()in('arm64','aarch64')else'x86_64')+'-pc-windows-msvc'
+        command+=['--target',target]
     if platform.system()!='Darwin': command+=['-p','netmate-ui']
     if args.release: command+=['--release']
     subprocess.run(command,cwd=ROOT,check=True)
@@ -22,5 +26,5 @@ def main():
         for name in ('netmate-ui','netmate-host'):
             shutil.copy2(ROOT/'apps/macos/.build'/('release' if args.release else 'debug')/name,ROOT/'target'/('release' if args.release else 'debug')/name)
     if args.run:
-        subprocess.run([str(ROOT/'target'/('release' if args.release else 'debug')/('netmate-agent.exe' if platform.system()=='Windows' else 'netmate-agent'))],cwd=ROOT,check=True)
+        subprocess.run([str(ROOT/'target'/(target or '')/('release' if args.release else 'debug')/('netmate-agent.exe' if platform.system()=='Windows' else 'netmate-agent'))],cwd=ROOT,check=True)
 if __name__=='__main__': main()
