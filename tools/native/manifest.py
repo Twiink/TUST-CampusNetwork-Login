@@ -23,6 +23,22 @@ def main():
     args=parser.parse_args()
     if not re.fullmatch(r'\d+\.\d+\.\d+',args.version):raise SystemExit('Invalid version')
     if urlparse(args.base_url).scheme!='https':raise SystemExit('HTTPS update source required')
+    expected_assets = {f'NetMate-{args.version}-{system}-{arch}.{extension}'
+                       for system, arches, extensions in [
+                           ('linux', ('x64', 'arm64'), ('deb', 'rpm')),
+                           ('windows', ('x64', 'arm64'), ('exe',)),
+                           ('macos', ('arm64',), ('zip', 'dmg'))]
+                       for arch in arches for extension in extensions}
+    expected_assets.add(f'NetMate-{args.version}-android.apk')
+    actual_assets = {file.name for file in args.assets.iterdir() if file.is_file()
+                     and file.suffix in ('.deb', '.rpm', '.exe', '.zip', '.dmg', '.apk')}
+    if actual_assets != expected_assets:
+        raise SystemExit(f'Native installation assets mismatch; missing={sorted(expected_assets-actual_assets)}, unexpected={sorted(actual_assets-expected_assets)}')
+    for name in expected_assets:
+        size = (args.assets / name).stat().st_size
+        limit = (5 if name.endswith('.apk') else 20) * 1048576
+        if not 0 < size <= limit:
+            raise SystemExit(f'Installation asset is empty or exceeds package budget: {name}')
     key=Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ['NETMATE_UPDATE_PRIVATE_KEY'],validate=True))
     expected=base64.b64decode(os.environ['NETMATE_UPDATE_PUBLIC_KEY'],validate=True)
     if key.public_key().public_bytes(serialization.Encoding.Raw,serialization.PublicFormat.Raw)!=expected:raise SystemExit('Update signing key does not match compiled public key')
@@ -43,7 +59,7 @@ def main():
         signature=key.sign(message(release));key.public_key().verify(signature,message(release))
         release['signature']=base64.b64encode(signature).decode();releases.append(release)
     required={('linux','x86_64'),('linux','aarch64'),('windows','x86_64'),('windows','aarch64'),('macos','aarch64'),('android','universal')}
-    if not required <= {(r['platform'],r['arch']) for r in releases}:raise SystemExit('Native platform artifacts are incomplete')
+    if len(releases)!=8 or not required <= {(r['platform'],r['arch']) for r in releases}:raise SystemExit('Native platform artifacts are incomplete')
     (args.assets/'native-updates.json').write_text(json.dumps(releases,indent=2)+'\n')
     with (args.assets/'SHA256SUMS').open('w') as output:
         for file in sorted(args.assets.iterdir()):
