@@ -59,8 +59,7 @@ object AutoAuthEngine {
         executor.execute { failures = 0; lastLoginAt = 0; reconnector.resetCooldown() }
     }
 
-    fun snapshot(context: Context): JSONObject {
-        val wifi = WifiEnvironment.snapshot(context)
+    fun snapshot(context: Context, wifi: WifiEnvironment.Snapshot = WifiEnvironment.snapshot(context)): JSONObject {
         val profile = AutoAuthStore.loadProfile(context)
         val requires = profile?.let { AutoAuthPolicy.decide(it.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive, wifi.security, wifi.bssid).requiresAuth } ?: false
         val reachable = wifi.connected && (internetKey == wifi.key || (wifi.validated && !wifi.captive && loggedOutKey != wifi.key))

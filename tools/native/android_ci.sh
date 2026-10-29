@@ -13,7 +13,7 @@ for permission in ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION NEARBY_WIFI_DEVICE
   adb shell pm grant com.netmate.app "android.permission.$permission"
 done
 adb shell am start -W -n com.netmate.app/.MainActivity
-python3 tools/native/startup_android.py --out dist-native/android-startup.json
+python3 tools/native/startup_android.py --apk apps/mobile/android/app/build/outputs/apk/benchmark/app-benchmark.apk --out dist-native/android-startup.json
 python3 tools/native/measure_android.py --ui --seconds 120 --out dist-native/android-foreground.json
 python3 tools/native/check_budget.py --android dist-native/android-foreground.json
 adb shell input keyevent KEYCODE_HOME

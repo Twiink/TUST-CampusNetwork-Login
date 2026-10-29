@@ -28,7 +28,7 @@ class NetworkService : Service() {
     override fun onCreate() { super.onCreate(); NetMateLogs.initialize(this); NetMateLogs.listeners.add(logListener); updater=NativeUpdater(this); AutoAuthEngine.statusListeners.add(stateListener); AutoAuthEngine.addListener(resultListener); ReconnectEvents.listeners.add(progressListener) }
     private fun snapshot(): JSONObject {
         val w=WifiEnvironment.snapshot(this)
-        return AutoAuthEngine.snapshot(this).put("version",1).put("logRevision",logRevision.get()).put("progress",ReconnectEvents.latest).put("network",JSONObject().put("ssid",w.ssid).put("bssid",w.bssid).put("ipv4",w.ipv4).put("ipv6",w.ipv6).put("security",w.security).put("signal",w.signal).put("frequency",w.frequency).put("channel",WifiFacts.channel(w.frequency ?: 0)).put("linkSpeed",w.linkSpeed).put("gateway",w.gateway).put("dns",JSONArray(w.dns)))
+        return AutoAuthEngine.snapshot(this,w).put("version",1).put("logRevision",logRevision.get()).put("progress",ReconnectEvents.latest).put("network",JSONObject().put("ssid",w.ssid).put("bssid",w.bssid).put("ipv4",w.ipv4).put("ipv6",w.ipv6).put("security",w.security).put("signal",w.signal).put("frequency",w.frequency).put("channel",WifiFacts.channel(w.frequency ?: 0)).put("linkSpeed",w.linkSpeed).put("gateway",w.gateway).put("dns",JSONArray(w.dns)))
     }
     @Synchronized private fun publish() { if(listeners.registeredCallbackCount==0)return;val value=runCatching{snapshot().toString()}.getOrNull() ?: return;val count=listeners.beginBroadcast();try{for(i in 0 until count)runCatching{listeners.getBroadcastItem(i).changed(value)}}finally{listeners.finishBroadcast()} }
     private val binder=object:INetwork.Stub(){
@@ -43,7 +43,13 @@ class NetworkService : Service() {
                 runCatching { callback.complete(response.toString()) }
             } } catch(_:RejectedExecutionException) { runCatching { callback.complete(JSONObject().put("error",if(op=="scan") "WiFi 正在扫描" else "后台繁忙，请稍后重试").toString()) } }
         }
-        override fun subscribe(callback:IEvents){listeners.register(callback);callback.changed(snapshot().toString())}
+        override fun subscribe(callback:IEvents){
+            listeners.register(callback)
+            // Snapshot collection involves system services. Never hold the UI's
+            // Binder caller while collecting it, and let config requests run first.
+            try{worker.execute{if(listeners.registeredCallbackCount>0)runCatching{callback.changed(snapshot().toString())}}}
+            catch(_:RejectedExecutionException){listeners.unregister(callback)}
+        }
         override fun unsubscribe(callback:IEvents){listeners.unregister(callback)}
     }
     private fun dispatch(op:String,args:JSONObject):Any=when(op){

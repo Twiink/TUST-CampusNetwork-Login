@@ -75,11 +75,11 @@ class MainActivity : Activity() {
         override fun onServiceConnected(name:ComponentName,binder:IBinder){
             remote=INetwork.Stub.asInterface(binder)
             if(visible){
-                remote?.subscribe(events)
                 call("config"){
                     config=it as JSONObject
                     render()
                     if(!fullyDrawn){fullyDrawn=true;markFullyDrawn()}
+                    remote?.subscribe(events)
                     if(config.optBoolean("autoUpdate",true)&&BuildConfig.UPDATE_ENDPOINT.isNotEmpty()){
                         call("update_check",silent=true)
                     }
