@@ -9,9 +9,20 @@ fn main() {
     // Native forms and virtual lists need no GPU renderer or shader compiler.
     // Set the default before any UI or worker thread is created; users can override it.
     #[cfg(target_os = "linux")]
-    if std::env::var_os("GSK_RENDERER").is_none() {
-        unsafe {
-            std::env::set_var("GSK_RENDERER", "cairo");
+    {
+        if std::env::var_os("GSK_RENDERER").is_none() {
+            unsafe {
+                std::env::set_var("GSK_RENDERER", "cairo");
+            }
+        }
+        // GDK otherwise initializes EGL even with the Cairo renderer. On headless
+        // systems that loads the entire software GL driver and its compiler.
+        if std::env::var("GSK_RENDERER").as_deref() == Ok("cairo")
+            && std::env::var_os("GDK_DISABLE").is_none()
+        {
+            unsafe {
+                std::env::set_var("GDK_DISABLE", "gl,vulkan");
+            }
         }
     }
 

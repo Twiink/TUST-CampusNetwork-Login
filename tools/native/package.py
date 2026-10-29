@@ -101,7 +101,10 @@ SectionEnd
             entitlements = ROOT / 'apps/macos/NetMate.entitlements'
             identity = os.environ.get('APPLE_SIGNING_IDENTITY', '-')
             for file in executables.iterdir():
-                run('codesign', '--force', '--options', 'runtime', '--entitlements', entitlements, '--sign', identity, file)
+                # WiFi event privileges belong to the signed CoreWLAN host only.
+                # Ad-hoc signatures cannot carry this restricted entitlement.
+                flags = ['--entitlements', entitlements] if file.name == 'netmate-host' and identity != '-' else []
+                run('codesign', '--force', '--options', 'runtime', *flags, '--sign', identity, file)
             run('codesign', '--force', '--sign', identity, app)
             run('ditto', '-c', '-k', '--keepParent', app, output / f'NetMate-{VERSION}-macos-arm64.zip')
             # macOS 27's native disk-image CLI takes a folder and destination.
