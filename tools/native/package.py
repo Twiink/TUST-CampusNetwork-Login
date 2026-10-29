@@ -104,7 +104,12 @@ SectionEnd
                 run('codesign', '--force', '--options', 'runtime', '--entitlements', entitlements, '--sign', identity, file)
             run('codesign', '--force', '--sign', identity, app)
             run('ditto', '-c', '-k', '--keepParent', app, output / f'NetMate-{VERSION}-macos-arm64.zip')
-            run('hdiutil', 'create', '-volname', 'NetMate', '-srcfolder', app, '-ov', '-format', 'UDZO', output / f'NetMate-{VERSION}-macos-arm64.dmg')
+            # macOS 27's native disk-image CLI takes a folder and destination.
+            # Include the app as a bundle at the volume root for drag installation.
+            (stage / 'Applications').symlink_to('/Applications')
+            image = output / f'NetMate-{VERSION}-macos-arm64.dmg'
+            image.unlink(missing_ok=True)
+            run('diskutil', 'image', 'create', 'from', '--volumeName', 'NetMate', '--format', 'UDZO', stage, image)
     for file in sorted(output.glob('*')):
         if file.is_file():
             size = file.stat().st_size

@@ -13,3 +13,14 @@ jobs:
           diskutil image create from --help || true
           diskutil image create from || true
           hdiutil create -help || true
+      - uses: actions/checkout@v6
+      - name: Verify new disk image packaging with the native artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download 40875059548 --name native-macos-arm64 --dir previous-native
+          mkdir -p image-source
+          ditto -x -k previous-native/NetMate-2.0.0-macos-arm64.zip image-source
+          ln -s /Applications image-source/Applications
+          diskutil image create from --volumeName NetMate --format UDZO image-source NetMate.dmg
+          test -s NetMate.dmg
