@@ -21,7 +21,7 @@ def millis(text):
     if not parts:raise RuntimeError('Unrecognized fully drawn duration')
     return sum(int(count)*units[unit]for count,unit in parts)
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--package',default='com.netmate.app');parser.add_argument('--runs',type=int,default=30);parser.add_argument('--apk',type=Path);parser.add_argument('--out',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('--package',default='com.netmate.app');parser.add_argument('--runs',type=int,default=30);parser.add_argument('--apk',type=Path);parser.add_argument('--compilation',choices=['uncontrolled','baseline-profile'],default='uncontrolled');parser.add_argument('--out',type=Path,required=True);args=parser.parse_args()
     if args.runs<20:raise SystemExit('At least 20 samples are required for P95')
     times=[]
     for _ in range(args.runs):
@@ -38,6 +38,7 @@ def main():
         else:raise RuntimeError('Fully drawn evidence missing; refusing to substitute am start TotalTime')
     p95=sorted(times)[math.ceil(len(times)*.95)-1]
     result=dict(package=args.package,os=adb('shell','getprop','ro.build.fingerprint').strip(),emulator=adb('shell','getprop','ro.kernel.qemu').strip()=='1',cpuOnline=adb('shell','cat','/sys/devices/system/cpu/online').strip(),display=adb('shell','wm','size').strip(),sourceRevision=os.environ.get('GITHUB_SHA'),apkSha256=hashlib.file_digest(args.apk.open('rb'),'sha256').hexdigest()if args.apk else None,debugger=False,kind='reportFullyDrawn-after-config-draw',milliseconds=times,p95Milliseconds=p95)
-    args.out.parent.mkdir(parents=True,exist_ok=True);args.out.write_text(json.dumps(result,indent=2)+'\n');print(f'Android startup P95: {p95} ms')
+    result['compilation']=args.compilation
+    args.out.parent.mkdir(parents=True,exist_ok=True);args.out.write_text(json.dumps(result,indent=2)+'\n');print(f'Android startup P95: {p95} ms ({args.compilation})')
     if p95>1500:raise SystemExit('Android startup budget exceeded')
 if __name__=='__main__':main()

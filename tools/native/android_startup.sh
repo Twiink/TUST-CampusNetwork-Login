@@ -7,4 +7,5 @@ adb install "$apk"
 for permission in ACCESS_COARSE_LOCATION ACCESS_FINE_LOCATION NEARBY_WIFI_DEVICES POST_NOTIFICATIONS; do
   adb shell pm grant com.netmate.app "android.permission.$permission"
 done
-python3 tools/native/startup_android.py --apk "$apk" --out dist-native/android-startup.json
+python3 tools/native/prepare_android_profile.py
+python3 tools/native/startup_android.py --compilation baseline-profile --apk "$apk" --out dist-native/android-startup.json

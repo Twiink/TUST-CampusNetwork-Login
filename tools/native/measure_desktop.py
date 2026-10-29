@@ -35,11 +35,16 @@ def main():
                 if process.poll()is not None:raise RuntimeError(f'Agent exited before ready (exit {process.returncode})')
                 time.sleep(.02)
             else:raise RuntimeError('Application did not become ready')
+            ui=psutil.Process(int(Path(profile,'ui-ready').read_text()))if args.ui else None
+            ui_started=ui.create_time()if ui else None
             time.sleep(args.warmup);known={};cpu={};samples=[]
             for _ in range(args.seconds):
                 if process.poll()is not None:raise RuntimeError('Agent exited')
+                if ui and (not ui.is_running()or ui.create_time()!=ui_started or ui.status()==psutil.STATUS_ZOMBIE):
+                    raise RuntimeError('Visible UI exited during foreground measurement')
                 root=psutil.Process(process.pid)
                 for child in [root]+root.children(recursive=True):known[(child.pid,child.create_time())]=child
+                if ui:known[(ui.pid,ui_started)]=ui
                 memory=rss=0;active=[]
                 for identity,child in list(known.items()):
                     try:
