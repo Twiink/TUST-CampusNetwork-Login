@@ -1,0 +1,15 @@
+name: Native packaging tools
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos-image-tools:
+    runs-on: xcode-27
+    steps:
+      - name: Inspect disk image CLI
+        run: |
+          sw_vers
+          diskutil image create from --help || true
+          diskutil image create from || true
+          hdiutil create -help || true
