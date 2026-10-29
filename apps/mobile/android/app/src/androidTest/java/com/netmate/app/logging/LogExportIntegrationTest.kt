@@ -1,32 +1,30 @@
 package com.netmate.app.logging
-
-import androidx.core.content.FileProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-
-/** Runs after the UI export flow, under the signed test package's target application identity. */
+import java.io.StringWriter
+/** Real SQLite, independent of the app's UI fixture state. */
 @RunWith(AndroidJUnit4::class)
 class LogExportIntegrationTest {
-    @Test fun exportedJournalIsPersistedRedactedAndReadableThroughFileProvider() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val file = File(context.cacheDir, "exports/NetMate-diagnostic.log")
-        assertTrue("The UI did not create an exported diagnostic file", file.isFile)
-        val text = file.readText()
-        val entries = text.lineSequence().filter { it.isNotBlank() }.map { JSONObject(it) }.toList()
-        assertTrue("Export did not contain persisted entries", entries.isNotEmpty())
-        assertTrue(entries.all { it.has("message") && it.get("message") is String })
-        for (password in listOf("fake-password", "e2e-wifi-pass")) {
-            assertFalse("An exported fixture password was not redacted", text.contains(password))
-        }
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        val shared = context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
-        assertEquals("The system share URI did not resolve to the exported journal", text, shared)
-        val artifact = File(requireNotNull(context.getExternalFilesDir(null)), "e2e-exported-diagnostic.log")
-        artifact.writeText(shared)
+    @Test fun indexedHistoryPagesAndExportsBeyondTheUiLimit() {
+        val context = InstrumentationRegistry.getInstrumentation().context
+        context.deleteDatabase("native-logs-v1.db")
+        val journal = SqliteJournal(context)
+        val entries = (0 until 1200).map { JSONObject().put("level", "info").put("source", "test").put("message", "record $it password=fixture-log-value").put("data",JSONObject().put("sequence",it)) }
+        journal.appendBatch(entries)
+        val first = journal.page(JSONObject())
+        assertEquals(200, first.getJSONArray("entries").length())
+        assertTrue(first.getBoolean("hasMore"))
+        val writer = StringWriter()
+        assertEquals(1200L, journal.export(JSONObject(), "json", writer))
+        assertFalse(writer.toString().contains("fixture-log-value"))
+        assertTrue(first.getJSONArray("entries").getJSONObject(0).getJSONObject("data").has("sequence"))
+        journal.clear()
+        try { journal.page(JSONObject().put("cursor", first.getString("nextCursor"))); fail("stale cursor was accepted") } catch (_: IllegalArgumentException) { }
+        assertEquals(0, journal.page(JSONObject()).getJSONArray("entries").length())
+        journal.close()
     }
 }

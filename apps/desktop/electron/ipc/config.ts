@@ -1,98 +1,56 @@
-/**
- * 配置相关 IPC 处理
- */
-
+/** Configuration IPC commits include the result of applying OS autostart. */
 import { ipcMain } from 'electron';
-import { ConfigManager, AppConfig, AppSettings, createLogger } from '@repo/shared';
-
-/** 配置保存后回调：主进程据此把设置应用到运行中的服务 */
-export type ConfigChangedHandler = (config: AppConfig) => void;
+import { ConfigManager, type AppConfig, type AppSettings, type Logger } from '@repo/shared';
+import type { AutoLaunchService } from '../services/auto-launch';
 import { IPC_CHANNELS } from './channels';
 import { assertAppConfigInput } from './validate';
 
-/**
- * 注册配置 IPC 处理器
- */
+export interface ConfigApplyResult {
+  config: AppConfig;
+  applied: boolean;
+  error?: string;
+}
+export type ConfigChangedHandler = (config: AppConfig) => void | Promise<void>;
+
 export function registerConfigIPC(
-  configManager: ConfigManager,
-  logger: ReturnType<typeof createLogger>,
-  onConfigChanged?: ConfigChangedHandler
+  manager: ConfigManager,
+  logger: Logger,
+  onConfigChanged?: ConfigChangedHandler,
+  autoLaunch?: AutoLaunchService
 ) {
-  const emitChanged = () => {
-    const current = configManager.getConfig();
-    if (!current || !onConfigChanged) return;
-    try {
-      onConfigChanged(current);
-    } catch (error) {
-      logger.error('应用配置变更失败', error);
-    }
-  };
-
-  /**
-   * 获取配置
-   */
-  ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async (): Promise<AppConfig | null> => {
-    try {
-      return configManager.getConfig();
-    } catch (error) {
-      logger.error('获取配置失败', error);
-      return null;
-    }
-  });
-
-  /**
-   * 保存配置
-   */
-  ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_, config: AppConfig): Promise<boolean> => {
-    try {
-      assertAppConfigInput(config, '保存配置');
-      await configManager.save(config);
-      logger.info('配置已保存');
-      emitChanged();
-      return true;
-    } catch (error) {
-      logger.error('保存配置失败', error);
-      return false;
-    }
-  });
-
-  /**
-   * 重置配置
-   */
-  ipcMain.handle(IPC_CHANNELS.CONFIG_RESET, async (): Promise<AppConfig> => {
-    try {
-      const config = await configManager.reset();
-      logger.info('配置已重置');
-      emitChanged();
-      return config;
-    } catch (error) {
-      logger.error('重置配置失败', error);
-      throw error;
-    }
-  });
-
-  /**
-   * 获取设置
-   */
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async (): Promise<AppSettings> => {
-    return configManager.getSettings();
-  });
-
-  /**
-   * 更新设置
-   */
-  ipcMain.handle(
-    IPC_CHANNELS.SETTINGS_UPDATE,
-    async (_, settings: Partial<AppSettings>): Promise<AppSettings> => {
-      try {
-        const updated = await configManager.updateSettings(settings);
-        logger.info('设置已更新');
-        emitChanged();
-        return updated;
-      } catch (error) {
-        logger.error('更新设置失败', error);
-        throw error;
+  let queue: Promise<unknown> = Promise.resolve();
+  const commit = (save: () => Promise<unknown>): Promise<ConfigApplyResult> => {
+    const operation = queue.then(async () => {
+      await save(); // Persistence failures reject; no OS side effects precede this commit.
+      let error: string | undefined;
+      if (autoLaunch) {
+        const wanted = manager.getSettings().autoLaunch;
+        const actual = await autoLaunch.isEnabled();
+        if (wanted !== actual && !(await autoLaunch.setEnabled(wanted))) {
+          const restored = await autoLaunch.isEnabled();
+          await manager.updateSettings({ autoLaunch: restored });
+          error = '系统未能更改开机自启，开关已恢复为系统实际状态';
+          logger.error(error);
+        }
       }
-    }
+      const config = manager.getConfig()!;
+      await onConfigChanged?.(config);
+      return { config, applied: !error, ...(error ? { error } : {}) };
+    });
+    queue = operation.catch(() => undefined);
+    return operation;
+  };
+  const updateSettings = (settings: Partial<AppSettings>) =>
+    commit(() => manager.updateSettings(settings));
+  ipcMain.handle(IPC_CHANNELS.CONFIG_GET, async () => manager.getConfig());
+  ipcMain.handle(IPC_CHANNELS.CONFIG_SET, async (_, config: AppConfig) => {
+    assertAppConfigInput(config, '保存配置');
+    return commit(() => manager.save(config));
+  });
+  ipcMain.handle(IPC_CHANNELS.CONFIG_RESET, () => commit(() => manager.reset()));
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, async () => manager.getSettings());
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_, settings: Partial<AppSettings>) =>
+    updateSettings(settings)
   );
+  return { updateSettings };
 }

@@ -9,6 +9,7 @@ const onlineStatus: NetworkStatus = {
   authenticated: true,
   wifiConnected: true,
   ssid: 'TUST-WIFI',
+  ip: '10.1.2.3',
 };
 
 const onlineInfo = {

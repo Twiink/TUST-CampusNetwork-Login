@@ -10,6 +10,7 @@ import type { WifiInfo, WifiDetails, NetworkInfo } from '../types/network';
  * 负责 WiFi 相关操作，包括启动时获取当前 WiFi 连接状态
  */
 export interface WifiAdapter {
+  invalidateCache?(): void;
   isWifiEnabled?(): Promise<boolean>;
   /**
    * 获取当前连接的 WiFi 信息

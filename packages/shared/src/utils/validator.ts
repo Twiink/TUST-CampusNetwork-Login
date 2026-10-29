@@ -176,14 +176,28 @@ export function normalizeAppSettings(settings?: unknown): AppSettings {
         ? raw.autoReconnect
         : DEFAULT_APP_SETTINGS.autoReconnect,
     autoAuthPaused: raw.autoAuthPaused === true,
-    wifiReconnectRetries:
-      toFiniteNumber(raw.wifiReconnectRetries) ??
-      toFiniteNumber(raw.maxRetries) ??
-      DEFAULT_APP_SETTINGS.wifiReconnectRetries,
-    maxRetries:
-      toFiniteNumber(raw.wifiReconnectRetries) ??
-      toFiniteNumber(raw.maxRetries) ??
-      DEFAULT_APP_SETTINGS.wifiReconnectRetries,
+    wifiReconnectRetries: Math.max(
+      1,
+      Math.min(
+        10,
+        Math.floor(
+          toFiniteNumber(raw.wifiReconnectRetries) ??
+            toFiniteNumber(raw.maxRetries) ??
+            DEFAULT_APP_SETTINGS.wifiReconnectRetries
+        )
+      )
+    ),
+    maxRetries: Math.max(
+      1,
+      Math.min(
+        10,
+        Math.floor(
+          toFiniteNumber(raw.wifiReconnectRetries) ??
+            toFiniteNumber(raw.maxRetries) ??
+            DEFAULT_APP_SETTINGS.wifiReconnectRetries
+        )
+      )
+    ),
     wifiReconnectCooldownMinutes:
       toFiniteNumber(raw.wifiReconnectCooldownMinutes) ??
       DEFAULT_APP_SETTINGS.wifiReconnectCooldownMinutes,
@@ -386,9 +400,11 @@ export function validateAppSettings(settings: Partial<AppSettings>): ValidationR
     if (
       typeof settings.wifiReconnectRetries !== 'number' ||
       !Number.isFinite(settings.wifiReconnectRetries) ||
-      settings.wifiReconnectRetries < 0
+      !Number.isInteger(settings.wifiReconnectRetries) ||
+      settings.wifiReconnectRetries < 1 ||
+      settings.wifiReconnectRetries > 10
     ) {
-      errors.push('WiFi 重试次数必须大于等于 0');
+      errors.push('WiFi 尝试次数必须为 1–10 的整数');
     }
   }
 

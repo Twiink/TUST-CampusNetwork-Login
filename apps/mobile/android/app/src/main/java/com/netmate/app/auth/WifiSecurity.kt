@@ -13,6 +13,8 @@ object WifiSecurity {
             else -> text.lowercase()
         }
     }
+    fun systemSettingsOnly(security: String?) = normalize(security) in setOf("enterprise", "wep")
+    fun connected(rule: AutoAuthWifiRule, state: WifiEnvironment.Snapshot) = state.connected && !state.ipv4.isNullOrBlank() && match(rule, state.ssid, state.security, state.bssid) >= 0
     fun matches(expected: String, actual: String) = expected == actual || (expected == "wpa2-wpa3" && actual in setOf("wpa2", "wpa3"))
     fun bssid(value: String?): String = value.orEmpty().replace(":", "").replace("-", "").lowercase().takeIf { it.matches(Regex("[0-9a-f]{12}")) && it != "020000000000" }.orEmpty()
     fun match(rule: AutoAuthWifiRule, ssid: String?, security: String?, address: String?): Int {

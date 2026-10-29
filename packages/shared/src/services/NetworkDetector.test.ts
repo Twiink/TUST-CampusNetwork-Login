@@ -266,7 +266,7 @@ describe('NetworkDetector', () => {
       connected: false,
       authenticated: false,
       wifiConnected: false,
-      ssid: undefined,
+      internetReachable: false,
     });
   });
 
@@ -354,5 +354,38 @@ describe('NetworkDetector', () => {
     });
     detector.stopPolling();
     expect(detector.isPollingActive()).toBe(false);
+  });
+});
+
+it('fresh status uses the new interface when WiFi changes during a connectivity probe', async () => {
+  const base = {
+    ssid: 'Campus',
+    ipv4: '10.1.1.2',
+    connected: true,
+    signalStrength: 80,
+    linkSpeed: 100,
+    frequency: 5000,
+  };
+  const adapter = {
+    getWifiDetails: vi
+      .fn()
+      .mockResolvedValueOnce(base)
+      .mockResolvedValue({ ...base, ipv4: '192.168.1.2' }),
+    invalidateCache: vi.fn(),
+  } as unknown as import('./WifiAdapter').WifiAdapter;
+  const detector = new NetworkDetector(adapter);
+  let finish!: (online: boolean) => void;
+  vi.spyOn(detector, 'checkConnectivity').mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    })
+  );
+  const pending = detector.getNetworkStatus({ fresh: true });
+  await Promise.resolve();
+  finish(true);
+  expect(await pending).toMatchObject({
+    ip: '192.168.1.2',
+    connected: false,
+    authenticated: false,
   });
 });

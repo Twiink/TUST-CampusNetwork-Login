@@ -31,10 +31,14 @@ export function editAccount(
   if (!validation.valid) throw new Error(validation.errors.join('；'));
   return { ...config, accounts: config.accounts.map((a) => (a.id === id ? account : a)) };
 }
+export type WifiEditDraft = Partial<Omit<WifiConfig, 'id' | 'password' | 'security'>> & {
+  security?: string | null;
+};
+
 export function editWifi(
   config: AppConfig,
   id: string,
-  draft: Partial<Omit<WifiConfig, 'id' | 'password'>>,
+  draft: WifiEditDraft,
   password = '',
   clearPassword = false
 ): AppConfig {
@@ -50,7 +54,10 @@ export function editWifi(
     id,
     linkedAccountIds,
     linkedAccountId: linkedAccountIds[0],
-    security: resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
+    security:
+      draft.security === null
+        ? undefined
+        : resolveWifiSecurity(draft.security ?? previous.security, nextPassword),
     password: nextPassword,
   };
   if (config.wifiList.some((w) => w.id !== id && sameWifiFingerprint(w, wifi)))

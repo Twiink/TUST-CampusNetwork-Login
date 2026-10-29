@@ -202,21 +202,57 @@ pub fn current_wifi() -> Option<NativeWifiInfo> {
     snapshot
 }
 
-pub fn network_info() -> Option<NativeNetworkInfo> {
-    adapter_addresses()
-        .and_then(|info| (info.ipv4.is_some() || info.ipv6.is_some()).then_some(info))
+fn connected_wifi_guid() -> Option<windows::core::GUID> {
+    let handle = open_wlan_handle().ok()?;
+    let mut list = std::ptr::null_mut();
+    let result = unsafe { WlanEnumInterfaces(handle.0, None, &mut list) };
+    if list.is_null() {
+        return None;
+    }
+    let guid = if result == 0 {
+        let entries = unsafe {
+            std::slice::from_raw_parts(
+                (*list).InterfaceInfo.as_ptr(),
+                (*list).dwNumberOfItems as usize,
+            )
+        };
+        entries
+            .iter()
+            .find(|info| {
+                info.isState == wlan_interface_state_connected
+                    && query_connection(handle.0, &info.InterfaceGuid)
+                        .and_then(|connection| decode_connection(&connection))
+                        .is_some()
+            })
+            .map(|info| info.InterfaceGuid)
+    } else {
+        None
+    };
+    unsafe {
+        WlanFreeMemory(list.cast());
+    }
+    guid
 }
 
-fn adapter_addresses() -> Option<NativeNetworkInfo> {
+fn matches_wifi_adapter(name: &str, guid: &windows::core::GUID) -> bool {
+    name.trim_matches(&['{', '}'][..])
+        .eq_ignore_ascii_case(&format!("{guid:?}"))
+}
+
+pub fn network_info() -> Option<NativeNetworkInfo> {
+    adapter_addresses(&connected_wifi_guid()?)
+}
+
+fn adapter_addresses(wifi_guid: &windows::core::GUID) -> Option<NativeNetworkInfo> {
     let mut size = 0u32;
     let flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_FRIENDLY_NAME;
     unsafe {
-        GetAdaptersAddresses(2, flags, None, None, &mut size);
+        GetAdaptersAddresses(0, flags, None, None, &mut size);
     }
     let mut buffer = vec![0u8; size as usize];
     let result = unsafe {
         GetAdaptersAddresses(
-            2,
+            0,
             flags,
             None,
             Some(buffer.as_mut_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>()),
@@ -227,12 +263,24 @@ fn adapter_addresses() -> Option<NativeNetworkInfo> {
         return None;
     }
 
-    let mut best_metric = u32::MAX;
-    let mut selected = None;
-    let mut cursor = buffer.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+    adapter_info(buffer.as_ptr().cast(), wifi_guid)
+}
+
+fn adapter_info(
+    mut cursor: *const IP_ADAPTER_ADDRESSES_LH,
+    wifi_guid: &windows::core::GUID,
+) -> Option<NativeNetworkInfo> {
     while !cursor.is_null() {
         let adapter = unsafe { &*cursor };
         cursor = adapter.Next;
+        if adapter.AdapterName.0.is_null() {
+            continue;
+        }
+        let name =
+            unsafe { std::ffi::CStr::from_ptr(adapter.AdapterName.0.cast()) }.to_string_lossy();
+        if !matches_wifi_adapter(&name, wifi_guid) {
+            continue;
+        }
 
         let mut ipv4 = None;
         let mut ipv6 = None;
@@ -275,29 +323,26 @@ fn adapter_addresses() -> Option<NativeNetworkInfo> {
             }
         }
 
-        if ipv4.is_some() && adapter.Ipv4Metric < best_metric {
-            best_metric = adapter.Ipv4Metric;
-            selected = Some(NativeNetworkInfo {
-                ipv4,
-                ipv6,
-                mac: (adapter.PhysicalAddressLength >= 6).then(|| {
-                    format!(
-                        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                        adapter.PhysicalAddress[0],
-                        adapter.PhysicalAddress[1],
-                        adapter.PhysicalAddress[2],
-                        adapter.PhysicalAddress[3],
-                        adapter.PhysicalAddress[4],
-                        adapter.PhysicalAddress[5]
-                    )
-                }),
-                gateway,
-                dns: (!dns.is_empty()).then_some(dns),
-                subnet_mask,
-            });
-        }
+        return Some(NativeNetworkInfo {
+            ipv4,
+            ipv6,
+            mac: (adapter.PhysicalAddressLength >= 6).then(|| {
+                format!(
+                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    adapter.PhysicalAddress[0],
+                    adapter.PhysicalAddress[1],
+                    adapter.PhysicalAddress[2],
+                    adapter.PhysicalAddress[3],
+                    adapter.PhysicalAddress[4],
+                    adapter.PhysicalAddress[5]
+                )
+            }),
+            gateway,
+            dns: (!dns.is_empty()).then_some(dns),
+            subnet_mask,
+        });
     }
-    selected
+    None
 }
 
 fn format_sockaddr(
@@ -402,6 +447,48 @@ unsafe extern "system" fn wlan_notification_callback(
 mod identity_tests {
     use super::*;
     use windows::Win32::NetworkManagement::WiFi::{DOT11_AUTH_ALGORITHM, WLAN_SECURITY_ATTRIBUTES};
+
+    #[test]
+    fn wifi_adapter_uses_wlan_guid_and_does_not_borrow_vpn_addresses() {
+        use windows::core::{GUID, PSTR};
+        use windows::Win32::NetworkManagement::IpHelper::IP_ADAPTER_UNICAST_ADDRESS_LH;
+        use windows::Win32::Networking::WinSock::{AF_INET, SOCKADDR_IN};
+        let guid = GUID::from_u128(0x00112233_4455_6677_8899_aabbccddeeff);
+        let mut wifi_name = b"{00112233-4455-6677-8899-aabbccddeeff}\0".to_vec();
+        let mut vpn_name = b"{11112233-4455-6677-8899-aabbccddeeff}\0".to_vec();
+        let mut wifi_ip = SOCKADDR_IN {
+            sin_family: AF_INET,
+            ..Default::default()
+        };
+        wifi_ip.sin_addr.S_un.S_addr = u32::from_ne_bytes([192, 168, 5, 10]);
+        let mut vpn_ip = SOCKADDR_IN {
+            sin_family: AF_INET,
+            ..Default::default()
+        };
+        vpn_ip.sin_addr.S_un.S_addr = u32::from_ne_bytes([10, 88, 0, 2]);
+        let mut wifi_address = IP_ADAPTER_UNICAST_ADDRESS_LH::default();
+        wifi_address.Address.lpSockaddr = (&mut wifi_ip as *mut SOCKADDR_IN).cast();
+        let mut vpn_address = IP_ADAPTER_UNICAST_ADDRESS_LH::default();
+        vpn_address.Address.lpSockaddr = (&mut vpn_ip as *mut SOCKADDR_IN).cast();
+        let mut wifi = IP_ADAPTER_ADDRESSES_LH {
+            AdapterName: PSTR(wifi_name.as_mut_ptr()),
+            FirstUnicastAddress: &mut wifi_address,
+            ..Default::default()
+        };
+        let mut vpn = IP_ADAPTER_ADDRESSES_LH {
+            AdapterName: PSTR(vpn_name.as_mut_ptr()),
+            FirstUnicastAddress: &mut vpn_address,
+            Next: &mut wifi,
+            ..Default::default()
+        };
+        assert_eq!(
+            adapter_info(&vpn, &guid).unwrap().ipv4.as_deref(),
+            Some("192.168.5.10")
+        );
+        wifi.FirstUnicastAddress = std::ptr::null_mut();
+        vpn.Next = &mut wifi;
+        assert!(adapter_info(&vpn, &guid).unwrap().ipv4.is_none());
+    }
 
     #[test]
     fn connection_identity_uses_sdk_layout_and_preserves_ssid() {

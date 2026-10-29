@@ -4,7 +4,7 @@ import { createDefaultAppConfig, type NetworkStatus } from '@repo/shared';
 import { AppProvider, useApp } from './AppContext';
 
 const disconnected: NetworkStatus = {
-  connected: true,
+  connected: false,
   authenticated: false,
   wifiConnected: true,
   ssid: 'TUST-WIFI',
@@ -13,7 +13,10 @@ const disconnected: NetworkStatus = {
 describe('AppProvider', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.config.get).mockResolvedValue(createDefaultAppConfig());
-    vi.mocked(window.electronAPI.config.set).mockResolvedValue(true);
+    vi.mocked(window.electronAPI.config.set).mockImplementation(async (config) => ({
+      config,
+      applied: true,
+    }));
     vi.mocked(window.electronAPI.network.getWifiSSID).mockResolvedValue({
       connected: true,
       ssid: 'TUST-WIFI',
@@ -34,7 +37,7 @@ describe('AppProvider', () => {
     });
   });
 
-  it('登录和注销后立即同步网络展示状态', async () => {
+  it('认证成功但仍无外网时保留认证状态，并在注销后清除', async () => {
     const { result } = renderHook(() => useApp(), { wrapper: AppProvider });
 
     await waitFor(() => expect(result.current.initialCheckDone).toBe(true));
@@ -47,7 +50,8 @@ describe('AppProvider', () => {
     });
     expect(window.electronAPI.auth.login).toHaveBeenCalledTimes(1);
     expect(result.current.isAuthenticated).toBe(true);
-    expect(result.current.networkStatus).toBe('connected');
+    expect(result.current.networkStatus).toBe('disconnected');
+    expect(result.current.isConnected).toBe(false);
 
     await act(async () => {
       await result.current.logout();

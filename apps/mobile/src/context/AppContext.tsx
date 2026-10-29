@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { matchesLog, mergeLogs, redact, type LogHistoryFilter } from '@repo/shared';
 import { AppState } from 'react-native';
 import {
   createDefaultAppConfig,
@@ -29,6 +30,7 @@ import {
   startBackgroundService,
   stopBackgroundService,
 } from '../native/BackgroundService';
+import { normalizeMobileWifiRules } from '../services/wifiPolicy';
 import { createMobileServices } from './mobileServices';
 import { useAccountActions } from './useAccountActions';
 import { isAutoStartAvailable, setAutoStartEnabled } from '../native/AutoStart';
@@ -58,12 +60,7 @@ import {
 } from '../native/Logs';
 import type { PermissionItem, PermissionKey } from '../native/Permissions';
 
-export interface LogEntry {
-  id: string;
-  timestamp: string;
-  level: PersistentLogEntry['level'];
-  message: string;
-}
+export type LogEntry = PersistentLogEntry;
 export type ConfigUpdate = AppConfig | ((current: AppConfig) => AppConfig);
 interface AppContextType {
   config: AppConfig;
@@ -87,8 +84,14 @@ interface AppContextType {
   switchAccount: (id: string) => Promise<void>;
   logs: LogEntry[];
   addLog: (level: LogEntry['level'], message: string) => void;
-  clearLogs: () => void;
-  exportLogs: () => Promise<void>;
+  clearLogs: () => Promise<void>;
+  logError: string | null;
+  logsLoading: boolean;
+  logsTotal: number;
+  hasMoreLogs: boolean;
+  queryLogs: (filter?: LogHistoryFilter) => Promise<void>;
+  refreshLogs: () => Promise<void>;
+  exportLogs: (format?: 'text' | 'json', filter?: LogHistoryFilter) => Promise<void>;
   loadMoreLogs: () => Promise<void>;
   hasPermission: boolean;
   requestPermission: () => Promise<boolean>;
@@ -118,7 +121,7 @@ const emptyNetwork: NetworkInfo = {
 const displayLog = (entry: PersistentLogEntry): LogEntry => ({
   ...entry,
   message: redactText(entry.message),
-  timestamp: new Date(entry.timestamp).toLocaleString(),
+  data: redact(entry.data),
 });
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -127,6 +130,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const configRef = useRef(config);
   const commitQueue = useRef<Promise<unknown>>(Promise.resolve());
   const pendingRetry = useRef<(() => Promise<unknown>) | null>(null);
+  const initializationFailed = useRef(false);
   const syncQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [configurationState, setConfigurationState] =
     useState<AppContextType['configurationState']>('loading');
@@ -143,8 +147,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [accounts, setAccounts] = useState<AccountConfig[]>([]);
   const [currentAccount, setCurrentAccount] = useState<AccountConfig | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logError, setLogError] = useState<string | null>(null);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsTotal, setLogsTotal] = useState(0);
+  const [hasMoreLogs, setHasMoreLogs] = useState(true);
+  const logFilter = useRef<LogHistoryFilter>({});
+  const logsRef = useRef(logs);
+  logsRef.current = logs;
   const logEpoch = useRef(0);
   const logWrites = useRef<Promise<void>>(Promise.resolve());
+  const pendingLocalLogs = useRef(new Map<string, PersistentLogEntry>());
+  const queryLogEvents = useRef<Map<string, LogEntry> | null>(null);
   const logClearPending = useRef<Promise<void> | null>(null);
   const logGeneration = useRef<string | undefined>(undefined);
   const pendingNativeLogs = useRef<PersistentLogEntry[]>([]);
@@ -164,63 +177,140 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (entry.generation && logGeneration.current && entry.generation !== logGeneration.current)
       return;
     const value = displayLog(entry);
-    setLogs(previous => [value, ...previous.filter(log => log.id !== value.id)]);
+    if (matchesLog(value, logFilter.current)) {
+      queryLogEvents.current?.set(value.id, value);
+      setLogs(previous => mergeLogs(previous, [value]));
+    }
   }, []);
+  const persistLog = useCallback(
+    (entry: PersistentLogEntry) => {
+      pendingLocalLogs.current.set(entry.id, entry);
+      receiveLog(entry);
+      logWrites.current = logWrites.current
+        .then(async () => {
+          await appendPersistentLog(entry);
+          pendingLocalLogs.current.delete(entry.id);
+        })
+        .catch(() => setLogError('日志保存失败，当前记录仍可查看，请检查存储空间'));
+    },
+    [receiveLog]
+  );
   const addLog = useCallback(
-    (level: LogEntry['level'], message: string) => {
-      const entry: PersistentLogEntry = {
+    (level: LogEntry['level'], message: string) =>
+      persistLog({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         timestamp: Date.now(),
         level,
         message: redactText(message),
         source: 'app',
-      };
-      receiveLog(entry);
-      logWrites.current = logWrites.current
-        .then(() => appendPersistentLog(entry))
-        .catch(() => undefined);
-    },
-    [receiveLog]
+      }),
+    [persistLog]
   );
-  const clearLogs = useCallback(() => {
+  const clearLogs = useCallback(async () => {
     logEpoch.current++;
+    queryLogEvents.current = null;
+    logPagePending.current = false;
+    const previousIds = new Set(logsRef.current.map(entry => entry.id));
     logCursor.current = null;
     logHasMore.current = true;
-    setLogs([]);
     const pending = logWrites.current.then(async () => {
       logGeneration.current = await clearPersistentLogs();
+      previousIds.forEach(id => pendingLocalLogs.current.delete(id));
+      setLogs(previous =>
+        previous.filter(
+          entry =>
+            !previousIds.has(entry.id) && !entry.generation && matchesLog(entry, logFilter.current)
+        )
+      );
+      setLogsTotal(0);
+      setHasMoreLogs(false);
+      setLogError(null);
     });
     logWrites.current = pending.catch(() => undefined);
     logClearPending.current = pending;
-    pending
-      .catch(() => addLog('error', '日志清空失败，请重试'))
-      .finally(() => {
-        if (logClearPending.current !== pending) return;
+    try {
+      await pending;
+    } catch (error) {
+      setLogError('日志清空失败，请重试');
+      throw error;
+    } finally {
+      if (logClearPending.current === pending) {
         logClearPending.current = null;
         const queued = pendingNativeLogs.current;
         pendingNativeLogs.current = [];
         queued.forEach(receiveLog);
-      });
-  }, [addLog, receiveLog]);
-  const loadMoreLogs = useCallback(async () => {
-    if (logPagePending.current || !logHasMore.current) return;
-    const epoch = logEpoch.current;
-    logPagePending.current = true;
-    try {
-      await logClearPending.current;
-      if (epoch !== logEpoch.current) return;
-      const page = await queryPersistentLogPage(logCursor.current);
-      if (!mounted.current || epoch !== logEpoch.current) return;
-      logCursor.current = page.nextCursor;
-      logHasMore.current = page.hasMore;
-      setLogs(previous => {
-        const ids = new Set(previous.map(log => log.id));
-        return [...previous, ...page.entries.filter(entry => !ids.has(entry.id)).map(displayLog)];
-      });
-    } finally {
-      logPagePending.current = false;
+      }
     }
-  }, []);
+  }, [receiveLog]);
+  const readLogs = useCallback(
+    async (mode: 'query' | 'refresh' | 'more', filter?: LogHistoryFilter) => {
+      if (mode === 'more' && (logPagePending.current || !logHasMore.current)) return;
+      if (mode === 'query') {
+        logEpoch.current++;
+        logFilter.current = filter ?? {};
+        queryLogEvents.current = new Map();
+      }
+      const epoch = logEpoch.current;
+      logPagePending.current = true;
+      setLogsLoading(true);
+      try {
+        await logClearPending.current;
+        await logWrites.current;
+        if (epoch !== logEpoch.current) return;
+        const page = await queryPersistentLogPage(
+          mode === 'more' ? logCursor.current : null,
+          logFilter.current
+        );
+        if (!mounted.current || epoch !== logEpoch.current) return;
+        if (mode === 'refresh' && logsRef.current.length) {
+          const knownIds = new Set(logsRef.current.map(entry => entry.id));
+          let chunk = page;
+          while (chunk.hasMore && !chunk.entries.some(entry => knownIds.has(entry.id))) {
+            chunk = await queryPersistentLogPage(chunk.nextCursor, logFilter.current);
+            if (epoch !== logEpoch.current) return;
+            page.entries.push(...chunk.entries);
+          }
+          page.nextCursor = chunk.nextCursor;
+          page.hasMore = chunk.hasMore;
+        }
+        if (mode !== 'refresh' || logCursor.current === null) {
+          logCursor.current = page.nextCursor;
+          logHasMore.current = page.hasMore;
+          setHasMoreLogs(page.hasMore);
+        }
+        setLogsTotal(page.total);
+        setLogError(page.error ?? null);
+        const received = mode === 'query' ? [...(queryLogEvents.current?.values() ?? [])] : [];
+        if (mode === 'query') queryLogEvents.current = null;
+        setLogs(previous =>
+          mergeLogs(
+            mode === 'query' ? [] : previous,
+            [...pendingLocalLogs.current.values()]
+              .map(displayLog)
+              .filter(entry => matchesLog(entry, logFilter.current)),
+            page.entries.map(displayLog),
+            received
+          )
+        );
+      } catch (error) {
+        setLogError('历史日志读取失败，请刷新重试');
+        throw error;
+      } finally {
+        if (epoch === logEpoch.current) {
+          if (mode === 'query') queryLogEvents.current = null;
+          logPagePending.current = false;
+          setLogsLoading(false);
+        }
+      }
+    },
+    []
+  );
+  const loadMoreLogs = useCallback(() => readLogs('more'), [readLogs]);
+  const queryLogs = useCallback(
+    (filter?: LogHistoryFilter) => readLogs('query', filter),
+    [readLogs]
+  );
+  const refreshLogs = useCallback(() => readLogs('refresh'), [readLogs]);
   const applyConfigState = useCallback((next: AppConfig) => {
     if ((next.revision ?? 0) < (configRef.current.revision ?? 0)) return;
     configRef.current = next;
@@ -263,7 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [syncConfiguration]);
   useEffect(() => {
-    if (configurationState !== 'error') return;
+    if (configurationState !== 'error' || initializationFailed.current) return;
     retryTimer.current = setTimeout(() => {
       retryConfigurationSync().catch(() => undefined);
     }, 5000);
@@ -310,6 +400,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const next = typeof update === 'function' ? update(current) : update;
           return {
             ...next,
+            wifiList: normalizeMobileWifiRules(next.wifiList),
             settings: {
               ...next.settings,
               heartbeatIntervalSeconds: Math.max(
@@ -337,8 +428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNetworkStatus(
       snapshot.authenticating
         ? 'connecting'
-        : snapshot.wifiConnected &&
-            (snapshot.requiresAuth ? snapshot.authenticated : snapshot.internetReachable)
+        : snapshot.wifiConnected && snapshot.internetReachable
           ? 'connected'
           : 'disconnected'
     );
@@ -369,18 +459,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     mounted.current = true;
     let unsubscribe: (() => void) | undefined;
     const subscription = onPersistentLog(receiveLog);
-    (async () => {
+    const initialize = async (): Promise<void> => {
+      let retryInitialization: () => Promise<void> = initialize;
+      initializationFailed.current = false;
+      setConfigurationState('loading');
+      setConfigurationError(null);
       try {
-        await loadMoreLogs();
-        const services = createMobileServices();
-        servicesRef.current = services;
-        unsubscribe = services.logger.addListener(entry =>
-          addLog(
-            entry.level,
-            entry.data ? `${entry.message} ${JSON.stringify(entry.data)}` : entry.message
-          )
-        );
+        let services = servicesRef.current;
+        if (!services) {
+          services = createMobileServices();
+          servicesRef.current = services;
+          unsubscribe = services.logger.addListener(entry =>
+            persistLog({ ...entry, timestamp: new Date(entry.timestamp).getTime() })
+          );
+        }
         await services.configManager.load();
+        const rules = services.configManager.getConfig()!.wifiList;
+        const normalized = normalizeMobileWifiRules(rules);
+        if (normalized.some((rule, index) => rule !== rules[index]))
+          await services.configManager.update({ wifiList: normalized });
         const interval = services.configManager.getSettings().heartbeatIntervalSeconds;
         if (interval < 15 || interval > 300)
           await services.configManager.updateSettings({
@@ -399,16 +496,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             settings: { ...current.settings, autoAuthPaused: native.paused },
           }));
         }
-        await syncConfiguration(services.configManager.getConfig()!);
-        if (!mounted.current) return;
-        setReady(true);
-        setHasPermission(await hasLocationPermission());
-        await refreshNetworkInfo();
-        addLog('success', '配置加载完成');
+        const snapshot = services.configManager.getConfig()!;
+        const finishInitialization = async () => {
+          await syncConfiguration(snapshot);
+          if (!mounted.current) return;
+          setHasPermission(await hasLocationPermission());
+          await refreshNetworkInfo();
+          initializationFailed.current = false;
+          pendingRetry.current = null;
+          setReady(true);
+          addLog('success', '配置加载完成');
+        };
+        retryInitialization = finishInitialization;
+        await finishInitialization();
       } catch (error) {
+        if (!mounted.current) return;
+        initializationFailed.current = true;
+        pendingRetry.current = retryInitialization;
+        setConfigurationState('error');
+        setConfigurationError(error instanceof Error ? error.message : '初始化失败');
         addLog('error', `初始化失败: ${error instanceof Error ? error.message : '未知错误'}`);
       }
-    })();
+    };
+    loadMoreLogs().catch(() => addLog('warn', '历史日志读取失败，可在日志页重试'));
+    initialize();
     return () => {
       mounted.current = false;
       unsubscribe?.();
@@ -416,7 +527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       servicesRef.current?.logger.stopAutoCleanup();
       servicesRef.current = null;
     };
-  }, [addLog, loadMoreLogs, receiveLog, refreshNetworkInfo, syncConfiguration]);
+  }, [addLog, loadMoreLogs, persistLog, receiveLog, refreshNetworkInfo, syncConfiguration]);
 
   useEffect(() => {
     if (!ready || !isModuleAvailable) return;
@@ -434,7 +545,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (value) setReconnectProgress(value);
     });
     const appState = AppState.addEventListener('change', value => {
-      if (value === 'active') refreshNetworkInfo();
+      if (value === 'active') {
+        refreshNetworkInfo();
+        refreshLogs().catch(() => undefined);
+      }
     });
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') refreshNetworkInfo();
@@ -447,7 +561,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clearInterval(timer);
       stopWatching().catch(() => undefined);
     };
-  }, [ready, isModuleAvailable, refreshNetworkInfo, applyAuthSnapshot]);
+  }, [ready, isModuleAvailable, refreshNetworkInfo, refreshLogs, applyAuthSnapshot]);
 
   useEffect(() => {
     if (ready && isAutoStartAvailable())
@@ -456,13 +570,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (!ready || !isBackgroundServiceAvailable()) return;
     (async () => {
-      const shouldRun = config.settings.enableHeartbeat || config.settings.autoReconnect;
+      const shouldRun =
+        config.settings.enableHeartbeat ||
+        config.settings.autoReconnect ||
+        config.settings.startupAutoConnect;
       if (shouldRun) await startBackgroundService(config.settings.heartbeatIntervalSeconds * 1000);
       else if (await isBackgroundServiceRunning()) await stopBackgroundService();
     })().catch(() => addLog('warn', '后台服务更新失败'));
   }, [
     ready,
     config.settings.autoReconnect,
+    config.settings.startupAutoConnect,
     config.settings.enableHeartbeat,
     config.settings.heartbeatIntervalSeconds,
     addLog,
@@ -599,6 +717,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     commitAction,
   });
 
+  const exportLogs = useCallback(
+    async (format: 'text' | 'json' = 'text', filter?: LogHistoryFilter) => {
+      await logClearPending.current;
+      await logWrites.current;
+      await exportPersistentLogs(format, filter);
+    },
+    []
+  );
   return (
     <AppContext.Provider
       value={{
@@ -621,7 +747,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logs,
         addLog,
         clearLogs,
-        exportLogs: exportPersistentLogs,
+        logError,
+        logsLoading,
+        logsTotal,
+        hasMoreLogs,
+        queryLogs,
+        refreshLogs,
+        exportLogs,
         loadMoreLogs,
         hasPermission,
         requestPermission,

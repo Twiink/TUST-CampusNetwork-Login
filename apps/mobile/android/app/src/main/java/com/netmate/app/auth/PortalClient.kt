@@ -21,6 +21,7 @@ import java.net.URLEncoder
  */
 class PortalClient(
     private val transport: Transport = UrlConnectionTransport(),
+    private val probeUrls: List<String> = CONNECTIVITY_CHECK_URLS,
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
 ) {
 
@@ -40,6 +41,7 @@ class PortalClient(
             "http://www.google.cn/generate_204",
         )
 
+        private val probes = java.util.concurrent.ThreadPoolExecutor(3,3,15,java.util.concurrent.TimeUnit.SECONDS,java.util.concurrent.ArrayBlockingQueue<Runnable>(12),java.util.concurrent.ThreadFactory { task -> Thread(task,"netmate-probe").apply { isDaemon=true } }).apply { allowCoreThreadTimeOut(true) }
         private val STATUS_SUCCESS = Regex("\"status\"\\s*:\\s*1")
 
         fun buildUserAccount(username: String, isp: String): String {
@@ -101,16 +103,27 @@ class PortalClient(
      * 未认证时门户会劫持为 200 页面，因此不能只看 2xx。
      */
     fun isOnline(network: Network?): Boolean {
-        return CONNECTIVITY_CHECK_URLS.any { url ->
-            try {
-                transport.get(url, network, PROBE_TIMEOUT_MS, readBody = false).first == 204
-            } catch (e: IOException) {
-                false
+        val native=transport as? UrlConnectionTransport
+        if (native==null) return probeUrls.any { url -> try { transport.get(url,network,PROBE_TIMEOUT_MS,false).first==204 } catch (_:IOException) { false } }
+        val scope=ProbeScope()
+        val completed=java.util.concurrent.ExecutorCompletionService<Boolean>(probes)
+        val jobs=mutableListOf<java.util.concurrent.Future<Boolean>>()
+        try {
+            for(url in probeUrls) jobs.add(completed.submit(java.util.concurrent.Callable {
+                try { native.getCancellable(url,network,PROBE_TIMEOUT_MS,false,scope).first==204 } catch (_:IOException) { false }
+            }))
+            val deadline=System.nanoTime()+java.util.concurrent.TimeUnit.MILLISECONDS.toNanos((PROBE_TIMEOUT_MS+500).toLong())
+            repeat(jobs.size) {
+                val remaining=deadline-System.nanoTime();if(remaining<=0)return false
+                val result=completed.poll(remaining,java.util.concurrent.TimeUnit.NANOSECONDS) ?: return false
+                if(runCatching{result.get()}.getOrDefault(false))return true
             }
-        }
+            return false
+        } catch (_:java.util.concurrent.RejectedExecutionException) { return false }
+        finally { scope.cancel();jobs.forEach{it.cancel(true)} }
     }
 
-    fun login(credentials: Credentials, ipv4: String, ipv6: String?, network: Network?, shouldContinue: () -> Boolean = { true }): LoginOutcome {
+    fun login(credentials: Credentials, ipv4: String, ipv6: String?, network: Network?, shouldContinue: () -> Boolean = { true }, maxAttempts: Int = MAX_ATTEMPTS): LoginOutcome {
         val url = buildLoginUrl(
             credentials.serverUrl.ifBlank { DEFAULT_SERVER_URL },
             credentials.username,
@@ -121,7 +134,7 @@ class PortalClient(
         )
 
         var lastMessage = "登录失败"
-        for (attempt in 1..MAX_ATTEMPTS) {
+        for (attempt in 1..maxAttempts) {
             if (!shouldContinue()) return LoginOutcome(false, "认证已取消", attempt - 1)
             try {
                 val (_, body) = transport.get(url, network, REQUEST_TIMEOUT_MS, readBody = true)
@@ -133,11 +146,11 @@ class PortalClient(
             } catch (e: IOException) {
                 lastMessage = "登录请求失败，请检查 WiFi 连接"
             }
-            if (attempt < MAX_ATTEMPTS) {
+            if (attempt < maxAttempts) {
                 sleeper(RETRY_DELAY_MS)
             }
         }
-        return LoginOutcome(false, lastMessage, MAX_ATTEMPTS)
+        return LoginOutcome(false, lastMessage, maxAttempts)
     }
 
     fun logout(serverUrl: String, network: Network?): LoginOutcome {
@@ -158,9 +171,14 @@ class PortalClient(
 /** 基于 HttpURLConnection 的实现；network 非空时通过 Network.openConnection 绑定 WiFi */
 class UrlConnectionTransport : PortalClient.Transport {
     override fun get(url: String, network: Network?, timeoutMs: Int, readBody: Boolean): Pair<Int, String> {
+        return request(url,network,timeoutMs,readBody,null)
+    }
+    internal fun getCancellable(url:String,network:Network?,timeoutMs:Int,readBody:Boolean,scope:ProbeScope):Pair<Int,String> = request(url,network,timeoutMs,readBody,scope)
+    private fun request(url:String,network:Network?,timeoutMs:Int,readBody:Boolean,scope:ProbeScope?):Pair<Int,String> {
         val target = URL(url)
         val connection = (network?.openConnection(target) ?: target.openConnection()) as HttpURLConnection
         try {
+            scope?.attach(connection)
             connection.requestMethod = "GET"
             connection.connectTimeout = timeoutMs
             connection.readTimeout = timeoutMs
@@ -176,12 +194,28 @@ class UrlConnectionTransport : PortalClient.Transport {
             val body = stream?.bufferedReader(Charsets.UTF_8)?.use { reader ->
                 // 门户响应很短；限制读取长度，避免异常页面占用内存
                 val buffer = CharArray(8192)
-                val read = reader.read(buffer)
-                if (read > 0) String(buffer, 0, read) else ""
+                val result = StringBuilder()
+                while (true) {
+                    val read = reader.read(buffer, 0, minOf(buffer.size, 8193 - result.length))
+                    if (read < 0) break
+                    result.append(buffer, 0, read)
+                    if (result.length > 8192) throw IOException("门户响应超过 8192 字符")
+                }
+                result.toString()
             } ?: ""
             return Pair(code, body)
         } finally {
+            scope?.detach(connection)
             connection.disconnect()
         }
     }
+}
+
+/** Disconnect outstanding socket reads as soon as any probe returns a valid 204. */
+internal class ProbeScope {
+    private val cancelled=java.util.concurrent.atomic.AtomicBoolean()
+    private val active=java.util.concurrent.ConcurrentHashMap.newKeySet<HttpURLConnection>()
+    fun attach(connection:HttpURLConnection) { active.add(connection);if(cancelled.get()){connection.disconnect();throw IOException("Probe cancelled")} }
+    fun detach(connection:HttpURLConnection) { active.remove(connection) }
+    fun cancel() { cancelled.set(true);active.forEach{it.disconnect()} }
 }

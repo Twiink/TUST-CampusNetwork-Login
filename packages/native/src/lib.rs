@@ -58,7 +58,9 @@ pub async fn scan_wifi() -> Result<Vec<NativeWifiInfo>> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Err(Error::from_reason("Native scan is unavailable on this platform"))
+        Err(Error::from_reason(
+            "Native scan is unavailable on this platform",
+        ))
     }
 }
 

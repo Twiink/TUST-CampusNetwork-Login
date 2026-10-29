@@ -48,7 +48,13 @@ export function ConfigEditor({
       await onSave((current) =>
         target.kind === 'account'
           ? editAccount(current, target.id, draft as AccountConfig, password)
-          : editWifi(current, target.id, data, password, clearPassword)
+          : editWifi(
+              current,
+              target.id,
+              { ...data, security: data.security || null },
+              password,
+              clearPassword
+            )
       );
       onClose();
     } catch (reason) {

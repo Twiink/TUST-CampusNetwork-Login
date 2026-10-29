@@ -70,7 +70,11 @@ export const WifiMetricGrid: React.FC<{ networkStatus: NetworkStatus }> = ({ net
             )}
           </div>
           <div style={{ fontSize: '0.95rem', fontWeight: 600, color: latencyStatusInfo.color }}>
-            {latencyValue === 9999 ? '超时' : `${latencyValue}ms · ${latencyStatusInfo.text}`}
+            {!latency
+              ? '未知'
+              : latencyValue === 9999
+                ? '超时'
+                : `${latencyValue}ms · ${latencyStatusInfo.text}`}
           </div>
         </div>
       </div>
@@ -81,7 +85,7 @@ export const WifiMetricGrid: React.FC<{ networkStatus: NetworkStatus }> = ({ net
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>连接速度</div>
           <div style={{ fontSize: '0.95rem', fontWeight: 600, color: linkSpeedStatus.color }}>
-            {linkSpeed} Mbps · {linkSpeedStatus.text}
+            {linkSpeed > 0 ? `${linkSpeed} Mbps · ${linkSpeedStatus.text}` : '未知'}
           </div>
         </div>
       </div>
@@ -92,7 +96,13 @@ export const WifiMetricGrid: React.FC<{ networkStatus: NetworkStatus }> = ({ net
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>频段</div>
           <div style={{ fontSize: '0.95rem', fontWeight: 600, color: bandColor }}>
-            {frequency >= 5000 ? '5G' : frequency >= 2400 ? '2.4G' : '未知'}
+            {frequency >= 5925 && frequency <= 7125
+              ? '6GHz'
+              : frequency >= 4900 && frequency < 5925
+                ? '5GHz'
+                : frequency >= 2400 && frequency <= 2500
+                  ? '2.4GHz'
+                  : '未知'}
           </div>
         </div>
       </div>

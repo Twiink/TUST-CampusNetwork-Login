@@ -13,7 +13,7 @@ import { createUpdaterService, UpdaterService } from './services/updater';
 import { WifiSwitcherService } from './services/wifi-switcher';
 import { createWifiEventListener, WifiEventListener } from './services/wifi-event-listener';
 import type { FileLogger } from './services/file-logger';
-import type { AppConfig, AppSettings } from '@repo/shared';
+import type { AppConfig, AppSettings, NetworkStatus } from '@repo/shared';
 import { devLog } from './utils/dev-log';
 import { createMainWindow } from './main-window';
 import { initAppServices } from './main-services';
@@ -63,6 +63,19 @@ let autoReconnectService: AutoReconnectService | null = null;
 let autoLaunchService: AutoLaunchService | null = null;
 let notificationService: NotificationService | null = null;
 let updaterService: UpdaterService | null = null;
+let updateTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleAutomaticUpdate(): void {
+  if (updateTimer) clearTimeout(updateTimer);
+  updateTimer = null;
+  if (VITE_DEV_SERVER_URL || !updaterService || !services?.configManager.getSettings().autoUpdate)
+    return;
+  updateTimer = setTimeout(() => {
+    updateTimer = null;
+    if (services?.configManager.getSettings().autoUpdate)
+      void updaterService?.checkForUpdates().catch(() => undefined);
+  }, 30_000);
+}
+
 let wifiSwitcherService: WifiSwitcherService | null = null;
 let wifiEventListener: WifiEventListener | null = null;
 let fileLogger: FileLogger | null = null;
@@ -71,6 +84,39 @@ let createWindow: (() => BrowserWindow) | null = null;
 let destroyHiddenWindowTimer: ReturnType<typeof setTimeout> | null = null;
 let appliedWifiConfig = '';
 let appliedSettings: AppSettings | null = null;
+let latestNetworkStatus: NetworkStatus = {
+  connected: false,
+  authenticated: false,
+  wifiConnected: false,
+};
+function publishNetworkStatus(status: NetworkStatus | 'connecting'): void {
+  if (status === 'connecting') {
+    trayService?.setStatus('connecting');
+    return;
+  }
+  latestNetworkStatus = status;
+  trayService?.setStatus(status.connected ? 'connected' : 'disconnected');
+  for (const window of BrowserWindow.getAllWindows())
+    if (!window.isDestroyed()) window.webContents.send('event:network:statusChanged', status);
+}
+async function publishAuthResult(
+  success: boolean,
+  logout = false,
+  cancelled = false
+): Promise<void> {
+  const status = await services?.networkDetector.getNetworkStatus({ fresh: true });
+  if (status)
+    publishNetworkStatus(
+      success && !cancelled
+        ? {
+            ...status,
+            connected: !logout && status.connected,
+            internetReachable: !logout && status.connected,
+            authenticated: !logout,
+          }
+        : status
+    );
+}
 
 function heartbeatIntervalMs(settings: AppSettings): number {
   return (settings.heartbeatIntervalSeconds ?? settings.pollingInterval ?? 30) * 1000;
@@ -85,6 +131,7 @@ function applyConfigChange(config: AppConfig): void {
   const previous = appliedSettings;
   appliedSettings = settings;
 
+  if (!previous || previous.autoUpdate !== settings.autoUpdate) scheduleAutomaticUpdate();
   notificationService?.setEnabled(Object.values(settings.notificationSettings).some(Boolean));
   notificationService?.setEventSettings(settings.notificationSettings);
 
@@ -113,11 +160,6 @@ function applyConfigChange(config: AppConfig): void {
   if (wifiKey !== appliedWifiConfig) {
     appliedWifiConfig = wifiKey;
     wifiEventListener?.resetCooldown();
-  }
-
-  if (previous && previous.autoLaunch !== settings.autoLaunch && autoLaunchService) {
-    const toggle = settings.autoLaunch ? autoLaunchService.enable() : autoLaunchService.disable();
-    toggle.catch((error) => services?.logger.error('同步开机自启失败', error));
   }
 
   const heartbeatChanged =
@@ -194,7 +236,13 @@ function scheduleHiddenWindowTeardown(delayMs: number): void {
   }, delayMs);
 }
 
-app.on('before-quit', () => {
+let shutdownComplete = false;
+let shutdownPending = false;
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (shutdownPending) return;
+  shutdownPending = true;
   forceQuit = true;
   if (trayService) {
     trayService.destroy();
@@ -208,11 +256,15 @@ app.on('before-quit', () => {
     stopBackgroundServices(services);
     services.logger.log('info', '应用退出', { category: 'system', source: 'Main' });
   }
-  void services?.storage.flush().catch(() => undefined);
-  if (fileLogger) {
-    fileLogger.close();
-    fileLogger = null;
+  if (updateTimer) {
+    clearTimeout(updateTimer);
+    updateTimer = null;
   }
+  void Promise.allSettled([services?.storage.flush(), fileLogger?.close()]).then(() => {
+    fileLogger = null;
+    shutdownComplete = true;
+    app.quit();
+  });
 });
 
 // 单实例锁：避免多开导致的重复后台服务、重复 WiFi 轮询与端口/托盘冲突
@@ -238,6 +290,7 @@ app.whenReady().then(async () => {
     // 初始化服务
     const initialized = await initAppServices();
     services = initialized;
+    services.publishNetworkStatus = publishNetworkStatus;
     services.configManager.subscribe((config) => {
       applyConfigChange(config);
       for (const window of BrowserWindow.getAllWindows())
@@ -265,14 +318,20 @@ app.whenReady().then(async () => {
     );
 
     // 注册 IPC 处理器（传递 wifiSwitcherService）
-    registerAllIPC(services, wifiSwitcherService, applyConfigChange);
+    autoLaunchService = createAutoLaunchService();
+    const configCommands = registerAllIPC(
+      services,
+      wifiSwitcherService,
+      undefined,
+      autoLaunchService,
+      publishNetworkStatus
+    );
 
     // 注册托盘 IPC（在托盘创建前注册，使用 getter 函数）
     registerTrayIPC(() => trayService, services.logger);
 
     // 创建并注册开机自启服务
-    autoLaunchService = createAutoLaunchService();
-    registerAutoLaunchIPC(autoLaunchService, services.logger);
+    registerAutoLaunchIPC(autoLaunchService, services.logger, configCommands.updateSettings);
 
     // 获取设置
     const settings = services.configManager.getSettings();
@@ -293,14 +352,7 @@ app.whenReady().then(async () => {
     });
     registerUpdaterIPC(updaterService, services.logger);
 
-    // 检查更新（仅在生产环境）
-    if (!VITE_DEV_SERVER_URL && settings.autoUpdate) {
-      setTimeout(() => {
-        updaterService?.checkForUpdates().catch(() => {
-          // 忽略更新检查错误
-        });
-      }, 30_000);
-    }
+    scheduleAutomaticUpdate();
 
     // 创建自动重连服务
     autoReconnectService = createAutoReconnectService(
@@ -315,40 +367,46 @@ app.whenReady().then(async () => {
         failureThreshold: settings.heartbeatFailureThreshold,
       },
       {
+        onReconnectCancelled: () => {
+          void publishAuthResult(false);
+        },
         onReconnectStart: () => {
-          trayService?.setStatus('connecting');
+          publishNetworkStatus('connecting');
           // 广播重连开始事件
-          win?.webContents.send('event:reconnect:progress', {
-            status: 'reconnecting',
-            currentAttempt: 0,
-            maxAttempts: 3,
-            message: '开始自动重连',
-          });
+          if (win && !win.isDestroyed())
+            win.webContents.send('event:reconnect:progress', {
+              status: 'reconnecting',
+              currentAttempt: 0,
+              maxAttempts: 3,
+              message: '开始自动重连',
+            });
         },
         onReconnectSuccess: ({ recovered }) => {
-          trayService?.setStatus('connected');
+          void publishAuthResult(true);
           // 仅「已在线 → 掉线 → 自动重新认证成功」才算认证恢复；首次自动登录不打扰
           if (recovered) {
             notificationService?.notifyEvent('authRecovered', '认证失效后已自动重新登录');
           }
           // 广播重连成功事件
-          win?.webContents.send('event:reconnect:progress', {
-            status: 'success',
-            currentAttempt: 0,
-            maxAttempts: 3,
-            message: '自动重连成功',
-          });
+          if (win && !win.isDestroyed())
+            win.webContents.send('event:reconnect:progress', {
+              status: 'success',
+              currentAttempt: 0,
+              maxAttempts: 3,
+              message: '自动重连成功',
+            });
         },
         onReconnectFailed: async () => {
-          trayService?.setStatus('disconnected');
+          publishNetworkStatus({ ...latestNetworkStatus, connected: false, authenticated: false });
 
           // 广播重连失败事件
-          win?.webContents.send('event:reconnect:progress', {
-            status: 'failed',
-            currentAttempt: 3,
-            maxAttempts: 3,
-            message: '自动重连失败',
-          });
+          if (win && !win.isDestroyed())
+            win.webContents.send('event:reconnect:progress', {
+              status: 'failed',
+              currentAttempt: 3,
+              maxAttempts: 3,
+              message: '自动重连失败',
+            });
 
           // 认证重连失败属于「自动重连全部失败」场景
           notificationService?.notifyEvent(
@@ -363,12 +421,13 @@ app.whenReady().then(async () => {
         onReconnectAttempt: (attempt, maxAttempts) => {
           services?.logger.info(`自动重连尝试 ${attempt}/${maxAttempts}`);
           // 广播重连进度
-          win?.webContents.send('event:reconnect:progress', {
-            status: 'reconnecting',
-            currentAttempt: attempt,
-            maxAttempts: maxAttempts,
-            message: `正在重连 (第 ${attempt}/${maxAttempts} 次)`,
-          });
+          if (win && !win.isDestroyed())
+            win.webContents.send('event:reconnect:progress', {
+              status: 'reconnecting',
+              currentAttempt: attempt,
+              maxAttempts: maxAttempts,
+              message: `正在重连 (第 ${attempt}/${maxAttempts} 次)`,
+            });
         },
       },
       services.wifiManager,
@@ -387,9 +446,9 @@ app.whenReady().then(async () => {
       const resumeSettings = services?.configManager.getSettings();
       services?.logger.info('系统恢复，重启后台心跳检测');
       services?.networkDetector
-        .getNetworkStatus()
+        .getNetworkStatus({ fresh: true })
         .then((status) => {
-          win?.webContents.send('event:network:statusChanged', status);
+          publishNetworkStatus(status);
         })
         .catch((error) => {
           services?.logger.error('系统恢复后的网络检测失败', error);
@@ -409,12 +468,6 @@ app.whenReady().then(async () => {
     // 启动后台服务（带自动重连和心跳检测设置）
     const pollingInterval = heartbeatIntervalMs(settings);
     appliedSettings = settings;
-    startBackgroundServices(
-      services,
-      pollingInterval,
-      autoReconnectService,
-      settings.enableHeartbeat
-    );
 
     // 创建窗口
     const windowOptions = {
@@ -427,8 +480,12 @@ app.whenReady().then(async () => {
         wifiEventListener?.setCheckInterval(
           hidden ? WIFI_CHECK_INTERVAL_BACKGROUND : WIFI_CHECK_INTERVAL_FOREGROUND
         );
-        if (hidden && !IS_E2E_TEST) {
-          scheduleHiddenWindowTeardown(settings.destroyHiddenWindowAfterMs ?? 120_000);
+        if (hidden) {
+          scheduleHiddenWindowTeardown(
+            runtimePorts.hiddenWindowDelayMs ??
+              services!.configManager.getSettings().destroyHiddenWindowAfterMs ??
+              120_000
+          );
         } else if (destroyHiddenWindowTimer) {
           clearTimeout(destroyHiddenWindowTimer);
           destroyHiddenWindowTimer = null;
@@ -438,7 +495,7 @@ app.whenReady().then(async () => {
         win = window;
         try {
           const currentStatus = await services!.networkDetector.getNetworkStatus();
-          window.webContents.send('event:network:statusChanged', currentStatus);
+          if (!window.isDestroyed()) publishNetworkStatus(currentStatus);
           services!.logger.log('info', '窗口加载完成，已发送初始网络状态', {
             category: 'system',
             source: 'Main',
@@ -458,22 +515,29 @@ app.whenReady().then(async () => {
       trayService = createTrayService(iconDir, {
         onLogin: async () => {
           if (!services) return;
-          trayService?.setStatus('connecting');
+          publishNetworkStatus('connecting');
           const result = await manualLogin(
             services.authService,
             services.configManager,
             services.networkDetector
           ).catch((error) => ({ success: false, message: String(error) }));
-          trayService?.setStatus(result.success ? 'connected' : 'disconnected');
+          await publishAuthResult(
+            result.success,
+            false,
+            'cancelled' in result && result.cancelled === true
+          );
         },
         onLogout: async () => {
           if (!services) return;
-          await manualLogout(
+          const result = await manualLogout(
             services.authService,
             services.configManager,
             services.networkDetector
-          ).catch((error) => services?.logger.error('托盘注销失败', error));
-          trayService?.setStatus('disconnected');
+          ).catch((error) => {
+            services?.logger.error('托盘注销失败', error);
+            return { success: false };
+          });
+          await publishAuthResult(result.success, true);
         },
         onShowWindow: () => {
           showWindowFromTray();
@@ -485,6 +549,7 @@ app.whenReady().then(async () => {
       });
 
       if (trayService.init()) {
+        publishNetworkStatus(latestNetworkStatus);
         services.logger.info('托盘服务已初始化');
       } else {
         services.logger.warn('托盘服务初始化失败，将继续在无托盘模式下运行');
@@ -497,14 +562,29 @@ app.whenReady().then(async () => {
       networkDetector: services.networkDetector,
       logger: services.logger,
       window: win,
+      publishNetworkStatus,
       checkInterval: WIFI_CHECK_INTERVAL_FOREGROUND, // 前台检测 SSID 变化，隐藏到托盘后自动降频
       wifiManager: services.wifiManager,
       wifiSwitcherService: wifiSwitcherService,
       configManager: services.configManager,
       autoReconnectService: autoReconnectService ?? undefined,
       notify: (kind, body) => notificationService?.notifyEvent(kind, body),
+      onRecoveryProgress: (progress) =>
+        trayService?.setStatus(
+          ['connecting', 'authenticating', 'verifying'].includes(progress.status)
+            ? 'connecting'
+            : latestNetworkStatus.connected
+              ? 'connected'
+              : 'disconnected'
+        ),
     });
     wifiEventListener.start();
+    startBackgroundServices(
+      services,
+      pollingInterval,
+      autoReconnectService,
+      settings.enableHeartbeat
+    );
     services.logger.info('WiFi 事件监听器已启动');
 
     services.logger.log('success', '===== 应用初始化完成 =====', {

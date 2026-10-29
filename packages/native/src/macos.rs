@@ -154,7 +154,13 @@ pub fn current_wifi() -> Option<NativeWifiInfo> {
 }
 
 pub fn network_info() -> Option<NativeNetworkInfo> {
-    let (ipv4, ipv6, mac, subnet_mask) = read_interfaces();
+    let name = unsafe {
+        CWWiFiClient::sharedWiFiClient()
+            .interface()?
+            .interfaceName()?
+            .to_string()
+    };
+    let (ipv4, ipv6, mac, subnet_mask) = read_interfaces(&name);
     let gateway = read_default_gateway();
     let dns = read_dns();
     if ipv4.is_none()
@@ -186,7 +192,9 @@ impl Drop for IfaddrsList {
     }
 }
 
-fn read_interfaces() -> (
+fn read_interfaces(
+    wifi_name: &str,
+) -> (
     Option<String>,
     Option<String>,
     Option<String>,
@@ -197,14 +205,24 @@ fn read_interfaces() -> (
         return (None, None, None, None);
     }
     let list = IfaddrsList { ptr };
+    interface_addresses(list.ptr, wifi_name)
+}
 
+fn interface_addresses(
+    mut cursor: *const libc::ifaddrs,
+    wifi_name: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     let mut ipv4 = None;
     let mut ipv6 = None;
     let mut mac = None;
     let mut mac_by_interface: HashMap<String, String> = HashMap::new();
     let mut mask = None;
     let mut selected_name = None;
-    let mut cursor = list.ptr;
     while !cursor.is_null() {
         let entry = unsafe { &*cursor };
         cursor = entry.ifa_next;
@@ -213,7 +231,7 @@ fn read_interfaces() -> (
         } else {
             unsafe { std::ffi::CStr::from_ptr(entry.ifa_name).to_string_lossy() }
         };
-        if name == "lo0" || entry.ifa_addr.is_null() {
+        if name != wifi_name || entry.ifa_addr.is_null() {
             continue;
         }
 
@@ -452,6 +470,40 @@ pub fn watch_network(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn addresses_stay_on_core_wlan_interface_even_before_dhcp() {
+        let wifi_name = std::ffi::CString::new("en1").unwrap();
+        let vpn_name = std::ffi::CString::new("utun0").unwrap();
+        let mut wifi_ip: libc::sockaddr_in = unsafe { std::mem::zeroed() };
+        wifi_ip.sin_len = std::mem::size_of::<libc::sockaddr_in>() as u8;
+        wifi_ip.sin_family = AF_INET_MACOS;
+        wifi_ip.sin_addr.s_addr = u32::from_ne_bytes([192, 168, 5, 10]);
+        let mut vpn_ip = wifi_ip;
+        vpn_ip.sin_addr.s_addr = u32::from_ne_bytes([10, 88, 0, 2]);
+        let mut vpn_ipv6: libc::sockaddr_in6 = unsafe { std::mem::zeroed() };
+        vpn_ipv6.sin6_len = std::mem::size_of::<libc::sockaddr_in6>() as u8;
+        vpn_ipv6.sin6_family = AF_INET6_MACOS;
+        vpn_ipv6.sin6_addr.s6_addr = "2001:db8::99".parse::<Ipv6Addr>().unwrap().octets();
+        let mut wifi: libc::ifaddrs = unsafe { std::mem::zeroed() };
+        wifi.ifa_name = wifi_name.as_ptr().cast_mut();
+        wifi.ifa_addr = (&mut wifi_ip as *mut libc::sockaddr_in).cast();
+        let mut vpn: libc::ifaddrs = unsafe { std::mem::zeroed() };
+        vpn.ifa_name = vpn_name.as_ptr().cast_mut();
+        vpn.ifa_addr = (&mut vpn_ip as *mut libc::sockaddr_in).cast();
+        vpn.ifa_next = &mut wifi;
+        let mut vpn6: libc::ifaddrs = unsafe { std::mem::zeroed() };
+        vpn6.ifa_name = vpn_name.as_ptr().cast_mut();
+        vpn6.ifa_addr = (&mut vpn_ipv6 as *mut libc::sockaddr_in6).cast();
+        vpn6.ifa_next = &mut vpn;
+        let (ipv4, ipv6, _, _) = interface_addresses(&vpn6, "en1");
+        assert_eq!(ipv4.as_deref(), Some("192.168.5.10"));
+        assert!(ipv6.is_none());
+        wifi.ifa_addr = std::ptr::null_mut();
+        vpn.ifa_next = &mut wifi;
+        vpn6.ifa_next = &mut vpn;
+        assert!(interface_addresses(&vpn6, "en1").0.is_none());
+    }
 
     #[test]
     fn security_modes_use_core_wlan_constants() {

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useWifiReconnect } from '../../hooks/useWifiReconnect';
 import { Wifi, Loader, CheckCircle2, XCircle } from 'lucide-react';
 
@@ -7,16 +7,29 @@ export const WifiReconnectProgressCard: React.FC<{
   progress: NonNullable<ReturnType<typeof useWifiReconnect>['progress']>;
 }> = ({ progress }) => {
   const { ssid, attempt, maxAttempts, status } = progress;
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!progress.nextRetryAt) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [progress.nextRetryAt]);
 
   // 根据状态选择颜色和图标
   const getStatusConfig = () => {
     switch (status) {
+      case 'authenticating':
+      case 'verifying':
       case 'connecting':
         return {
           bgColor: 'rgba(59, 130, 246, 0.1)',
           borderColor: '#3b82f6',
           icon: <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} />,
-          text: '正在连接',
+          text:
+            status === 'authenticating'
+              ? '正在认证'
+              : status === 'verifying'
+                ? '正在确认联网'
+                : '正在连接',
           textColor: '#3b82f6',
         };
       case 'success':
@@ -27,12 +40,19 @@ export const WifiReconnectProgressCard: React.FC<{
           text: '连接成功',
           textColor: '#22c55e',
         };
+      case 'cancelled':
+      case 'cooldown':
       case 'failed':
         return {
           bgColor: 'rgba(239, 68, 68, 0.1)',
           borderColor: '#ef4444',
           icon: <XCircle size={18} />,
-          text: '连接失败',
+          text:
+            status === 'cancelled'
+              ? '已取消'
+              : status === 'cooldown'
+                ? '等待下一轮重连'
+                : '连接失败',
           textColor: '#ef4444',
         };
     }
@@ -80,6 +100,20 @@ export const WifiReconnectProgressCard: React.FC<{
           </span>
         </div>
 
+        {progress.reason && <p style={{ margin: 0 }}>{progress.reason}</p>}
+        {progress.nextRetryAt && (
+          <p style={{ margin: 0 }}>
+            剩余 {Math.max(0, Math.ceil((progress.nextRetryAt - now) / 1000))} 秒后重试
+          </p>
+        )}
+        {['cooldown', 'failed', 'cancelled'].includes(status) && (
+          <button
+            className="btn btn-secondary"
+            onClick={() => void window.electronAPI.wifi.retry()}
+          >
+            立即重试
+          </button>
+        )}
         {/* 尝试次数 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>尝试进度:</span>

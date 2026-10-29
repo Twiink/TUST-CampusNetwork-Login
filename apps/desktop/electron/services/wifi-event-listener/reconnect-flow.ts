@@ -16,13 +16,25 @@ export interface WifiReconnectProgress {
   ssid: string;
   attempt: number;
   maxAttempts: number;
-  status: 'connecting' | 'failed' | 'success';
+  status:
+    | 'connecting'
+    | 'authenticating'
+    | 'verifying'
+    | 'success'
+    | 'failed'
+    | 'cooldown'
+    | 'cancelled';
+  wifiId?: string;
+  reason?: string;
+  nextRetryAt?: number;
+  failedList?: WifiReconnectFailure[];
 }
 
 /**
  * WiFi 重连失败信息
  */
 export interface WifiReconnectFailure {
+  wifiId?: string;
   ssid: string;
   priority: number;
   reason: string;
@@ -46,13 +58,20 @@ export interface AutoReconnectDeps {
   /** 首次连接前的等待（毫秒）；启动自动连接无需等待硬件重置 */
   initialDelayMs?: number;
   shouldContinue?: () => boolean | Promise<boolean>;
+  candidates?: WifiConfig[];
+  currentWifiId?: string;
+  connect?: (wifi: WifiConfig) => Promise<boolean>;
+  verify?: (
+    wifi: WifiConfig,
+    phase: (status: 'authenticating' | 'verifying') => void
+  ) => Promise<{ online: boolean; authenticated: boolean; retryable?: boolean; reason?: string }>;
 }
 
 /** 单个 WiFi 重试次数：读新字段，兼容旧 maxRetries，至少 1 次 */
 export function resolveRetriesPerWifi(configManager?: ConfigManager): number {
   const settings = configManager?.getConfig()?.settings;
   const value = settings?.wifiReconnectRetries ?? settings?.maxRetries ?? 3;
-  return Math.max(1, Math.floor(value));
+  return Math.min(10, Math.max(1, Math.floor(value)));
 }
 
 /** 冷却期判定：冷却时长为 0 表示不冷却 */
@@ -63,13 +82,19 @@ export function inCooldown(lastAllFailedAt: number, cooldownMs: number, now: num
 /**
  * 重连顺序：断开的 WiFi 排第一，其余开启自动连接的 WiFi 按优先级（数字越小越优先）
  */
-export function planReconnect<T extends { ssid: string; priority: number }>(
+export function planReconnect<T extends { ssid: string; priority: number; id?: string }>(
   disconnectedSsid: string | null,
-  candidates: T[]
+  candidates: T[],
+  currentWifiId?: string
 ): T[] {
   const sorted = [...candidates].sort((a, b) => a.priority - b.priority);
   if (!disconnectedSsid) return sorted;
-  const first = sorted.find((c) => c.ssid === disconnectedSsid);
+  const sameName = sorted.filter((c) => c.ssid === disconnectedSsid);
+  const first = currentWifiId
+    ? sorted.find((c) => c.id === currentWifiId)
+    : sameName.length === 1
+      ? sameName[0]
+      : undefined;
   return first ? [first, ...sorted.filter((c) => c !== first)] : sorted;
 }
 
@@ -84,12 +109,8 @@ export async function executeAutoReconnect(
 ): Promise<boolean | null> {
   const { logger, wifiManager, configManager, onAllFailed, onReconnected } = deps;
 
-  const candidates = wifiManager.getWifiConfigs().filter((w) => w.autoConnect);
-  if (disconnectedSsid !== null && !candidates.some((w) => w.ssid === disconnectedSsid)) {
-    logger.debug(`WiFi ${disconnectedSsid} 未配置自动重连，跳过`);
-    return null;
-  }
-  const plan = planReconnect(disconnectedSsid, candidates);
+  const candidates = deps.candidates ?? wifiManager.getWifiConfigs().filter((w) => w.autoConnect);
+  const plan = planReconnect(disconnectedSsid, candidates, deps.currentWifiId);
   if (plan.length === 0) {
     return null;
   }
@@ -161,13 +182,13 @@ export async function executeAutoReconnect(
 export interface StartupConnectDeps extends AutoReconnectDeps {
   /** 扫描当前可见的 SSID 列表 */
   scanAvailableSsids: () => Promise<string[]>;
+  force?: boolean;
 }
 
 /**
  * 启动时自动连接（settings.startupAutoConnect，语义对齐 Android AutoAuthEngine.onStartup）：
  * - 未连接 WiFi：按优先级三阶段尝试已开启自动连接的 WiFi
- * - 已连接已配置的 WiFi：不动
- * - 已连接未配置的 WiFi：「保持当前连接」开启则不动；关闭则切换到可见的最高优先级已配置 WiFi
+ * - 已连接 WiFi：「保持当前连接」开启则只确认当前网络；关闭则从附近最高优先级候选开始
  *
  * @returns 是否执行了连接动作并成功；未执行返回 null
  */
@@ -175,9 +196,9 @@ export async function executeStartupAutoConnect(
   currentSsid: string | null,
   deps: StartupConnectDeps
 ): Promise<boolean | null> {
-  const { logger, wifiManager, wifiSwitcherService, configManager } = deps;
+  const { logger, wifiManager, configManager } = deps;
   const settings = configManager?.getConfig()?.settings;
-  if (!settings?.startupAutoConnect) {
+  if (!deps.force && !settings?.startupAutoConnect) {
     return null;
   }
 
@@ -187,13 +208,16 @@ export async function executeStartupAutoConnect(
   }
 
   const candidates = wifiManager.getWifiConfigs().filter((w) => w.autoConnect);
-  const configured = candidates.some((w) => w.ssid === currentSsid);
-  if (settings.keepCurrentConnection || configured) {
+  if (settings?.keepCurrentConnection && !deps.force) {
     logger.debug(`启动时已连接 ${currentSsid}，保持当前连接`);
-    return null;
+    const current = deps.candidates?.find((w) => w.id === deps.currentWifiId);
+    return current && deps.verify
+      ? executeAutoReconnect(currentSsid, { ...deps, candidates: [current], initialDelayMs: 0 })
+      : null;
   }
 
   const visible = new Set(await deps.scanAvailableSsids());
+  if (deps.shouldContinue && !(await deps.shouldContinue())) return null;
   const best = planReconnect(null, candidates).find((w) => visible.has(w.ssid));
   if (!best) {
     logger.info('附近没有已配置的 WiFi，保持当前连接');
@@ -201,26 +225,11 @@ export async function executeStartupAutoConnect(
   }
 
   logger.info(`启动时切换 WiFi: ${currentSsid} → ${best.ssid}`);
-  wifiSwitcherService.setConfiguredNetworks(
-    wifiManager.getWifiConfigs().map((w) => ({
-      id: w.id,
-      ssid: w.ssid,
-      password: w.password,
-      priority: w.priority ?? 10,
-      security: w.security,
-      bssid: w.bssid,
-    }))
-  );
-  try {
-    const success = await wifiSwitcherService.connectToConfiguredNetwork(best.id);
-    if (success) {
-      await deps.onReconnected(best.ssid);
-    }
-    return success;
-  } catch (error) {
-    logger.warn(`启动切换 WiFi 失败: ${error instanceof Error ? error.message : String(error)}`);
-    return false;
-  }
+  return executeAutoReconnect(null, {
+    ...deps,
+    candidates: candidates.filter((w) => visible.has(w.ssid)),
+    initialDelayMs: 0,
+  });
 }
 
 async function retryConnectToWifi(
@@ -234,7 +243,6 @@ async function retryConnectToWifi(
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     logger.info(`尝试连接 ${ssid} (第 ${attempt}/${maxRetries} 次)`);
-    onProgress({ ssid, attempt, maxAttempts: maxRetries, status: 'connecting' });
 
     try {
       if (attempt > 1) {
@@ -242,28 +250,74 @@ async function retryConnectToWifi(
       }
 
       if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
-      const success = await wifiSwitcherService.connectToConfiguredNetwork(wifi.id);
+      onProgress({ ssid, wifiId: wifi.id, attempt, maxAttempts: maxRetries, status: 'connecting' });
+      const success = deps.connect
+        ? await deps.connect(wifi)
+        : await (deps.shouldContinue
+            ? wifiSwitcherService.connectToConfiguredNetwork(wifi.id, deps.shouldContinue)
+            : wifiSwitcherService.connectToConfiguredNetwork(wifi.id));
+      if (success && deps.verify) {
+        const result = await deps.verify(wifi, (status) =>
+          onProgress({ ssid, wifiId: wifi.id, attempt, maxAttempts: maxRetries, status })
+        );
+        if (!result.online) {
+          if (result.authenticated || result.retryable === false) {
+            if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
+            onProgress({
+              ssid,
+              wifiId: wifi.id,
+              attempt,
+              maxAttempts: maxRetries,
+              status: 'failed',
+              reason: result.reason,
+            });
+            failedList.push({
+              wifiId: wifi.id,
+              ssid,
+              priority,
+              reason: result.reason || '已认证但互联网不可达',
+            });
+            return false;
+          }
+          throw new Error(result.reason || '网络不可用');
+        }
+      }
       if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
 
       if (success) {
         logger.success(`连接成功: ${ssid} (第 ${attempt}/${maxRetries} 次)`);
-        onProgress({ ssid, attempt, maxAttempts: maxRetries, status: 'success' });
+        onProgress({ ssid, wifiId: wifi.id, attempt, maxAttempts: maxRetries, status: 'success' });
         return true;
       }
     } catch (error) {
+      if (deps.shouldContinue && !(await deps.shouldContinue())) return false;
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.warn(`连接失败: ${ssid} (第 ${attempt}/${maxRetries} 次) - ${errorMessage}`);
 
       if (attempt === maxRetries) {
-        onProgress({ ssid, attempt, maxAttempts: maxRetries, status: 'failed' });
-        failedList.push({ ssid, priority, reason: errorMessage || '连接超时' });
+        onProgress({
+          ssid,
+          wifiId: wifi.id,
+          attempt,
+          maxAttempts: maxRetries,
+          status: 'failed',
+          reason: errorMessage,
+        });
+        failedList.push({ wifiId: wifi.id, ssid, priority, reason: errorMessage || '连接超时' });
       }
     }
   }
 
-  if (!failedList.some((f) => f.ssid === ssid)) {
-    onProgress({ ssid, attempt: maxRetries, maxAttempts: maxRetries, status: 'failed' });
-    failedList.push({ ssid, priority, reason: '连接超时' });
+  if (!failedList.some((f) => f.wifiId === wifi.id)) {
+    onProgress({
+      ssid,
+      wifiId: wifi.id,
+      attempt: maxRetries,
+      maxAttempts: maxRetries,
+      status: 'failed',
+      reason: '连接超时',
+    });
+    failedList.push({ wifiId: wifi.id, ssid, priority, reason: '连接超时' });
   }
 
   return false;

@@ -22,6 +22,7 @@ const onlineStatus = (overrides: Partial<NetworkStatus> = {}): NetworkStatus => 
   authenticated: true,
   wifiConnected: true,
   ssid: 'TUST-Dorm',
+  ip: '10.1.2.3',
   requiresAuth: true,
   ...overrides,
 });
@@ -31,6 +32,7 @@ const offlineAuthRequired: NetworkStatus = {
   authenticated: false,
   wifiConnected: true,
   ssid: 'TUST-Dorm',
+  ip: '10.1.2.3',
   requiresAuth: true,
 };
 

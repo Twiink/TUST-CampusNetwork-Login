@@ -11,9 +11,12 @@ describe('useConfig', () => {
     vi.mocked(window.electronAPI.config.get).mockImplementation(async () => stored);
     vi.mocked(window.electronAPI.config.set).mockImplementation(async (next) => {
       stored = next;
-      return true;
+      return { config: next, applied: true };
     });
-    vi.mocked(window.electronAPI.config.reset).mockResolvedValue(initial);
+    vi.mocked(window.electronAPI.config.reset).mockResolvedValue({
+      config: initial,
+      applied: true,
+    });
   });
 
   it('加载配置并持久化更新', async () => {
@@ -36,7 +39,7 @@ describe('useConfig', () => {
   it('主进程拒绝保存时抛出错误且不更新本地状态', async () => {
     const { result } = renderHook(() => useConfig());
     await waitFor(() => expect(result.current.config).toEqual(initial));
-    vi.mocked(window.electronAPI.config.set).mockResolvedValue(false);
+    vi.mocked(window.electronAPI.config.set).mockRejectedValue(new Error('保存配置失败'));
 
     let error: unknown;
     await act(async () => {
@@ -49,6 +52,27 @@ describe('useConfig', () => {
     expect((error as Error).message).toBe('保存配置失败');
     expect(result.current.config).toEqual(initial);
     expect(result.current.error).toBe('保存配置失败');
+  });
+
+  it('系统未应用自启时采用权威配置，保留其他设置并显示错误', async () => {
+    const { result } = renderHook(() => useConfig());
+    await waitFor(() => expect(result.current.config).toEqual(initial));
+    const requested = {
+      ...initial,
+      settings: { ...initial.settings, autoLaunch: true, autoReconnect: false },
+    };
+    const actual = { ...requested, settings: { ...requested.settings, autoLaunch: false } };
+    vi.mocked(window.electronAPI.config.set).mockResolvedValueOnce({
+      config: actual,
+      applied: false,
+      error: '系统拒绝自启',
+    });
+    await act(async () => {
+      await expect(result.current.updateConfig(requested)).rejects.toThrow('系统拒绝自启');
+    });
+    expect(result.current.config).toEqual(actual);
+    expect(result.current.saveState).toBe('error');
+    expect(result.current.error).toBe('系统拒绝自启');
   });
 
   it('连续函数式更新会串行合并，不会用旧配置覆盖前一次修改', async () => {
@@ -95,7 +119,10 @@ describe('useConfig', () => {
       ...initial,
       accounts: [],
     };
-    vi.mocked(window.electronAPI.config.reset).mockResolvedValue(resetConfig);
+    vi.mocked(window.electronAPI.config.reset).mockResolvedValue({
+      config: resetConfig,
+      applied: true,
+    });
 
     await act(async () => {
       await expect(result.current.resetConfig()).resolves.toEqual(resetConfig);
@@ -110,8 +137,8 @@ describe('useSettings', () => {
   beforeEach(() => {
     vi.mocked(window.electronAPI.settings.get).mockResolvedValue(settings);
     vi.mocked(window.electronAPI.settings.update).mockResolvedValue({
-      ...settings,
-      autoLaunch: true,
+      config: { ...createDefaultAppConfig(), settings: { ...settings, autoLaunch: true } },
+      applied: true,
     });
   });
 
@@ -137,5 +164,23 @@ describe('useSettings', () => {
     });
     expect(result.current.settings).toEqual(settings);
     expect(result.current.error).toBe('写入失败');
+  });
+
+  it('应用失败时仍采用系统返回的自启值及已保存设置', async () => {
+    const { result } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.settings).toEqual(settings));
+    const actual = { ...settings, autoLaunch: false, autoReconnect: false };
+    vi.mocked(window.electronAPI.settings.update).mockResolvedValueOnce({
+      config: { ...createDefaultAppConfig(), settings: actual },
+      applied: false,
+      error: '系统拒绝自启',
+    });
+    await act(async () => {
+      await expect(
+        result.current.updateSettings({ autoLaunch: true, autoReconnect: false })
+      ).rejects.toThrow('系统拒绝自启');
+    });
+    expect(result.current.settings).toEqual(actual);
+    expect(result.current.error).toBe('系统拒绝自启');
   });
 });

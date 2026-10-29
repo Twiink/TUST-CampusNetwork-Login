@@ -14,6 +14,7 @@ if (!directory) throw new Error('An isolated userData directory is required');
 app.setPath('userData', directory);
 app.setPath('sessionData', directory);
 const scenario = process.env.E2E_SCENARIO ?? 'authenticated';
+if (scenario === 'hidden-window') runtimePorts.hiddenWindowDelayMs = 150;
 const scannedSsids = ['TUST-WIFI', 'Home-WIFI', 'TUST-Backup', 'Nearby-WIFI'];
 const bssidFor = (ssid: string) =>
   `00:11:22:33:44:${String(scannedSsids.indexOf(ssid) + 1).padStart(2, '0')}`;

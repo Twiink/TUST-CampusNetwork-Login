@@ -51,8 +51,8 @@ export function useConfig() {
             createDefaultAppConfig();
           const newConfig = typeof update === 'function' ? update(current) : update;
           const saved = await window.electronAPI.config.set(newConfig);
-          if (!saved) throw new Error('保存配置失败');
-          applyConfig((await window.electronAPI.config.get()) ?? newConfig);
+          applyConfig(saved.config);
+          if (!saved.applied) throw new Error(saved.error || '配置未生效');
           setError(null);
           setSaveState('saved');
         } catch (err) {
@@ -75,9 +75,10 @@ export function useConfig() {
     setLoading(true);
     try {
       const defaultConfig = await window.electronAPI.config.reset();
-      applyConfig(defaultConfig);
+      applyConfig(defaultConfig.config);
+      if (!defaultConfig.applied) throw new Error(defaultConfig.error || '配置未生效');
       setError(null);
-      return defaultConfig;
+      return defaultConfig.config;
     } catch (err) {
       const message = err instanceof Error ? err.message : '重置配置失败';
       setError(message);
@@ -127,9 +128,10 @@ export function useSettings() {
     setLoading(true);
     try {
       const updated = await window.electronAPI.settings.update(updates);
-      setSettings(updated);
+      setSettings(updated.config.settings);
+      if (!updated.applied) throw new Error(updated.error || '配置未生效');
       setError(null);
-      return updated;
+      return updated.config.settings;
     } catch (err) {
       const message = err instanceof Error ? err.message : '更新设置失败';
       setError(message);

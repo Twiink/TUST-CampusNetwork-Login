@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as os from 'node:os';
 import type { NetworkInfo } from '@repo/shared';
+import { resolveMacOSWifiDevice } from './macos';
 import { devLog } from '../../utils/dev-log';
 
 const execAsync = promisify(exec);
@@ -14,10 +15,12 @@ export async function resolveMacOSNetworkInfo(): Promise<NetworkInfo> {
 
   try {
     // 使用 Node.js 内置 API 获取网络接口信息
+    const device = await resolveMacOSWifiDevice();
+    if (!device) return info;
     const interfaces = os.networkInterfaces();
 
     // 查找 WiFi 接口（通常是 en0）
-    const wifiInterface = interfaces['en0'] || [];
+    const wifiInterface = interfaces[device] || [];
 
     for (const iface of wifiInterface) {
       if (!iface.internal) {
@@ -33,7 +36,7 @@ export async function resolveMacOSNetworkInfo(): Promise<NetworkInfo> {
 
     // 获取网关
     try {
-      const { stdout } = await execAsync('netstat -nr | grep default | grep en0');
+      const { stdout } = await execAsync(`netstat -nr | grep default | grep ${device}`);
       const match = stdout.match(/default\s+(\d+\.\d+\.\d+\.\d+)/);
       if (match) {
         info.gateway = match[1];
@@ -80,7 +83,7 @@ export async function resolveWindowsNetworkInfo(): Promise<NetworkInfo> {
     const output = stdout.toString('utf8');
 
     // 查找 WiFi 适配器部分（支持中英文）
-    const sections = output.split('\n\n');
+    const sections = output.split(/(?=^[^\r\n]*(?:adapter|适配器)[^\r\n]*:\s*$)/gim);
     let wifiSection = '';
 
     for (const section of sections) {

@@ -163,9 +163,8 @@ describe('IPC 入口校验', () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 
-  it('保存配置：非对象输入被拒绝并返回 false', async () => {
+  it('保存配置：非对象输入拒绝 Promise', async () => {
     const set = handlers.get(IPC_CHANNELS.CONFIG_SET)!;
-    // handler 内部 catch 后返回 false（与既有错误语义一致），服务层不被调用
-    await expect(set({}, 'not-an-object')).resolves.toBe(false);
+    await expect(set({}, 'not-an-object')).rejects.toThrow();
   });
 });

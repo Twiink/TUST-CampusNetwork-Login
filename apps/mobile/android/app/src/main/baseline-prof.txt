@@ -1,0 +1,4 @@
+HSPLcom/netmate/app/MainActivity;->onCreate(Landroid/os/Bundle;)V
+HSPLcom/netmate/app/MainActivity;->onStart()V
+HSPLcom/netmate/app/ipc/NetworkService;->onCreate()V
+HSPLcom/netmate/app/service/BackgroundService;->onCreate()V

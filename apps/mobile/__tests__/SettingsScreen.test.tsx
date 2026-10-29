@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { createDefaultAppConfig, type AccountConfig, type AppConfig } from '@repo/shared';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
 import { useApp, type ConfigUpdate } from '../src/context/AppContext';
+import * as Wifi from '../src/native/WifiModule';
 
 jest.mock('../src/components/settings/UpdateCard', () => ({ UpdateCard: () => null }));
 jest.mock('../src/context/AppContext', () => ({
@@ -68,6 +69,33 @@ function savedConfig(setConfig: jest.Mock, callIndex = 0, base = makeConfig()): 
 describe('SettingsScreen', () => {
   beforeEach(() => {
     mockUseApp.mockReset();
+  });
+
+  it.each(['EAP', 'WEP'])('%s 规则禁用应用内自动连接，手动入口打开系统设置', async security => {
+    const config = makeConfig();
+    config.wifiList = [
+      {
+        id: 'system',
+        ssid: 'System-WiFi',
+        security,
+        password: '',
+        autoConnect: false,
+        requiresAuth: true,
+        linkedAccountIds: ['a1'],
+        priority: 1,
+        lastConnectedAt: null,
+      },
+    ];
+    const open = jest.spyOn(Wifi, 'openWifiSettings').mockResolvedValue(undefined);
+    const connect = jest.spyOn(Wifi, 'connectToWifi').mockResolvedValue(true);
+    renderSettings(config);
+    expect(screen.getByLabelText('自动连接 System-WiFi').props.disabled).toBe(true);
+    expect(screen.getByText('此安全类型通过系统 WiFi 设置连接，自动连接不可用')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('连接 WiFi System-WiFi'));
+    await waitFor(() => expect(open).toHaveBeenCalledTimes(1));
+    expect(connect).not.toHaveBeenCalled();
+    open.mockRestore();
+    connect.mockRestore();
   });
 
   it('账号表单拒绝空白、重复用户名和非法 URL', async () => {
@@ -240,4 +268,18 @@ describe('SettingsScreen', () => {
     fireEvent.press(screen.getByLabelText('删除 WiFi TUST-WIFI'));
     expect(savedConfig(setConfig, 0, config).wifiList).toEqual([]);
   });
+});
+
+test('N5/N8: 关闭心跳仍能修改 WiFi 尝试次数与冷却时间，次数最少为 1', async () => {
+  const config = makeConfig();
+  config.settings.enableHeartbeat = false;
+  const { setConfig } = renderSettings(config);
+  expect(screen.getByText('每个 WiFi 最多尝试次数（含首次）')).toBeTruthy();
+  const attempts = screen.getByPlaceholderText('1-10');
+  fireEvent.changeText(attempts, '0');
+  expect(setConfig).not.toHaveBeenCalled();
+  fireEvent.changeText(attempts, '5');
+  expect(savedConfig(setConfig, 0, config).settings.wifiReconnectRetries).toBe(5);
+  fireEvent.changeText(screen.getByPlaceholderText('0-60'), '0');
+  expect(savedConfig(setConfig, 1, config).settings.wifiReconnectCooldownMinutes).toBe(0);
 });

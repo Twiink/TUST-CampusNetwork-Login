@@ -30,6 +30,21 @@ export class NetworkDetector {
   async isWifiEnabled(): Promise<boolean> {
     return (await this.wifiAdapter?.isWifiEnabled?.()) ?? true;
   }
+  private portalAuthentication: { identity: string; authenticated: boolean } | null = null;
+  private authIdentity(status: NetworkStatus): string {
+    return JSON.stringify([
+      status.wifiConnected,
+      status.ssid,
+      status.bssid?.toLowerCase(),
+      status.security?.toLowerCase(),
+      status.ip,
+    ]);
+  }
+  rememberAuthentication(status: NetworkStatus | null, authenticated = false): void {
+    this.portalAuthentication = status
+      ? { identity: this.authIdentity(status), authenticated }
+      : null;
+  }
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
   private isPolling = false;
   private tickInFlight = false;
@@ -145,18 +160,31 @@ export class NetworkDetector {
    * 启动时调用，无论是否配置账户
    * @returns 当前 WiFi 状态
    */
-  async getCurrentWifiStatus(): Promise<NetworkStatus> {
+  async getCurrentWifiStatus(options: { fresh?: boolean } = {}): Promise<NetworkStatus> {
     const [connectedResult, wifiResult] = await Promise.allSettled([
       this.checkConnectivity(),
       this.wifiAdapter ? this.wifiAdapter.getWifiDetails() : Promise.resolve(null),
     ]);
-    const connected = connectedResult.status === 'fulfilled' ? connectedResult.value : false;
-    const wifiDetails = wifiResult.status === 'fulfilled' ? wifiResult.value : null;
+    let connected = connectedResult.status === 'fulfilled' ? connectedResult.value : false;
+    let wifiDetails = wifiResult.status === 'fulfilled' ? wifiResult.value : null;
+    if (options.fresh && this.wifiAdapter) {
+      // Connectivity probes can outlive a WiFi change. Read the interface again before authentication.
+      this.wifiAdapter.invalidateCache?.();
+      const latest = await this.wifiAdapter.getWifiDetails();
+      if (
+        ['ssid', 'bssid', 'security', 'ipv4', 'connected'].some(
+          (key) => wifiDetails?.[key as keyof WifiDetails] !== latest?.[key as keyof WifiDetails]
+        )
+      )
+        connected = false;
+      wifiDetails = latest;
+    }
 
     if (!wifiDetails) {
       const status: NetworkStatus = {
         connected,
         authenticated: connected,
+        internetReachable: connected,
         wifiConnected: false,
       };
       this.logger?.debug('网络状态检测完成', {
@@ -167,10 +195,13 @@ export class NetworkDetector {
     }
 
     // 适配器已带延迟时直接复用；只有缺少延迟才额外探测。
-    const latency = wifiDetails.latency ?? (connected ? await this.measureLatency() : undefined);
+    const latency =
+      wifiDetails.latency ??
+      (connected && !options.fresh ? await this.measureLatency() : undefined);
     const status: NetworkStatus = {
       connected,
       authenticated: connected,
+      internetReachable: connected,
       wifiConnected: wifiDetails.connected,
       ssid: wifiDetails.ssid,
       signalStrength: wifiDetails.signalStrength,
@@ -187,8 +218,10 @@ export class NetworkDetector {
       channel: wifiDetails.channel,
       security: wifiDetails.security,
     };
+    if (this.portalAuthentication?.identity === this.authIdentity(status))
+      status.authenticated = this.portalAuthentication.authenticated;
     this.logger?.debug('网络状态检测完成', {
-      网络连接: '在线',
+      网络连接: connected ? '在线' : '离线',
       SSID: status.ssid || '未知',
       信号强度: status.signalStrength,
       延迟: latency ? `${latency.value}ms` : '未探测',
@@ -244,19 +277,32 @@ export class NetworkDetector {
     }
   }
 
+  /** 接口身份快照，不等待互联网或延迟探测。 */
+  async getWifiSnapshot(): Promise<WifiDetails | null> {
+    return this.wifiAdapter?.getWifiDetails() ?? null;
+  }
+
   /**
    * 获取完整网络状态
    */
   private pendingStatus: Promise<NetworkStatus> | null = null;
-  getNetworkStatus(): Promise<NetworkStatus> {
-    if (!this.pendingStatus)
-      this.pendingStatus = this.computeNetworkStatus().finally(() => {
-        this.pendingStatus = null;
+  invalidateCache(): void {
+    this.wifiAdapter?.invalidateCache?.();
+    this.pendingStatus = null;
+    this.latencyCache = null;
+  }
+  getNetworkStatus(options: { fresh?: boolean } = {}): Promise<NetworkStatus> {
+    if (options.fresh) this.invalidateCache();
+    if (!this.pendingStatus) {
+      const pending = this.computeNetworkStatus(options).finally(() => {
+        if (this.pendingStatus === pending) this.pendingStatus = null;
       });
+      this.pendingStatus = pending;
+    }
     return this.pendingStatus;
   }
-  private async computeNetworkStatus(): Promise<NetworkStatus> {
-    return this.getCurrentWifiStatus();
+  private async computeNetworkStatus(options: { fresh?: boolean }): Promise<NetworkStatus> {
+    return this.getCurrentWifiStatus(options);
   }
 
   /**

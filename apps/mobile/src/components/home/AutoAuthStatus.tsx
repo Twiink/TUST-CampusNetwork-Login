@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Text, Pressable } from 'react-native';
+import { retryWifiRecovery } from '../../native/AutoAuth';
+import { openWifiSettings } from '../../native/WifiModule';
 import { GlassView } from '../GlassView';
 import { useApp } from '../../context/AppContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -49,22 +51,43 @@ export function AutoAuthStatus() {
               ? '等待下一轮重连'
               : progress.status === 'awaiting-system'
                 ? '请在系统 WiFi 中确认连接'
-                : progress.status === 'connecting'
-                  ? '正在连接 WiFi'
-                  : progress.status === 'success'
-                    ? 'WiFi 已连接'
-                    : 'WiFi 连接失败'}
+                : progress.status === 'authenticating'
+                  ? '正在认证'
+                  : progress.status === 'verifying'
+                    ? '正在确认联网'
+                    : progress.status === 'cancelled'
+                      ? '恢复已停止'
+                      : progress.status === 'connecting'
+                        ? '正在连接 WiFi'
+                        : progress.status === 'success'
+                          ? '网络已恢复'
+                          : 'WiFi 连接失败'}
           </Text>
           <Text style={{ color: theme.colors.textSecondary }}>
             {progress.ssid} {progress.attempt ? `${progress.attempt}/${progress.maxAttempts}` : ''}
           </Text>
+          {!!(progress.reason || progress.message) && (
+            <Text style={{ color: theme.colors.textSecondary }}>
+              {progress.reason ?? progress.message}
+            </Text>
+          )}
+          {['failed', 'cooldown', 'cancelled'].includes(progress.status) && (
+            <Pressable accessibilityRole="button" onPress={() => retryWifiRecovery()}>
+              <Text style={[buttonStyle, { color: theme.colors.primary }]}>立即重试</Text>
+            </Pressable>
+          )}
+          {['awaiting-system', 'failed', 'cooldown'].includes(progress.status) && (
+            <Pressable accessibilityRole="button" onPress={() => openWifiSettings()}>
+              <Text style={[buttonStyle, { color: theme.colors.primary }]}>打开系统 WiFi</Text>
+            </Pressable>
+          )}
           {progress.nextRetryAt ? (
             <Text style={{ color: theme.colors.textSecondary }}>
               剩余 {Math.max(0, Math.ceil((progress.nextRetryAt - now) / 1000))} 秒
             </Text>
           ) : null}
           {progress.failedList?.map(item => (
-            <Text key={item.ssid} style={{ color: theme.colors.danger }}>
+            <Text key={item.wifiId ?? item.ssid} style={{ color: theme.colors.danger }}>
               {item.ssid}：{item.reason}
             </Text>
           ))}

@@ -10,7 +10,7 @@ vi.mock('./network', () => ({
   resolveNetworkInfo: async () => ({ ipv4: '10.1.2.3' }),
   getCurrentWifiSSID: async () => ({ ssid: 'TUST', connected: true }),
 }));
-import { manualLogin, manualLogout } from './auth-session';
+import { configureAuthSession, manualLogin, manualLogout } from './auth-session';
 const account = {
   id: 'one',
   name: 'one',
@@ -85,4 +85,41 @@ describe('手动认证入口回归', () => {
     await restored.load();
     expect(restored.getSettings().autoAuthPaused).toBe(true);
   });
+});
+
+it('保存关联账号的成功门户，重建服务后仍向同一门户注销', async () => {
+  const { storage, config, auth, detector } = await setup();
+  await config.update((current) => ({
+    accounts: current.accounts.map((entry) => ({
+      ...entry,
+      serverUrl: entry.id === 'two' ? 'http://two.test' : 'http://one.test',
+    })),
+  }));
+  configureAuthSession(auth, storage, detector);
+  vi.spyOn(auth, 'loginWithAccounts').mockResolvedValue({
+    success: true,
+    message: 'ok',
+    accountId: 'two',
+    attempts: [],
+  });
+  await manualLogin(auth, config, detector);
+  const restarted = new AuthService('http://one.test');
+  configureAuthSession(restarted, storage, detector);
+  const logout = vi.spyOn(restarted, 'logout').mockResolvedValue({ success: true, message: 'ok' });
+  await manualLogout(restarted, config, detector);
+  expect(logout).toHaveBeenCalledWith('10.1.2.3', 'http://two.test');
+  expect(await storage.get('auth_session')).toBeNull();
+});
+it('无成功会话记录且关联多个门户时不向全局门户猜测注销', async () => {
+  const { storage, config, auth, detector } = await setup();
+  await config.update((current) => ({
+    accounts: current.accounts.map((entry) => ({
+      ...entry,
+      serverUrl: 'http://' + entry.id + '.test',
+    })),
+  }));
+  configureAuthSession(auth, storage, detector);
+  const logout = vi.spyOn(auth, 'logout');
+  expect((await manualLogout(auth, config, detector)).success).toBe(false);
+  expect(logout).not.toHaveBeenCalled();
 });

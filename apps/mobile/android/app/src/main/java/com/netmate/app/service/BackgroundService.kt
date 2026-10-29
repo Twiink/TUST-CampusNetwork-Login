@@ -22,6 +22,8 @@ import com.netmate.app.auth.AutoAuthEngine
 import com.netmate.app.auth.AutoAuthResult
 import com.netmate.app.auth.AutoAuthStore
 import com.netmate.app.auth.LocalAddresses
+import com.netmate.app.auth.ReconnectEvents
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -65,6 +67,7 @@ class BackgroundService : Service() {
     private var intervalMs = DEFAULT_INTERVAL_MS
     private var wifiConnected = false
     private var statusText = "等待网络"
+    private var lastNotification: String? = null
     /** 当前 WiFi 的 SSID（连接期间记录，断开时用于重连与通知） */
     private var currentSsid: String? = null
 
@@ -90,11 +93,35 @@ class BackgroundService : Service() {
         handler.post { refreshNotification() }
     }
 
+    private val recoveryListener: (JSONObject) -> Unit = { progress ->
+        val target = progress.optString("ssid")
+        statusText = when (progress.optString("status")) {
+            "connecting" -> "正在连接 $target · ${progress.optInt("attempt")}/${progress.optInt("maxAttempts")}"
+            "awaiting-system" -> "等待系统连接 $target，请在 WiFi 设置中确认"
+            "authenticating" -> "正在认证 $target"
+            "verifying" -> "正在确认 $target 的互联网连接"
+            "success" -> "网络已恢复 · $target"
+            "cooldown" -> "已断链 · ${formatTime(progress.optLong("nextRetryAt"))} 再次尝试"
+            "failed" -> "网络恢复失败 · ${progress.optString("reason", "所有候选均不可用")}"
+            "cancelled" -> progress.optString("reason", "自动恢复已停止")
+            else -> statusText
+        }
+        handler.post { refreshNotification() }
+    }
+    private val stateListener: (JSONObject) -> Unit = { state ->
+        wifiConnected = state.optBoolean("wifiConnected")
+        if (state.optBoolean("internetReachable")) statusText = "互联网可达"
+        else if (state.optBoolean("authenticated")) statusText = "门户已认证 · 互联网不可达"
+        handler.post { refreshNotification() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         active = this
         createNotificationChannel()
         AutoAuthEngine.addListener(resultListener)
+        AutoAuthEngine.statusListeners.add(stateListener)
+        ReconnectEvents.listeners.add(recoveryListener)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -138,6 +165,8 @@ class BackgroundService : Service() {
         AutoAuthEngine.stopReconnect(this)
         stopEverything()
         AutoAuthEngine.removeListener(resultListener)
+        AutoAuthEngine.statusListeners.remove(stateListener)
+        ReconnectEvents.listeners.remove(recoveryListener)
         active = null
         super.onDestroy()
     }
@@ -205,6 +234,9 @@ class BackgroundService : Service() {
 
     private fun refreshNotification() {
         if (!isRunning) return
+        val key = "$wifiConnected:$statusText"
+        if (key == lastNotification) return
+        lastNotification = key
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NOTIFICATION_ID, createNotification())
     }

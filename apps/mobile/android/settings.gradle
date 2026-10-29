@@ -1,9 +1,4 @@
-pluginManagement {
-    // Android Studio's Gradle importer needs a canonical path in this pnpm monorepo.
-    includeBuild(new File(settingsDir, "../../../node_modules/@react-native/gradle-plugin").toPath().toRealPath().toString())
-}
-plugins { id("com.facebook.react.settings") }
-extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
-rootProject.name = 'mobile'
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+rootProject.name = 'NetMateNative'
 include ':app'
-includeBuild(new File(settingsDir, "../../../node_modules/@react-native/gradle-plugin").toPath().toRealPath().toString())

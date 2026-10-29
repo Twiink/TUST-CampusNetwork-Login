@@ -6,16 +6,38 @@ import { runtimePorts } from '../runtime-ports';
 import { ipcMain, BrowserWindow, dialog, shell, app } from 'electron';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { Logger, LogEntry, LogQueryOptions } from '@repo/shared';
+import {
+  Logger,
+  LogEntry,
+  LogQueryOptions,
+  LogHistoryQuery,
+  LogHistoryFilter,
+  matchesLog,
+  queryLogPage,
+  exportLogHistory,
+} from '@repo/shared';
 import { IPC_CHANNELS, IPC_EVENTS } from './channels';
+import type { FileLogger } from '../services/file-logger';
 import { collectSystemInfo } from '../services/system-info';
 
 /**
  * 注册日志 IPC 处理器
  */
-export function registerLogIPC(logger: Logger) {
+export function registerLogIPC(logger: Logger, journal?: FileLogger) {
   // 日志合并推送：突发写入只跨一次 IPC，且隐藏窗口不产生渲染端唤醒。
   const pendingEntries: LogEntry[] = [];
+  let generation = 0;
+  const all = async () => {
+    const snapshot = journal ? await journal.all() : { entries: logger.getAllLogs() };
+    if (snapshot.error) throw new Error(snapshot.error);
+    return snapshot.entries;
+  };
+  const content = async (format: 'text' | 'json', filter: LogHistoryFilter = {}) =>
+    exportLogHistory(
+      (await all()).filter((entry) => matchesLog(entry, filter)),
+      format,
+      await collectSystemInfo()
+    );
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   const flush = () => {
     flushTimer = null;
@@ -31,7 +53,7 @@ export function registerLogIPC(logger: Logger) {
   };
 
   logger.addListener((entry: LogEntry) => {
-    pendingEntries.push(entry);
+    pendingEntries.push({ ...entry, generation: String(generation) });
     if (!flushTimer) {
       flushTimer = setTimeout(flush, 250);
     }
@@ -43,18 +65,38 @@ export function registerLogIPC(logger: Logger) {
   ipcMain.handle(
     IPC_CHANNELS.LOG_GET,
     async (_, options?: LogQueryOptions): Promise<LogEntry[]> => {
-      return logger.getLogs(options);
+      const entries = await all();
+      return entries
+        .filter((entry) =>
+          matchesLog(entry, {
+            ...options,
+            startTime: options?.startTime ? new Date(options.startTime).getTime() : undefined,
+            endTime: options?.endTime ? new Date(options.endTime).getTime() : undefined,
+          })
+        )
+        .slice(
+          options?.offset ?? 0,
+          options?.limit ? (options.offset ?? 0) + options.limit : undefined
+        );
     }
   );
+
+  ipcMain.handle(IPC_CHANNELS.LOG_QUERY, async (_, options: LogHistoryQuery = {}) => ({
+    ...(journal ? await journal.query(options) : queryLogPage(logger.getAllLogs(), options)),
+    generation: String(generation),
+  }));
 
   /**
    * 清除日志
    */
-  ipcMain.handle(IPC_CHANNELS.LOG_CLEAR, async (): Promise<void> => {
+  ipcMain.handle(IPC_CHANNELS.LOG_CLEAR, async (): Promise<string> => {
+    generation++;
     pendingEntries.length = 0;
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = null;
     logger.clearLogs();
+    await journal?.clear();
+    return String(generation);
   });
 
   /**
@@ -62,12 +104,8 @@ export function registerLogIPC(logger: Logger) {
    */
   ipcMain.handle(
     IPC_CHANNELS.LOG_EXPORT,
-    async (_, format: 'text' | 'json' = 'text'): Promise<string> => {
-      if (format === 'json') {
-        return logger.exportAsJson();
-      }
-      return logger.exportAsText();
-    }
+    async (_, format: 'text' | 'json' = 'text', filter?: LogHistoryFilter): Promise<string> =>
+      content(format, filter)
   );
 
   /**
@@ -77,15 +115,11 @@ export function registerLogIPC(logger: Logger) {
     IPC_CHANNELS.LOG_EXPORT_SAVE,
     async (
       _,
-      format: 'text' | 'json' = 'text'
+      format: 'text' | 'json' = 'text',
+      filter?: LogHistoryFilter
     ): Promise<{ success: boolean; path?: string; error?: string }> => {
       try {
-        // 采集系统信息
-        const systemInfo = await collectSystemInfo();
-
-        // 生成导出内容
-        const content =
-          format === 'json' ? logger.exportAsJson(systemInfo) : logger.exportAsText(systemInfo);
+        const exported = await content(format, filter);
 
         // 生成默认文件名
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -110,7 +144,7 @@ export function registerLogIPC(logger: Logger) {
         }
 
         // 写入文件
-        await fs.writeFile(result.filePath, content, 'utf-8');
+        await fs.writeFile(result.filePath, exported, 'utf-8');
 
         return { success: true, path: result.filePath };
       } catch (err) {

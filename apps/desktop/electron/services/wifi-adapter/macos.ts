@@ -62,12 +62,22 @@ export async function resolveMacOSWifiInfo(): Promise<WifiInfo | null> {
   return await macOSWifiFallback();
 }
 
+export async function resolveMacOSWifiDevice(): Promise<string | null> {
+  const { stdout } = await execAsync('networksetup -listallhardwareports', { timeout: 3000 });
+  const block = stdout
+    .split(/\r?\n\s*\r?\n/)
+    .find((value) => /Hardware Port:\s*(?:Wi-Fi|AirPort)/i.test(value));
+  return block?.match(/Device:\s*(en\d+)/)?.[1] ?? null;
+}
+
 /**
  * macOS: 备选方法获取 WiFi 信息
  */
 export async function macOSWifiFallback(): Promise<WifiInfo | null> {
   try {
-    const { stdout } = await execAsync('networksetup -getairportnetwork en0');
+    const device = await resolveMacOSWifiDevice();
+    if (!device) return null;
+    const { stdout } = await execAsync(`networksetup -getairportnetwork ${device}`);
     const match = stdout.match(/Current Wi-Fi Network:\s*(.+)/);
     if (match && match[1]) {
       const ssid = match[1].trim();

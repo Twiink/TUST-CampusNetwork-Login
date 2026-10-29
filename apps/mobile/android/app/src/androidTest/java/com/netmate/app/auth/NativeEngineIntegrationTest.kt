@@ -54,14 +54,14 @@ class NativeEngineIntegrationTest {
         assertEquals("cooldown", ReconnectEvents.latest.getString("status"))
         assertTrue(ReconnectEvents.latest.getLong("nextRetryAt") >= startedAt + 5000)
         AutoAuthEngine.stopReconnect(context)
-        assertEquals("idle", ReconnectEvents.latest.getString("status"))
+        assertEquals("cancelled", ReconnectEvents.latest.getString("status"))
         assertNull(AutoAuthStore.pendingSsid(context))
     }
 
     @Test fun nativeManualFallbackLogoutPauseAndLastServerShareOneEngine() {
         val result = AutoAuthEngine.checkAsync(context, AutoAuthEngine.TRIGGER_MANUAL).get(10, TimeUnit.SECONDS)!!
         assertTrue(result.success); assertEquals("accept", result.username)
-        assertEquals("http://two.test", AutoAuthStore.sessionServer(context))
+        assertEquals("http://two.test", AutoAuthStore.sessionServer(context, WifiEnvironment.snapshot(context)))
         AutoAuthEngine.checkAsync(context, "status").get(10, TimeUnit.SECONDS)
         assertTrue(AutoAuthEngine.snapshot(context).getBoolean("authenticated"))
         assertFalse(AutoAuthEngine.snapshot(context).getBoolean("internetReachable"))

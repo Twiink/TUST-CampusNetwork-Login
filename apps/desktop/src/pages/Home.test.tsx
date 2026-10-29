@@ -174,7 +174,11 @@ describe('Home', () => {
     expect(login).toHaveBeenCalledTimes(1);
 
     const logout = vi.fn();
-    renderHome({ networkStatus: 'connected', logout });
+    renderHome({
+      networkStatus: 'connected',
+      status: { ...networkStatus, connected: true, authenticated: true },
+      logout,
+    });
     fireEvent.click(screen.getByRole('button', { name: '断开连接' }));
     expect(logout).toHaveBeenCalledTimes(1);
 
@@ -258,5 +262,39 @@ describe('Home', () => {
     fireEvent.click(screen.getByText('TUST-LAB').closest('button')!);
     expect(await screen.findByText('WiFi切换失败，请检查网络设置')).toBeTruthy();
     consoleError.mockRestore();
+  });
+  it('R5: 断网且只有一个关闭自动连接的配置时，仍可手动连接', async () => {
+    const config = makeConfig();
+    config.wifiList[0].autoConnect = false;
+    renderHome({ wifiConnected: false, wifiSSID: null }, config);
+    fireEvent.click(screen.getByText('TUST-WIFI').closest('button')!);
+    expect(window.electronAPI.wifi.switch).toHaveBeenCalledWith('w1');
+    expect(await screen.findByText('正在切换到 TUST-WIFI，请稍候...')).toBeTruthy();
+  });
+  it('R7: 未保存规则的校园网按认证策略提供登录与注销', () => {
+    const config = makeConfig();
+    config.wifiList = [];
+    const first = renderHome({ status: { ...networkStatus, requiresAuth: true } }, config);
+    expect(screen.getByRole('button', { name: '立即连接' })).toBeTruthy();
+    first.unmount();
+    renderHome(
+      {
+        status: { ...networkStatus, requiresAuth: true, authenticated: true },
+        networkStatus: 'disconnected',
+      },
+      config
+    );
+    expect(screen.getByRole('button', { name: '断开连接' })).toBeTruthy();
+  });
+  it('无账号的校园网直接提供添加账号入口', () => {
+    const config = makeConfig();
+    config.wifiList = [];
+    config.accounts = [];
+    config.currentAccountId = null;
+    renderHome({ status: { ...networkStatus, requiresAuth: true } }, config).unmount();
+    const configure = vi.fn();
+    render(<Home onConfigure={configure} />);
+    fireEvent.click(screen.getByRole('button', { name: '添加认证账号' }));
+    expect(configure).toHaveBeenCalledTimes(1);
   });
 });

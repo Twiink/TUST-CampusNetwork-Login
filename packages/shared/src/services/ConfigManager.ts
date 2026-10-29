@@ -32,10 +32,14 @@ export class ConfigManager {
       this.loading = (async () => {
         try {
           const stored = await this.storage.get<AppConfig>(CONFIG_STORAGE_KEY);
-          let config = stored ? normalizeAppConfig(stored) : createDefaultAppConfig();
-          if (!validateAppConfig(config).valid) config = createDefaultAppConfig();
+          if (stored !== null && (typeof stored !== 'object' || Array.isArray(stored)))
+            throw new Error('配置格式无效，原数据已保留');
+          let config = stored === null ? createDefaultAppConfig() : normalizeAppConfig(stored);
+          const validation = validateAppConfig(config);
+          if (!validation.valid)
+            throw new Error(`配置无效，原数据已保留：${validation.errors.join('; ')}`);
           config = normalizeAppConfig(config);
-          if (!stored || JSON.stringify(stored) !== JSON.stringify(config)) {
+          if (stored === null || JSON.stringify(stored) !== JSON.stringify(config)) {
             await this.storage.set(CONFIG_STORAGE_KEY, copy(config));
           }
           this.config = config;

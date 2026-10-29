@@ -20,6 +20,11 @@ export function registerWifiIPC(
   logger: ReturnType<typeof createLogger>,
   wifiSwitcherService?: WifiSwitcherService
 ) {
+  ipcMain.handle(IPC_CHANNELS.WIFI_RETRY, () => wifiSwitcherService?.retry());
+  ipcMain.handle(
+    IPC_CHANNELS.WIFI_PROGRESS,
+    () => wifiSwitcherService?.getRecoveryProgress() ?? null
+  );
   /**
    * 获取 WiFi 列表
    */
@@ -134,6 +139,7 @@ export function registerWifiIPC(
       throw new Error('WiFi切换服务未初始化');
     }
 
+    const finish = wifiSwitcherService.beginManualConnection?.();
     try {
       const success = await wifiSwitcherService.connectToConfiguredNetwork(ssid);
       if (success) {
@@ -148,6 +154,8 @@ export function registerWifiIPC(
         错误: error instanceof Error ? error.message : String(error),
       });
       throw error;
+    } finally {
+      finish?.();
     }
   });
 

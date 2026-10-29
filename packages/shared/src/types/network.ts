@@ -34,6 +34,8 @@ export interface LatencyResult {
 export interface NetworkStatus {
   /** 网络是否连接 */
   connected: boolean;
+  /** 当前 WiFi 的互联网探测结果，与门户认证结果独立。 */
+  internetReachable?: boolean;
   /** 是否已认证（需要认证的 WiFi） */
   authenticated: boolean;
   /** WiFi 是否连接（最高优先级） */

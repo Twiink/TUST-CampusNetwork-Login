@@ -182,84 +182,85 @@ export const GeneralSettingsCard: React.FC<{
               />
               <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>次</Text>
             </View>
-
-            <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
-                  单个 WiFi 重试次数
-                </Text>
-                <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
-                  当前值: {settings.wifiReconnectRetries} 次
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.sliderContainer}>
-              <TextInput
-                style={[
-                  styles.numberInput,
-                  {
-                    borderColor: theme.colors.border + '40',
-                    backgroundColor: theme.colors.cardBg + '80',
-                    color: theme.colors.text,
-                  },
-                ]}
-                testID="wifi-retries"
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-                accessibilityLabel="WiFi 重试次数"
-                value={String(settings.wifiReconnectRetries)}
-                onChangeText={text => {
-                  const value = parseInt(text, 10) || 0;
-                  if (value >= 0 && value <= 10) {
-                    onToggleSetting('wifiReconnectRetries', value);
-                  }
-                }}
-                keyboardType="number-pad"
-                placeholder="0-10"
-                placeholderTextColor={theme.colors.textSecondary}
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>次</Text>
-            </View>
-
-            <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.settingLabel, { color: theme.colors.text }]}>冷却期时长</Text>
-                <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
-                  当前值: {settings.wifiReconnectCooldownMinutes} 分钟
-                </Text>
-              </View>
-            </View>
-
-            <View style={[styles.sliderContainer, { marginBottom: 0 }]}>
-              <TextInput
-                style={[
-                  styles.numberInput,
-                  {
-                    borderColor: theme.colors.border + '40',
-                    backgroundColor: theme.colors.cardBg + '80',
-                    color: theme.colors.text,
-                  },
-                ]}
-                testID="wifi-cooldown"
-                returnKeyType="done"
-                onSubmitEditing={Keyboard.dismiss}
-                accessibilityLabel="WiFi 冷却分钟"
-                value={String(settings.wifiReconnectCooldownMinutes)}
-                onChangeText={text => {
-                  const value = parseInt(text, 10) || 0;
-                  if (value >= 0 && value <= 60) {
-                    onToggleSetting('wifiReconnectCooldownMinutes', value);
-                  }
-                }}
-                keyboardType="number-pad"
-                placeholder="0-60"
-                placeholderTextColor={theme.colors.textSecondary}
-              />
-              <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>分</Text>
-            </View>
           </>
         )}
+        <>
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>
+                每个 WiFi 最多尝试次数（含首次）
+              </Text>
+              <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+                当前值: {settings.wifiReconnectRetries} 次
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sliderContainer}>
+            <TextInput
+              style={[
+                styles.numberInput,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
+              testID="wifi-retries"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              accessibilityLabel="WiFi 重试次数"
+              value={String(settings.wifiReconnectRetries)}
+              onChangeText={text => {
+                const value = parseInt(text, 10);
+                if (value >= 1 && value <= 10) {
+                  onToggleSetting('wifiReconnectRetries', value);
+                }
+              }}
+              keyboardType="number-pad"
+              placeholder="1-10"
+              placeholderTextColor={theme.colors.textSecondary}
+            />
+            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>次</Text>
+          </View>
+
+          <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingLabel, { color: theme.colors.text }]}>冷却期时长</Text>
+              <Text style={[styles.settingDesc, { color: theme.colors.textSecondary }]}>
+                当前值: {settings.wifiReconnectCooldownMinutes} 分钟
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.sliderContainer, { marginBottom: 0 }]}>
+            <TextInput
+              style={[
+                styles.numberInput,
+                {
+                  borderColor: theme.colors.border + '40',
+                  backgroundColor: theme.colors.cardBg + '80',
+                  color: theme.colors.text,
+                },
+              ]}
+              testID="wifi-cooldown"
+              returnKeyType="done"
+              onSubmitEditing={Keyboard.dismiss}
+              accessibilityLabel="WiFi 冷却分钟"
+              value={String(settings.wifiReconnectCooldownMinutes)}
+              onChangeText={text => {
+                const value = parseInt(text, 10) || 0;
+                if (value >= 0 && value <= 60) {
+                  onToggleSetting('wifiReconnectCooldownMinutes', value);
+                }
+              }}
+              keyboardType="number-pad"
+              placeholder="0-60"
+              placeholderTextColor={theme.colors.textSecondary}
+            />
+            <Text style={[styles.inputLabel, { color: theme.colors.textSecondary }]}>分</Text>
+          </View>
+        </>
       </GlassView>
 
       <GlassView style={styles.card}>

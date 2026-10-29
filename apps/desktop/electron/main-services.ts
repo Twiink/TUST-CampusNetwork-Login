@@ -17,6 +17,7 @@ import { createDesktopWifiAdapter } from './services/wifi-adapter';
 import type { AppServices } from './ipc';
 import { createFileLogger, FileLogger } from './services/file-logger';
 import { getResolvedAppVersion } from './utils/app-version';
+import { configureAuthSession } from './services/auth-session';
 
 /**
  * 初始化服务
@@ -108,6 +109,7 @@ export async function initAppServices(): Promise<AppServices & { fileLogger: Fil
   const networkDetector = new NetworkDetector(wifiAdapter, logger, {
     connectivityCheckUrls: runtimePorts.connectivityUrls,
   });
+  configureAuthSession(authService, storage, networkDetector);
   logger.log('info', '网络检测服务初始化完成', { category: 'system', source: 'Main' });
 
   return {

@@ -1,3 +1,4 @@
+import type { ConfigApplyResult } from './ipc/config';
 import { ipcRenderer, contextBridge } from 'electron';
 
 /**
@@ -24,10 +25,13 @@ const IPC_CHANNELS = {
   WIFI_FULL_INFO: 'wifi:fullInfo',
   WIFI_SWITCH: 'wifi:switch',
   WIFI_SCAN: 'wifi:scan',
+  WIFI_RETRY: 'wifi:retry',
+  WIFI_PROGRESS: 'wifi:progress',
   NETWORK_STATUS: 'network:status',
   NETWORK_INFO: 'network:info',
   NETWORK_CHECK: 'network:check',
   LOG_GET: 'log:get',
+  LOG_QUERY: 'log:query',
   LOG_CLEAR: 'log:clear',
   LOG_EXPORT: 'log:export',
   LOG_EXPORT_SAVE: 'log:exportSave',
@@ -74,8 +78,9 @@ const electronAPI = {
   // 配置
   config: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_GET),
-    set: (config: unknown) => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_SET, config),
-    reset: () => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_RESET),
+    set: (config: unknown): Promise<ConfigApplyResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONFIG_SET, config),
+    reset: (): Promise<ConfigApplyResult> => ipcRenderer.invoke(IPC_CHANNELS.CONFIG_RESET),
   },
 
   // 账户
@@ -98,6 +103,8 @@ const electronAPI = {
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_REMOVE, id),
     switch: (idOrSsid: string) => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SWITCH, idOrSsid),
     scan: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_SCAN),
+    retry: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_RETRY),
+    getReconnectProgress: () => ipcRenderer.invoke(IPC_CHANNELS.WIFI_PROGRESS),
   },
 
   // 网络
@@ -112,23 +119,27 @@ const electronAPI = {
   // 日志
   log: {
     get: (options?: unknown) => ipcRenderer.invoke(IPC_CHANNELS.LOG_GET, options),
+    query: (options?: unknown) => ipcRenderer.invoke(IPC_CHANNELS.LOG_QUERY, options),
     clear: () => ipcRenderer.invoke(IPC_CHANNELS.LOG_CLEAR),
-    export: (format?: 'text' | 'json') => ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT, format),
-    exportSave: (format?: 'text' | 'json') =>
-      ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT_SAVE, format),
+    export: (format?: 'text' | 'json', filter?: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT, format, filter),
+    exportSave: (format?: 'text' | 'json', filter?: unknown) =>
+      ipcRenderer.invoke(IPC_CHANNELS.LOG_EXPORT_SAVE, format, filter),
     openDir: () => ipcRenderer.invoke(IPC_CHANNELS.LOG_OPEN_DIR),
   },
 
   // 设置
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_GET),
-    update: (settings: unknown) => ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings),
+    update: (settings: unknown): Promise<ConfigApplyResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SETTINGS_UPDATE, settings),
   },
 
   // 开机自启
   autoLaunch: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.AUTO_LAUNCH_GET),
-    set: (enabled: boolean) => ipcRenderer.invoke(IPC_CHANNELS.AUTO_LAUNCH_SET, enabled),
+    set: (enabled: boolean): Promise<ConfigApplyResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.AUTO_LAUNCH_SET, enabled),
   },
 
   // 系统通知

@@ -19,12 +19,11 @@ import { createMobileWifiAdapter } from '../services/MobileWifiAdapter';
 export function createReactNativeStorage() {
   return {
     async get<T>(key: string): Promise<T | null> {
-      try {
-        const value = await AsyncStorage.getItem(key);
-        return value ? JSON.parse(value) : null;
-      } catch {
-        return null;
-      }
+      const value = await AsyncStorage.getItem(key);
+      if (value === null) return null;
+      const parsed = JSON.parse(value);
+      if (parsed === null) throw new Error('存储值无效，原数据已保留');
+      return parsed;
     },
     async set<T>(key: string, value: T): Promise<void> {
       await AsyncStorage.setItem(key, JSON.stringify(value));
@@ -33,11 +32,11 @@ export function createReactNativeStorage() {
       await AsyncStorage.removeItem(key);
     },
     async clear(): Promise<void> {
-      await AsyncStorage.clear();
+      await AsyncStorage.multiRemove(['app_config']);
     },
     async keys(): Promise<string[]> {
       const keys = await AsyncStorage.getAllKeys();
-      return [...keys];
+      return keys.filter(key => key === 'app_config');
     },
   };
 }

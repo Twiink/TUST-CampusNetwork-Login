@@ -33,7 +33,7 @@ object WifiEnvironment {
     @Volatile var scanPort: (() -> List<Triple<String, Int, String>>)? = null
 
     private val knownSsids = java.util.concurrent.ConcurrentHashMap<Long, String>()
-    fun rememberSsid(network: Network, ssid: String) { knownSsids[network.networkHandle] = ssid }
+    fun rememberSsid(network: Network, ssid: String) { knownSsids[network.networkHandle] = ssid; if (knownSsids.size > 8) knownSsids.keys.firstOrNull { it != network.networkHandle }?.let(knownSsids::remove) }
 
     fun snapshot(context: Context): Snapshot = snapshotPort?.invoke(context) ?: systemSnapshot(context)
 

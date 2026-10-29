@@ -1,3 +1,4 @@
+import type { ConfigApplyResult } from '../../electron/ipc/config';
 /**
  * Electron API 类型声明
  */
@@ -35,13 +36,25 @@ export interface WifiReconnectProgress {
   ssid: string;
   attempt: number;
   maxAttempts: number;
-  status: 'connecting' | 'failed' | 'success';
+  status:
+    | 'connecting'
+    | 'authenticating'
+    | 'verifying'
+    | 'success'
+    | 'failed'
+    | 'cooldown'
+    | 'cancelled';
+  wifiId?: string;
+  reason?: string;
+  nextRetryAt?: number;
+  failedList?: WifiReconnectFailure[];
 }
 
 /**
  * WiFi 重连失败信息
  */
 export interface WifiReconnectFailure {
+  wifiId?: string;
   ssid: string;
   priority: number;
   reason: string;
@@ -102,8 +115,8 @@ export interface ElectronAPI {
 
   config: {
     get: () => Promise<AppConfig | null>;
-    set: (config: AppConfig) => Promise<boolean>;
-    reset: () => Promise<AppConfig>;
+    set: (config: AppConfig) => Promise<ConfigApplyResult>;
+    reset: () => Promise<ConfigApplyResult>;
   };
 
   account: {
@@ -116,6 +129,8 @@ export interface ElectronAPI {
   };
 
   wifi: {
+    retry: () => Promise<void>;
+    getReconnectProgress: () => Promise<WifiReconnectProgress | null>;
     list: () => Promise<WifiConfig[]>;
     add: (wifi: Omit<WifiConfig, 'id'>) => Promise<WifiConfig>;
     update: (id: string, updates: Partial<WifiConfig>) => Promise<WifiConfig>;
@@ -136,23 +151,30 @@ export interface ElectronAPI {
   };
 
   log: {
+    query: (
+      options?: import('@repo/shared').LogHistoryQuery
+    ) => Promise<import('@repo/shared').LogPage>;
     get: (options?: LogQueryOptions) => Promise<LogEntry[]>;
-    clear: () => Promise<void>;
-    export: (format?: 'text' | 'json') => Promise<string>;
+    clear: () => Promise<string>;
+    export: (
+      format?: 'text' | 'json',
+      filter?: import('@repo/shared').LogHistoryFilter
+    ) => Promise<string>;
     exportSave: (
-      format?: 'text' | 'json'
+      format?: 'text' | 'json',
+      filter?: import('@repo/shared').LogHistoryFilter
     ) => Promise<{ success: boolean; path?: string; error?: string }>;
     openDir: () => Promise<{ success: boolean; path?: string; error?: string }>;
   };
 
   settings: {
     get: () => Promise<AppSettings>;
-    update: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+    update: (settings: Partial<AppSettings>) => Promise<ConfigApplyResult>;
   };
 
   autoLaunch: {
     get: () => Promise<boolean>;
-    set: (enabled: boolean) => Promise<boolean>;
+    set: (enabled: boolean) => Promise<ConfigApplyResult>;
   };
 
   notification: {

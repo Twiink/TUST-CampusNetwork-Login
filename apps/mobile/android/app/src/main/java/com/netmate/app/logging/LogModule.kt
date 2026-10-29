@@ -29,14 +29,34 @@ class LogModule(private val context: ReactApplicationContext) : ReactContextBase
         try { promise.resolve(NetMateLogs.queryPage(context, cursor, limit).toNativeMap()) }
         catch (_: Exception) { promise.reject("LOG_READ", "日志读取失败") }
     }
-    @ReactMethod fun export(promise: Promise) {
+    @ReactMethod fun queryHistory(json: String, promise: Promise) {
+        try { promise.resolve(NetMateLogs.queryHistory(context, JSONObject(json)).toNativeMap()) }
+        catch (_: Exception) { promise.reject("LOG_READ", "日志读取失败，请刷新重试") }
+    }
+    @ReactMethod fun copy(text: String, promise: Promise) {
+        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NetMate 日志", LogJournal.safe(text)))
+        promise.resolve(true)
+    }
+    @ReactMethod fun export(promise: Promise) = exportHistory("text", "{}", promise)
+    @ReactMethod fun exportHistory(format: String, filter: String, promise: Promise) {
         try {
+            val entries = NetMateLogs.history(context, JSONObject(filter))
+            val info = JSONObject().put("os", JSONObject().put("platform", "Android").put("release", android.os.Build.VERSION.RELEASE).put("sdk", android.os.Build.VERSION.SDK_INT))
+                .put("app", JSONObject().put("version", context.packageManager.getPackageInfo(context.packageName, 0).versionName))
+                .put("device", JSONObject().put("manufacturer", android.os.Build.MANUFACTURER).put("model", android.os.Build.MODEL))
+            val meta = JSONObject().put("appName", "NetMate").put("exportedAt", java.time.Instant.now().toString()).put("totalEntries", entries.size)
+                .put("timeRange", JSONObject().put("from", entries.lastOrNull()?.optLong("timestamp")).put("to", entries.firstOrNull()?.optLong("timestamp")))
+            val content = if (format == "json") JSONObject().put("meta", meta).put("systemInfo", info).put("entries", org.json.JSONArray(entries)).toString(2)
+                else listOf("NetMate 诊断日志", "导出时间: ${meta.getString("exportedAt")}", "日志记录 (共 ${entries.size} 条)", "系统与应用信息: $info").joinToString("\n") + "\n" + entries.joinToString("\n") {
+                    val labels = mapOf("info" to "信息", "success" to "成功", "warn" to "警告", "error" to "错误", "debug" to "调试")
+                    "[${java.time.Instant.ofEpochMilli(it.getLong("timestamp"))}] [${labels[it.optString("level")] ?: "信息"}] [${it.optString("source", "app")}] ${it.optString("message")}" + if (it.has("data")) "\n${it.opt("data")}" else ""
+                }
             val directory = File(context.cacheDir, "exports").apply { mkdirs() }
-            directory.listFiles()?.forEach { it.delete() }
-            val file = File(directory, "NetMate-diagnostic.log")
-            file.writeText(NetMateLogs.query(context, null, 100_000).joinToString("\n") { it.toString() })
+            val file = File(directory, "NetMate-diagnostic.${if (format == "json") "json" else "log"}")
+            file.writeText(content)
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-            val share = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val share = Intent(Intent.ACTION_SEND).setType(if (format == "json") "application/json" else "text/plain").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             context.startActivity(Intent.createChooser(share, "导出诊断日志").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             promise.resolve(true)
         } catch (_: Exception) { promise.reject("LOG_EXPORT", "日志导出失败，请重试") }

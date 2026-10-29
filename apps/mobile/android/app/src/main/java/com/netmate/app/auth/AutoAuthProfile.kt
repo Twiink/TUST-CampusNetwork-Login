@@ -64,7 +64,7 @@ data class AutoAuthProfile(
 ) {
     /** 开启了自动连接的 WiFi（WiFi 重连与启动连接的候选） */
     val autoConnectWifis: List<AutoAuthWifiRule>
-        get() = wifiRules.filter { it.autoConnect }
+        get() = wifiRules.filter { it.autoConnect && !WifiSecurity.systemSettingsOnly(it.security) }
 
     companion object {
         fun fromJson(json: String): AutoAuthProfile {
@@ -87,7 +87,7 @@ data class AutoAuthProfile(
                     requiresAuth = item.optBoolean("requiresAuth", false),
                     linkedAccountIds = item.optJSONArray("linkedAccountIds").strings(),
                     password = item.optString("password", ""),
-                    autoConnect = item.optBoolean("autoConnect", false),
+                    autoConnect = item.optBoolean("autoConnect", false) && !WifiSecurity.systemSettingsOnly(item.optString("security")),
                     priority = item.optInt("priority", 10),
                 )
             }
@@ -110,7 +110,7 @@ data class AutoAuthProfile(
                 heartbeatEnabled = root.optBoolean("heartbeatEnabled", true),
                 heartbeatIntervalSeconds = root.optInt("heartbeatIntervalSeconds", 30).coerceIn(15, 300),
                 failureThreshold = root.optInt("failureThreshold", 3).coerceAtLeast(1),
-                wifiRetries = root.optInt("wifiRetries", 3).coerceAtLeast(1),
+                wifiRetries = root.optInt("wifiRetries", 3).coerceIn(1, 10),
                 wifiCooldownMinutes = root.optInt("wifiCooldownMinutes", 5).coerceAtLeast(0),
                 startupAutoConnect = root.optBoolean("startupAutoConnect", false),
                 keepCurrentConnection = root.optBoolean("keepCurrentConnection", true),

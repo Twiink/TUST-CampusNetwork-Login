@@ -164,7 +164,7 @@ export const GeneralSettingsCard: React.FC<{
           )}
           <NumberRow
             icon={<RotateCcw size={14} style={{ marginRight: 6 }} />}
-            label="单个 WiFi 重试次数"
+            label="每个 WiFi 最多尝试次数（含首次）"
             value={settings.wifiReconnectRetries}
             min={1}
             max={10}

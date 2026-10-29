@@ -83,7 +83,13 @@ export async function resolveLinuxNetworkInfo(): Promise<NetworkInfo> {
   try {
     const { stdout } = await execFileAsync(
       'nmcli',
-      ['-t', '-f', 'IP4.ADDRESS,IP4.GATEWAY,IP4.DNS,GENERAL.HWADDR', 'dev', 'show'],
+      [
+        '-t',
+        '-f',
+        'GENERAL.TYPE,IP4.ADDRESS,IP6.ADDRESS,IP4.GATEWAY,IP4.DNS,GENERAL.HWADDR',
+        'dev',
+        'show',
+      ],
       { timeout: 3000 }
     );
 
@@ -91,7 +97,11 @@ export async function resolveLinuxNetworkInfo(): Promise<NetworkInfo> {
     const addresses: string[] = [];
     const dns: string[] = [];
 
-    for (const rawLine of stdout.split('\n')) {
+    const wifiBlock = stdout
+      .split(/\r?\n\s*\r?\n/)
+      .find((block) => /^GENERAL\.TYPE:(?:wifi|802-11-wireless)$/m.test(block.trim()));
+    if (!wifiBlock) return {};
+    for (const rawLine of wifiBlock.split('\n')) {
       const [key = '', value = ''] = splitNmcliLine(rawLine.trim());
       const normalizedKey = key.toUpperCase();
       if (/^IP4\.ADDRESS(?:\[\d+\])?$/.test(normalizedKey)) {
@@ -107,6 +117,9 @@ export async function resolveLinuxNetworkInfo(): Promise<NetworkInfo> {
           }
           addresses.push(address);
         }
+      } else if (/^IP6\.ADDRESS(?:\[\d+\])?$/.test(normalizedKey)) {
+        const address = value.split('/')[0];
+        if (address && !address.startsWith('fe80:')) info.ipv6 ??= address;
       } else if (normalizedKey === 'IP4.GATEWAY') {
         info.gateway = info.gateway || value || undefined;
       } else if (/^IP4\.DNS(?:\[\d+\])?$/.test(normalizedKey)) {

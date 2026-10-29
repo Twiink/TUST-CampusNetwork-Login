@@ -61,6 +61,7 @@ export const HomeNoticeCard: React.FC<HomeNoticeCardProps> = React.memo(
 );
 
 export interface NetworkStatusCardProps {
+  authenticated?: boolean;
   networkStatus: 'connected' | 'disconnected' | 'connecting';
   statusText: string;
   ipAddress: string | null;
@@ -75,6 +76,7 @@ export interface NetworkStatusCardProps {
 export const NetworkStatusCard: React.FC<NetworkStatusCardProps> = React.memo(
   ({
     networkStatus,
+    authenticated = networkStatus === 'connected',
     statusText,
     ipAddress,
     onLogin,
@@ -135,27 +137,21 @@ export const NetworkStatusCard: React.FC<NetworkStatusCardProps> = React.memo(
           style={[
             styles.btn,
             {
-              backgroundColor:
-                networkStatus === 'connected' ? theme.colors.danger : theme.colors.primary,
-              shadowColor:
-                networkStatus === 'connected' ? theme.colors.danger : theme.colors.primary,
+              backgroundColor: authenticated ? theme.colors.danger : theme.colors.primary,
+              shadowColor: authenticated ? theme.colors.danger : theme.colors.primary,
             },
           ]}
-          onPress={networkStatus === 'connected' ? onLogout : onLogin}
+          onPress={authenticated ? onLogout : onLogin}
           disabled={networkStatus === 'connecting'}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={
-            networkStatus === 'connected'
-              ? '断开连接'
-              : networkStatus === 'connecting'
-                ? '正在连接...'
-                : '立即连接'
+            authenticated ? '注销登录' : networkStatus === 'connecting' ? '正在连接...' : '立即连接'
           }
         >
           <Text style={styles.btnText}>
-            {networkStatus === 'connected'
-              ? '断开连接'
+            {authenticated
+              ? '注销登录'
               : networkStatus === 'connecting'
                 ? '正在连接...'
                 : '立即连接'}

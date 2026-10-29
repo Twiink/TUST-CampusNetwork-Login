@@ -121,6 +121,15 @@ export class DesktopWifiAdapter implements WifiAdapter {
   private networkSnapshot: NetworkInfo | null = null;
   private networkSnapshotAt = 0;
   private networkSnapshotPromise: Promise<NetworkInfo> | null = null;
+  private generation = 0;
+
+  invalidateCache(): void {
+    this.generation++;
+    this.snapshotAt = 0;
+    this.networkSnapshotAt = 0;
+    this.snapshotPromise = null;
+    this.networkSnapshotPromise = null;
+  }
 
   constructor() {
     this.platform = process.platform;
@@ -138,7 +147,8 @@ export class DesktopWifiAdapter implements WifiAdapter {
       return this.snapshotPromise;
     }
 
-    this.snapshotPromise = (async () => {
+    const generation = this.generation;
+    const pending = (async () => {
       try {
         switch (this.platform) {
           case 'darwin':
@@ -155,14 +165,25 @@ export class DesktopWifiAdapter implements WifiAdapter {
         return null;
       }
     })();
+    this.snapshotPromise = pending;
 
     try {
-      const result = await this.snapshotPromise;
+      const result = await pending;
+      if (generation !== this.generation) return this.getCurrentWifi();
+      if (
+        ['ssid', 'bssid', 'security', 'connected'].some(
+          (key) => this.snapshot?.[key as keyof WifiInfo] !== result?.[key as keyof WifiInfo]
+        )
+      ) {
+        this.generation++;
+        this.networkSnapshotAt = 0;
+        this.networkSnapshotPromise = null;
+      }
       this.snapshot = result;
       this.snapshotAt = Date.now();
       return result;
     } finally {
-      this.snapshotPromise = null;
+      if (this.snapshotPromise === pending) this.snapshotPromise = null;
     }
   }
 
@@ -170,12 +191,14 @@ export class DesktopWifiAdapter implements WifiAdapter {
    * 获取完整的 WiFi 详细信息
    */
   async getWifiDetails(): Promise<WifiDetails | null> {
+    const generation = this.generation;
     const wifiInfo = await this.getCurrentWifi();
     if (!wifiInfo) {
       return null;
     }
 
     const networkInfo = await this.getNetworkInfo();
+    if (generation !== this.generation) return this.getWifiDetails();
 
     return {
       ...wifiInfo,
@@ -252,7 +275,8 @@ export class DesktopWifiAdapter implements WifiAdapter {
       return this.networkSnapshotPromise;
     }
 
-    this.networkSnapshotPromise = (async () => {
+    const generation = this.generation;
+    const pending = (async () => {
       const native = loadNativeModule();
       const nativeInfo: NativeNetworkSnapshot | null = native?.networkInfo?.() ?? null;
       if (hasAnyNetworkValue(nativeInfo) && nativeInfo) {
@@ -296,9 +320,12 @@ export class DesktopWifiAdapter implements WifiAdapter {
       }
       return this.resolveFallbackNetworkInfo();
     })();
+    this.networkSnapshotPromise = pending;
 
     try {
-      const result = await this.networkSnapshotPromise;
+      const result = await pending;
+      if (generation !== this.generation || this.networkSnapshotPromise !== pending)
+        return this.getNetworkInfo();
       this.networkSnapshot = result;
       // Native interfaces are stable enough for 15s; route/DNS data can be held for 60s.
       this.networkSnapshotAt = Date.now();
@@ -307,7 +334,7 @@ export class DesktopWifiAdapter implements WifiAdapter {
       devLog.error('Failed to get network info:', error);
       return {};
     } finally {
-      this.networkSnapshotPromise = null;
+      if (this.networkSnapshotPromise === pending) this.networkSnapshotPromise = null;
     }
   }
 

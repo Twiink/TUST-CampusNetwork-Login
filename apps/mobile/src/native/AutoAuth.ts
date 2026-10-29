@@ -5,6 +5,7 @@
  * 由 Android Keystore 加密保存；前台检查与后台服务共用同一原生串行引擎。
  */
 
+import { usesSystemWifiSettings } from '../services/wifiPolicy';
 import { NativeEventEmitter, NativeModules, type EmitterSubscription } from 'react-native';
 import type { AppConfig } from '@repo/shared';
 
@@ -64,6 +65,7 @@ interface AutoAuthModuleInterface {
   logout(): Promise<AutoAuthResult>;
   getSnapshot(): Promise<AuthSnapshot>;
   getReconnectProgress(): Promise<WifiReconnectProgress>;
+  retryNow(): Promise<boolean>;
   checkNow(trigger: string): Promise<AutoAuthResult | null>;
   getLastResult(): Promise<AutoAuthResult | null>;
 }
@@ -103,7 +105,7 @@ export function buildAutoAuthProfile(config: AppConfig): AutoAuthProfile {
       requiresAuth: wifi.requiresAuth,
       linkedAccountIds: wifi.linkedAccountIds,
       password: wifi.password,
-      autoConnect: wifi.autoConnect,
+      autoConnect: wifi.autoConnect && !usesSystemWifiSettings(wifi.security),
       priority: wifi.priority,
     })),
     heartbeatEnabled: settings.enableHeartbeat,
@@ -169,12 +171,23 @@ export interface AuthSnapshot {
   timestamp: number;
 }
 export interface WifiReconnectProgress {
-  status: 'idle' | 'awaiting-system' | 'connecting' | 'success' | 'failed' | 'cooldown';
+  status:
+    | 'idle'
+    | 'awaiting-system'
+    | 'connecting'
+    | 'authenticating'
+    | 'verifying'
+    | 'success'
+    | 'failed'
+    | 'cooldown'
+    | 'cancelled';
   ssid?: string;
+  wifiId?: string;
+  reason?: string;
   attempt?: number;
   maxAttempts?: number;
   nextRetryAt?: number;
-  failedList?: Array<{ ssid: string; reason: string }>;
+  failedList?: Array<{ ssid: string; wifiId?: string; reason: string }>;
   message?: string;
 }
 export async function nativeLogin(): Promise<AutoAuthResult | null> {
@@ -204,4 +217,8 @@ export function onWifiReconnectProgress(
   return module
     ? new NativeEventEmitter(module as never).addListener('netmate:wifiReconnectProgress', handler)
     : null;
+}
+
+export async function retryWifiRecovery(): Promise<void> {
+  await nativeModule()?.retryNow();
 }

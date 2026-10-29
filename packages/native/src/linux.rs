@@ -270,7 +270,7 @@ fn recv_until_done(fd: i32, out: &mut Vec<u8>) -> Result<()> {
             if typ == NLMSG_DONE {
                 done = true;
             }
-            off += hdr_len;
+            off += (hdr_len + 3) & !3;
         }
         let _ = start;
         if done || out.len() >= 1024 * 1024 {
@@ -508,7 +508,22 @@ fn read_interfaces(preferred_ifindex: Option<u32>) -> Option<InterfaceData> {
     let mut ipv6 = None;
     let mut mac = None;
     let mut mask = None;
-    let mut selected_ifindex = None;
+    let mut selected_ifindex = preferred_ifindex;
+    let mut cursor = list.ptr;
+    // Choose one interface before reading its IPv4/IPv6/MAC; getifaddrs order is arbitrary.
+    while selected_ifindex.is_none() && !cursor.is_null() {
+        let entry = unsafe { &*cursor };
+        cursor = entry.next;
+        if entry.addr.is_null() || entry.name.is_null() {
+            continue;
+        }
+        if unsafe { *entry.addr }.sa_family == AF_INET {
+            let addr = unsafe { &*(entry.addr.cast::<SockaddrIn>()) };
+            if addr.addr[0] != 127 {
+                selected_ifindex = Some(unsafe { libc::if_nametoindex(entry.name) });
+            }
+        }
+    }
     let mut cursor = list.ptr;
     while !cursor.is_null() {
         let entry = unsafe { &*cursor };
@@ -519,7 +534,10 @@ fn read_interfaces(preferred_ifindex: Option<u32>) -> Option<InterfaceData> {
             Some(unsafe { std::ffi::CStr::from_ptr(entry.name).to_string_lossy() })
         };
         let name = name.as_deref().unwrap_or("");
-        if name == "lo" {
+        if name == "lo"
+            || entry.name.is_null()
+            || Some(unsafe { libc::if_nametoindex(entry.name) }) != selected_ifindex
+        {
             continue;
         }
         if entry.addr.is_null() {
@@ -529,8 +547,7 @@ fn read_interfaces(preferred_ifindex: Option<u32>) -> Option<InterfaceData> {
         if family == AF_INET {
             let addr = unsafe { &*(entry.addr.cast::<SockaddrIn>()) };
             let current_ifindex = unsafe { libc::if_nametoindex(entry.name) };
-            let preferred = preferred_ifindex.is_none_or(|index| index == current_ifindex);
-            if selected_ifindex.is_none() && preferred && addr.addr[0] != 127 {
+            if ipv4.is_none() && addr.addr[0] != 127 {
                 ipv4 = Some(format_inet(&addr.addr));
                 if !entry.netmask.is_null() {
                     let netmask = unsafe { &*(entry.netmask.cast::<SockaddrIn>()) };
@@ -591,37 +608,7 @@ fn read_route() -> Option<String> {
         return None;
     }
 
-    let payload = RtMsg {
-        family: AF_INET as u8,
-        dst_len: 0,
-        src_len: 0,
-        tos: 0,
-        table: 0,
-        protocol: 0,
-        scope: 0,
-        kind: 0,
-        flags: 0,
-    };
-    let mut buf = [0u8; 24];
-    let hdr = NlMsgHdr {
-        len: buf.len() as u32,
-        typ: 26, // RTM_GETROUTE
-        flags: NLM_F_REQUEST | NLM_F_DUMP,
-        seq: 2,
-        pid: std::process::id(),
-    };
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            &hdr as *const NlMsgHdr as *const u8,
-            buf.as_mut_ptr(),
-            std::mem::size_of::<NlMsgHdr>(),
-        );
-        std::ptr::copy_nonoverlapping(
-            &payload as *const RtMsg as *const u8,
-            buf.as_mut_ptr().add(16),
-            std::mem::size_of::<RtMsg>(),
-        );
-    }
+    let mut buf = route_request();
     let mut out = Vec::with_capacity(16 * 1024);
     let send_len = buf.len();
     if send_and_recv(socket.fd, &mut buf, send_len, &mut out).is_err() {
@@ -633,19 +620,60 @@ fn read_route() -> Option<String> {
         return None;
     }
 
+    parse_routes(&out)
+}
+
+fn route_request() -> Vec<u8> {
+    let header_size = std::mem::size_of::<NlMsgHdr>();
+    let mut buf = vec![0u8; header_size + std::mem::size_of::<RtMsg>()];
+    let hdr = NlMsgHdr {
+        len: buf.len() as u32,
+        typ: 26, // RTM_GETROUTE
+        flags: NLM_F_REQUEST | NLM_F_DUMP,
+        seq: 2,
+        pid: std::process::id(),
+    };
+    let payload = RtMsg {
+        family: AF_INET as u8,
+        dst_len: 0,
+        src_len: 0,
+        tos: 0,
+        table: 0,
+        protocol: 0,
+        scope: 0,
+        kind: 0,
+        flags: 0,
+    };
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            &hdr as *const NlMsgHdr as *const u8,
+            buf.as_mut_ptr(),
+            header_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            &payload as *const RtMsg as *const u8,
+            buf.as_mut_ptr().add(header_size),
+            std::mem::size_of::<RtMsg>(),
+        );
+    }
+    buf
+}
+
+fn parse_routes(out: &[u8]) -> Option<String> {
+    let attrs_offset = std::mem::size_of::<NlMsgHdr>() + std::mem::size_of::<RtMsg>();
     let mut best_metric = u32::MAX;
     let mut gateway = None;
     let mut off = 0;
     while off + 16 <= out.len() {
         let msg_len =
             u32::from_ne_bytes([out[off], out[off + 1], out[off + 2], out[off + 3]]) as usize;
-        if msg_len == 0 || off + msg_len > out.len() {
+        if msg_len < std::mem::size_of::<NlMsgHdr>() || off + msg_len > out.len() {
             break;
         }
-        if msg_len >= 24 {
-            let _ =
-                u32::from_ne_bytes([out[off + 20], out[off + 21], out[off + 22], out[off + 23]]);
-            let attrs = &out[off + 24..off + msg_len];
+        let typ = u16::from_ne_bytes([out[off + 4], out[off + 5]]);
+        if typ == 24 && msg_len >= attrs_offset {
+            // RTM_NEWROUTE
+            let attrs = &out[off + attrs_offset..off + msg_len];
             let mut gw = None;
             let mut metric = 0;
             parse_attrs(attrs, &mut |typ, data| {
@@ -660,7 +688,7 @@ fn read_route() -> Option<String> {
                 gateway = gw.map(|addr| format_inet(&addr));
             }
         }
-        off += msg_len;
+        off += (msg_len + 3) & !3;
     }
     gateway
 }
@@ -1142,5 +1170,40 @@ mod security_tests {
         let mut invalid = ie.clone();
         invalid[8] = 255;
         assert_eq!(parse_security_from_ies(&invalid), None);
+    }
+}
+
+#[cfg(test)]
+mod route_tests {
+    use super::*;
+    #[test]
+    fn request_contains_complete_header_and_route_message() {
+        let request = route_request();
+        assert_eq!(request.len(), 28);
+        assert_eq!(
+            u32::from_ne_bytes(request[..4].try_into().unwrap()) as usize,
+            request.len()
+        );
+        assert_eq!(request[16], AF_INET as u8);
+    }
+    #[test]
+    fn route_attributes_start_after_the_complete_payload() {
+        let mut reply = route_request();
+        reply[4..6].copy_from_slice(&24u16.to_ne_bytes());
+        reply.extend_from_slice(&8u16.to_ne_bytes());
+        reply.extend_from_slice(&RTA_GATEWAY.to_ne_bytes());
+        reply.extend_from_slice(&[10, 0, 0, 1]);
+        let len = reply.len() as u32;
+        reply[..4].copy_from_slice(&len.to_ne_bytes());
+        assert_eq!(parse_routes(&reply).as_deref(), Some("10.0.0.1"));
+        assert_eq!(parse_routes(&reply[..27]), None);
+        let mut padded_message = vec![0u8; 20];
+        padded_message[..4].copy_from_slice(&17u32.to_ne_bytes());
+        padded_message.extend_from_slice(&reply);
+        assert_eq!(parse_routes(&padded_message).as_deref(), Some("10.0.0.1"));
+    }
+    #[test]
+    fn production_route_query_completes() {
+        let _ = read_route();
     }
 }

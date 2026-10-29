@@ -16,6 +16,8 @@ import com.netmate.app.logging.NetMateLogs
  *
  * 由 AutoAuthEngine 的串行线程调用；用户手动断开 WiFi 开关时不重连。
  */
+internal data class WifiVerification(val online: Boolean, val authenticated: Boolean = false, val reason: String = "互联网不可达", val retryable: Boolean = false)
+
 internal class WifiReconnector(
     private val sleeper: (Long) -> Unit = { Thread.sleep(it) },
 ) {
@@ -37,9 +39,9 @@ internal class WifiReconnector(
      * @param disconnectedSsid 刚断开的 WiFi；启动自动连接时为 null
      * @return 是否已连上 WiFi
      */
-    fun run(context: Context, profile: AutoAuthProfile, disconnectedSsid: String?, trigger: String, shouldContinue: () -> Boolean = { true }): Boolean {
+    fun run(context: Context, profile: AutoAuthProfile, disconnectedSsid: String?, trigger: String, verify: ((AutoAuthWifiRule, (String) -> Unit) -> WifiVerification)? = null, startup: Boolean = false, previousWifiId: String? = null, shouldContinue: () -> Boolean = { true }): Boolean {
         val state = WifiConnector.state(context)
-        if (state.connected) return true
+        if (state.connected && verify == null) return true
         if (!state.enabled) {
             // 用户关闭了 WiFi 开关：尊重用户选择，不重连
             NetMateLogs.log(context, "debug", "WiFi 已关闭，跳过自动重连")
@@ -47,7 +49,7 @@ internal class WifiReconnector(
         }
 
         val settings = WifiReconnectPolicy.Settings(
-            enabled = profile.enabled,
+            enabled = profile.enabled || startup,
             retriesPerWifi = profile.wifiRetries,
             cooldownMs = profile.wifiCooldownMinutes * 60_000L,
         )
@@ -57,33 +59,50 @@ internal class WifiReconnector(
             return false
         }
 
-        val candidates = profile.autoConnectWifis.map {
+        val snapshot = WifiEnvironment.snapshot(context)
+        val policy = AutoAuthPolicy.decide(profile.copy(enabled = true, authPaused = false), snapshot.ssid, snapshot.ipv4, snapshot.captive, snapshot.security, snapshot.bssid)
+        val currentRule = profile.wifiRules.filter { WifiSecurity.match(it, snapshot.ssid, snapshot.security, snapshot.bssid) > 0 }.maxByOrNull { WifiSecurity.match(it, snapshot.ssid, snapshot.security, snapshot.bssid) }
+        val rules = (if (trigger == "startup-current") listOfNotNull(currentRule) else profile.autoConnectWifis).toMutableList()
+        if (trigger != "startup-current" && snapshot.connected && currentRule?.autoConnect == false) rules.add(0, currentRule)
+        if (snapshot.ssid != null && currentRule == null && (trigger != "startup" || profile.keepCurrentConnection)) rules.add(0, AutoAuthWifiRule(snapshot.ssid, policy.requiresAuth, emptyList(), id = "current-network", security = snapshot.security, bssid = snapshot.bssid, autoConnect = true, priority = 0))
+        val candidates = rules.map {
             WifiReconnectPolicy.Candidate(it.ssid, it.password, it.priority, it.id, it.security, it.bssid)
         }
-        // 断开的 WiFi 未开启自动连接时，与桌面端一致：不触发重连
-        if (disconnectedSsid != null && candidates.none { it.ssid == disconnectedSsid }) {
-            NetMateLogs.log(context, "debug", "WiFi $disconnectedSsid 未开启自动连接，跳过")
-            return false
-        }
-        val plan = WifiReconnectPolicy.plan(disconnectedSsid, candidates)
+        val currentId = currentRule?.id ?: if (snapshot.connected) candidates.firstOrNull { it.id == "current-network" }?.id else previousWifiId
+        val plan = WifiReconnectPolicy.plan(disconnectedSsid, candidates, currentId)
         if (plan.isEmpty()) return false
 
         NetMateLogs.log(context, "info", "开始 WiFi 自动重连（$trigger），候选 ${plan.size} 个")
         val failed = JSONArray()
         for (candidate in plan) {
+            var failureReason = "未在等待时间内连接目标网络"
             for (attempt in 1..settings.retriesPerWifi) {
                 if (attempt > 1) sleeper(RETRY_GAP_MS)
                 val current = AutoAuthStore.loadProfile(context)
-                if (!shouldContinue() || !WifiConnector.state(context).enabled || current?.enabled != true || current.autoConnectWifis.none { it.id == candidate.id }) return false
-                ReconnectEvents.publish(JSONObject().put("status", "connecting").put("ssid", candidate.ssid).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi))
+                if (!shouldContinue() || !WifiConnector.state(context).enabled || current == null || (!current.enabled && !startup) || rules.none { it.id == candidate.id }) return false
+                ReconnectEvents.publish(JSONObject().put("status", "connecting").put("wifiId", candidate.id).put("ssid", candidate.ssid).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi))
 
+                val rule = rules.first { it.id == candidate.id }
                 val accepted = try {
-                    WifiConnector.connect(context, candidate.ssid, candidate.password, candidate.security, candidate.bssid, ruleId = candidate.id)
+                    if (!WifiSecurity.connected(rule, WifiEnvironment.snapshot(context)) && android.os.Build.VERSION.SDK_INT >= 29 && WifiEnvironment.connectPort == null) WifiSuggestions.select(context, rule)
+                    if (WifiSecurity.connected(rule, WifiEnvironment.snapshot(context))) true else if (!rule.autoConnect) false else WifiConnector.connect(context, candidate.ssid, candidate.password, candidate.security, candidate.bssid, ruleId = candidate.id)
                 } catch (e: Exception) {
-                    NetMateLogs.log(context, "warn", "提交 WiFi 连接失败", "wifi")
+                    failureReason = com.netmate.app.logging.LogJournal.safe(e.message ?: "提交 WiFi 连接失败")
+                    NetMateLogs.log(context, "warn", failureReason, "wifi")
                     false
                 }
-                if (accepted && waitForConnection(context, candidate, shouldContinue)) {
+                if (!shouldContinue()) return false
+                if (accepted && !WifiSecurity.connected(rule, WifiEnvironment.snapshot(context))) ReconnectEvents.publish(JSONObject().put("status", "awaiting-system").put("ssid", candidate.ssid).put("wifiId", candidate.id).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi).put("reason", "等待系统选择目标 WiFi，可打开系统 WiFi 设置确认"))
+                if (accepted && waitForConnection(context, candidate, shouldContinue, startup)) {
+                    val result = verify?.invoke(rule) { phase -> if (shouldContinue()) ReconnectEvents.publish(JSONObject().put("status", phase).put("ssid", candidate.ssid).put("wifiId", candidate.id).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi)) } ?: WifiVerification(true)
+                    if (!shouldContinue()) return false
+                    if (!result.online) {
+                        if (!result.retryable || attempt == settings.retriesPerWifi) {
+                            failed.put(JSONObject().put("ssid", candidate.ssid).put("wifiId", candidate.id).put("reason", result.reason))
+                            break
+                        }
+                        continue
+                    }
                     val connectedSsid = WifiConnector.state(context).ssid ?: candidate.ssid
                     lastAllFailedAt = 0L
                     EventNotifier.notify(
@@ -92,12 +111,14 @@ internal class WifiReconnector(
                         "WiFi 已重新连接",
                         "已连接到 $connectedSsid",
                     )
-                    ReconnectEvents.publish(JSONObject().put("status", "success").put("ssid", connectedSsid))
+                    ReconnectEvents.publish(JSONObject().put("status", "success").put("ssid", connectedSsid).put("wifiId", candidate.id).put("attempt", attempt).put("maxAttempts", settings.retriesPerWifi))
                     NetMateLogs.log(context, "success", "WiFi 已连接：$connectedSsid", "wifi")
                     return true
                 }
             }
-            failed.put(JSONObject().put("ssid", candidate.ssid).put("reason", "未在等待时间内连接目标网络"))
+            if ((0 until failed.length()).none { failed.getJSONObject(it).optString("wifiId") == candidate.id }) failed.put(JSONObject().put("ssid", candidate.ssid).put("wifiId", candidate.id).put("reason", failureReason))
+            if (!shouldContinue()) return false
+            if (android.os.Build.VERSION.SDK_INT >= 29 && WifiEnvironment.connectPort == null) WifiSuggestions.reject(context, candidate.id)
         }
 
         if (!shouldContinue()) return false
@@ -115,16 +136,16 @@ internal class WifiReconnector(
         return false
     }
 
-    private fun waitForConnection(context: Context, target: WifiReconnectPolicy.Candidate, shouldContinue: () -> Boolean): Boolean {
+    private fun waitForConnection(context: Context, target: WifiReconnectPolicy.Candidate, shouldContinue: () -> Boolean, startup: Boolean): Boolean {
         var waited = 0L
         while (waited < CONNECT_WAIT_MS) {
             val state = WifiEnvironment.snapshot(context)
-            if (!shouldContinue() || !state.enabled || AutoAuthStore.loadProfile(context)?.let { it.enabled && it.autoConnectWifis.any { candidate -> candidate.id == target.id } } != true) return false
-            if (state.connected && state.ssid == target.ssid && (target.bssid.isNullOrBlank() || WifiSecurity.bssid(state.bssid) == WifiSecurity.bssid(target.bssid)) && state.ipv4 != null) return true
+            if (!shouldContinue() || !state.enabled || AutoAuthStore.loadProfile(context)?.let { (it.enabled || startup) } != true) return false
+            if (WifiSecurity.connected(AutoAuthWifiRule(target.ssid, false, emptyList(), security = target.security, bssid = target.bssid), state)) return true
             sleeper(POLL_MS)
             waited += POLL_MS
         }
         val state = WifiEnvironment.snapshot(context)
-        return state.connected && state.ssid == target.ssid && (target.bssid.isNullOrBlank() || WifiSecurity.bssid(state.bssid) == WifiSecurity.bssid(target.bssid)) && state.ipv4 != null
+        return WifiSecurity.connected(AutoAuthWifiRule(target.ssid, false, emptyList(), security = target.security, bssid = target.bssid), state)
     }
 }

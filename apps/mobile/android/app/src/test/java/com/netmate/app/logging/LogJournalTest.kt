@@ -48,4 +48,48 @@ class LogJournalTest {
             assertTrue(directory.listFiles()!!.all { it.length() <= 1024 })
         } finally { directory.deleteRecursively() }
     }
+    @Test fun fullHistoryFiltersPagesAndPreservesStructuredDetailsAcrossRestart() {
+        val directory = Files.createTempDirectory("netmate-history").toFile()
+        try {
+            val now = System.currentTimeMillis()
+            val journal = LogJournal(directory, { now })
+            repeat(1200) { index -> journal.append(JSONObject().put("id", "id-$index").put("timestamp", now - index).put("message", "event-$index").put("source", if (index == 1199) "portal" else "wifi").put("category", "network").put("data", JSONObject().put("password", "fixture-secret").put("index", index))) }
+            val restored = LogJournal(directory, { now })
+            val page = restored.queryPage(null, 500)
+            assertEquals(1200, page.getInt("total")); assertTrue(page.getBoolean("hasMore"))
+            val next = restored.queryPage(page.getString("nextCursor"), 500)
+            assertEquals(500, next.getJSONArray("entries").length())
+            val filtered = restored.queryPage(null, 200, JSONObject().put("source", "portal").put("keyword", "1199").put("startTime", now - 1200))
+            assertEquals(1, filtered.getInt("total"))
+            assertEquals("[REDACTED]", filtered.getJSONArray("entries").getJSONObject(0).getJSONObject("data").getString("password"))
+            assertEquals(1200, restored.history().size)
+        } finally { directory.deleteRecursively() }
+    }
+    @Test fun damagedHistoryKeepsReadableRecordsAndReportsTheFile() {
+        val directory = Files.createTempDirectory("netmate-readable").toFile()
+        try {
+            val journal = LogJournal(directory)
+            journal.append(JSONObject().put("message", "before"))
+            java.io.File(directory, "netmate.log").appendText("{broken\n")
+            journal.append(JSONObject().put("message", "after"))
+            val page = journal.queryPage(null, 200)
+            assertEquals(2, page.getInt("total"))
+            assertTrue(page.getString("error").contains("第 2 行"))
+            assertTrue(java.io.File(directory, "netmate.log").readText().contains("{broken"))
+        } finally { directory.deleteRecursively() }
+    }
+    @Test fun concurrentClearAndAppendAreConsistentWithTheReturnedGeneration() {
+        val directory = Files.createTempDirectory("netmate-clear-race").toFile()
+        try {
+            val journal = LogJournal(directory)
+            journal.append(JSONObject().put("message", "old"))
+            val barrier = java.util.concurrent.CyclicBarrier(2)
+            var generation: String? = null
+            var entry: JSONObject? = null
+            val clear = Thread { barrier.await(); generation = journal.clear() }
+            val write = Thread { barrier.await(); entry = journal.append(JSONObject().put("message", "new")) }
+            clear.start(); write.start(); clear.join(); write.join()
+            assertEquals(if (entry!!.getString("generation") == generation) listOf("new") else emptyList<String>(), journal.history().map { it.getString("message") })
+        } finally { directory.deleteRecursively() }
+    }
 }

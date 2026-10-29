@@ -79,7 +79,7 @@ test('Linux scan decodes escaped colon in SSID', async () => {
 
 test('Linux network fallback reads indexed nmcli IP fields', async () => {
   commandOutput(
-    'GENERAL.HWADDR:AA\\:BB\\:CC\\:DD\\:EE\\:FF\nIP4.ADDRESS[1]:10.1.2.3/24\nIP4.GATEWAY:10.1.2.1\nIP4.DNS[1]:10.1.2.1\n'
+    'GENERAL.TYPE:wifi\nGENERAL.HWADDR:AA\\:BB\\:CC\\:DD\\:EE\\:FF\nIP4.ADDRESS[1]:10.1.2.3/24\nIP4.GATEWAY:10.1.2.1\nIP4.DNS[1]:10.1.2.1\n'
   );
   expect(await resolveLinuxNetworkInfo()).toMatchObject({
     ipv4: '10.1.2.3',
@@ -132,6 +132,7 @@ test('desktop authentication retry stops after the active WiFi changes', async (
   );
   const pending = service.handleStatusChange({
     ssid: 'Campus',
+    ip: '10.1.2.3',
     wifiConnected: true,
     connected: false,
     authenticated: false,
@@ -142,6 +143,7 @@ test('desktop authentication retry stops after the active WiFi changes', async (
   await service.handleStatusChange(
     {
       ssid: 'Home',
+      ip: '192.168.1.20',
       wifiConnected: true,
       connected: true,
       authenticated: false,

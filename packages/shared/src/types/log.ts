@@ -16,6 +16,7 @@ export type LogCategory = 'system' | 'auth' | 'network' | 'wifi' | 'user' | 'req
  * 日志条目
  */
 export interface LogEntry {
+  generation?: string;
   /** 日志唯一标识 */
   id: string;
   /** 日志级别 */
@@ -99,4 +100,25 @@ export interface LogPersistAdapter {
   load(): Promise<LogEntry[]>;
   /** 清除日志 */
   clear(): Promise<void>;
+}
+
+/** Persistent history uses milliseconds across IPC and native bridges. */
+export interface LogHistoryFilter {
+  level?: LogLevel | 'all';
+  keyword?: string;
+  source?: string;
+  startTime?: number;
+  endTime?: number;
+}
+export interface LogHistoryQuery extends LogHistoryFilter {
+  cursor?: string | null;
+  limit?: number;
+}
+export interface LogPage<T = LogEntry> {
+  entries: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  total: number;
+  error?: string;
+  generation?: string;
 }

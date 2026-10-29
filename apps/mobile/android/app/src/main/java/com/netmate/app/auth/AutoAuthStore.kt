@@ -14,11 +14,11 @@ import javax.crypto.spec.GCMParameterSpec
 /**
  * 自动认证配置的持久化。
  * 配置中含账号密码，使用 Android Keystore 中不可导出的 AES-256-GCM 密钥加密后写入 SharedPreferences。
- * 最近一次认证结果不含密码，明文保存供 JS 启动时读取。
+ * 最近一次认证结果不含密码，明文保存供原生界面读取。
  */
 object AutoAuthStore {
 
-    private const val PREFS = "netmate_auto_auth"
+    private const val PREFS = "netmate_native_v1"
     private const val KEY_PROFILE = "profile"
     private const val KEY_LAST_RESULT = "last_result"
     private const val KEYSTORE = "AndroidKeyStore"
@@ -30,15 +30,18 @@ object AutoAuthStore {
     private var cachedProfile: AutoAuthProfile? = null
 
     @Synchronized
-    fun saveProfile(context: Context, json: String): AutoAuthProfile {
+    fun saveProfile(context: Context, json: String, beforeCommit: (AutoAuthProfile) -> Unit = {}): AutoAuthProfile {
         // 先解析校验，非法 JSON 不落盘
         val profile = AutoAuthProfile.fromJson(json)
         val previous = loadProfile(context)
         require(previous == null || profile.revision >= previous.revision) { "Stale configuration revision" }
+        beforeCommit(profile)
         check(prefs(context).edit().putString(KEY_PROFILE, encrypt(json)).commit()) { "Configuration persistence failed" }
         cachedProfile = profile
         return profile
     }
+
+    @Synchronized fun rawJson(context: Context): String? = prefs(context).getString(KEY_PROFILE, null)?.let(::decrypt)
 
     @Synchronized
     fun loadProfile(context: Context): AutoAuthProfile? {
@@ -47,9 +50,8 @@ object AutoAuthStore {
         return try {
             AutoAuthProfile.fromJson(decrypt(stored)).also { cachedProfile = it }
         } catch (e: Exception) {
-            // 密钥失效（如系统清除了 Keystore）或数据损坏：丢弃，等待 JS 下次同步
-            prefs(context).edit().remove(KEY_PROFILE).apply()
-            null
+            // 密钥失效（如系统清除了 Keystore）或数据损坏：报告错误并保留原数据
+            throw IllegalStateException("配置无法解密，原数据已保留，请解锁设备后重试", e)
         }
     }
 
@@ -66,7 +68,18 @@ object AutoAuthStore {
         val json = JSONObject(decrypt(prefs(context).getString(KEY_PROFILE, null)!!)).put("authPaused", false).put("revision", previous.revision + 1)
         saveProfile(context, json.toString())
     }
-    fun saveSession(context: Context, server: String) { prefs(context).edit().putString("session_server", server).commit() }
+    fun networkIdentity(wifi: WifiEnvironment.Snapshot): String = org.json.JSONArray(listOf(wifi.ssid, WifiSecurity.bssid(wifi.bssid), WifiSecurity.normalize(wifi.security), wifi.ipv4)).toString()
+    fun saveSession(context: Context, server: String, accountId: String? = null, wifi: WifiEnvironment.Snapshot? = null) {
+        val value = JSONObject().put("server", server).put("accountId", accountId).put("network", wifi?.let { networkIdentity(it) }).toString()
+        check(prefs(context).edit().putString("auth_session", value).commit()) { "认证会话保存失败" }
+    }
+    fun sessionServer(context: Context, wifi: WifiEnvironment.Snapshot? = null): String? {
+        val value = prefs(context).getString("auth_session", null) ?: return null
+        val record = JSONObject(value)
+        return if (wifi != null && record.optString("network") == networkIdentity(wifi)) record.optString("server").takeIf { it.isNotBlank() } else null
+    }
+    fun clearSession(context: Context) { prefs(context).edit().remove("auth_session").remove("session_server").commit() }
+
     @Synchronized fun suggestionRules(context: Context): List<AutoAuthWifiRule>? {
         val value = prefs(context).getString("suggestions", null) ?: return null
         return AutoAuthProfile.fromJson(JSONObject().put("enabled", false).put("accounts", org.json.JSONArray()).put("wifiRules", org.json.JSONArray(decrypt(value))).toString()).wifiRules
@@ -74,9 +87,9 @@ object AutoAuthStore {
     @Synchronized fun saveSuggestionRules(context: Context, rules: List<AutoAuthWifiRule>) {
         check(prefs(context).edit().putString("suggestions", encrypt(WifiSuggestions.encode(rules))).commit()) { "WiFi 建议状态保存失败" }
     }
-    fun sessionServer(context: Context): String? = prefs(context).getString("session_server", null)
     fun pendingSsid(context: Context): String? = prefs(context).getString("pending_wifi", null)
-    fun savePendingSsid(context: Context, ssid: String?) { prefs(context).edit().putString("pending_wifi", ssid).apply() }
+    fun pendingWifiId(context: Context): String? = prefs(context).getString("pending_wifi_id", null)
+    fun savePendingSsid(context: Context, ssid: String?, id: String? = null) { prefs(context).edit().putString("pending_wifi", ssid).putString("pending_wifi_id", if (ssid == null) null else id).apply() }
 
     fun saveLastResult(context: Context, result: AutoAuthResult) {
         prefs(context).edit().putString(KEY_LAST_RESULT, result.toJson().toString()).apply()

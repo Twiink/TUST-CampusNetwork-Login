@@ -15,7 +15,7 @@ class WifiReconnectPolicyTest {
             "Lab",
             listOf(c("Home", 5), c("Lab", 8), c("TUST", 1), c("Cafe", 5)),
         )
-        assertEquals(listOf("Lab", "TUST", "Cafe", "Home"), plan.map { it.ssid })
+        assertEquals(listOf("Lab", "TUST", "Home", "Cafe"), plan.map { it.ssid })
     }
 
     @Test

@@ -132,7 +132,7 @@ describe('WifiEventListener', () => {
       .filter((c) => c[0] === 'event:network:statusChanged')
       .map((c) => c[1]);
     expect(statusChanged).toContainEqual(
-      expect.objectContaining({ connected: false, wifiConnected: false, ssid: null })
+      expect.objectContaining({ connected: false, wifiConnected: false, ssid: undefined })
     );
     listener.stop();
   });

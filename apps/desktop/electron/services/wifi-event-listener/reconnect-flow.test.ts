@@ -142,16 +142,46 @@ describe('executeAutoReconnect', () => {
     ]);
   });
 
-  it('断开的 WiFi 未开启自动连接时不重连', async () => {
-    const { deps, connectToConfiguredNetwork } = setup([wifi('Lab', 2, false), wifi('TUST', 1)]);
+  it('断开的 WiFi 未开启自动连接时跳过该网络，仍尝试开启的备用网络', async () => {
+    const { deps, connectToConfiguredNetwork } = setup(
+      [wifi('Lab', 2, false), wifi('TUST', 1)],
+      {},
+      ['TUST']
+    );
 
-    expect(await run(executeAutoReconnect('Lab', deps))).toBeNull();
-    expect(connectToConfiguredNetwork).not.toHaveBeenCalled();
+    expect(await run(executeAutoReconnect('Lab', deps))).toBe(true);
+    expect(connectToConfiguredNetwork.mock.calls.map((call) => call[0])).toEqual(['TUST']);
   });
 });
 
 describe('executeStartupAutoConnect', () => {
   const scan = (ssids: string[]) => ({ scanAvailableSsids: vi.fn(async () => ssids) });
+
+  it('连接期间取消后不发布成功', async () => {
+    const { deps, connectToConfiguredNetwork, onReconnected } = setup([wifi('TUST', 1)], {
+      startupAutoConnect: true,
+      keepCurrentConnection: false,
+    });
+    let finish!: (connected: boolean) => void;
+    connectToConfiguredNetwork.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    let active = true;
+    const pending = executeStartupAutoConnect('Cafe', {
+      ...deps,
+      ...scan(['TUST']),
+      shouldContinue: () => active,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(connectToConfiguredNetwork).toHaveBeenCalledOnce();
+    active = false;
+    finish(true);
+    expect(await pending).toBeNull();
+    expect(onReconnected).not.toHaveBeenCalled();
+  });
 
   it('设置关闭时不做任何事', async () => {
     const { deps, connectToConfiguredNetwork } = setup([wifi('TUST', 1)], {}, ['TUST']);
@@ -190,13 +220,83 @@ describe('executeStartupAutoConnect', () => {
     expect(connectToConfiguredNetwork).toHaveBeenCalledWith('Lab');
   });
 
-  it('已连接已配置的 WiFi：不切换', async () => {
+  it('已连接已配置的 WiFi 且不保持：仍选择附近最高优先级', async () => {
     const { deps, connectToConfiguredNetwork } = setup(
       [wifi('TUST', 1), wifi('Lab', 2)],
       { startupAutoConnect: true, keepCurrentConnection: false },
       ['TUST']
     );
-    expect(await run(executeStartupAutoConnect('Lab', { ...deps, ...scan(['TUST']) }))).toBeNull();
-    expect(connectToConfiguredNetwork).not.toHaveBeenCalled();
+    expect(await run(executeStartupAutoConnect('Lab', { ...deps, ...scan(['TUST']) }))).toBe(true);
+    expect(connectToConfiguredNetwork).toHaveBeenCalledWith('TUST');
+  });
+});
+
+describe('功能完善回归', () => {
+  it('N1: 门户成功但不可联网只认证一次，再进入备用网络', async () => {
+    const { deps, onReconnected, onAllFailed } = setup(
+      [wifi('Campus', 5), wifi('Backup', 1)],
+      { wifiReconnectRetries: 3 },
+      ['Campus', 'Backup']
+    );
+    const verify = vi.fn(async (target: WifiConfig) => ({
+      online: target.id === 'Backup',
+      authenticated: target.id === 'Campus',
+      retryable: false,
+      reason: '已认证但互联网不可达',
+    }));
+    expect(
+      await run(executeAutoReconnect('Campus', { ...deps, currentWifiId: 'Campus', verify }))
+    ).toBe(true);
+    expect(verify.mock.calls.map((call) => call[0].id)).toEqual(['Campus', 'Backup']);
+    expect(onReconnected).toHaveBeenCalledExactlyOnceWith('Backup');
+    expect(onAllFailed).not.toHaveBeenCalled();
+  });
+  it('普通热点达到联网确认阈值后也切换，认证失败才消耗重试次数', async () => {
+    const { deps, connectToConfiguredNetwork } = setup(
+      [wifi('Hotspot', 5), wifi('Backup', 1)],
+      { wifiReconnectRetries: 3 },
+      ['Hotspot', 'Backup']
+    );
+    const verify = vi.fn(async (target: WifiConfig) => ({
+      online: target.id === 'Backup',
+      authenticated: false,
+      retryable: false,
+    }));
+    expect(await run(executeAutoReconnect('Hotspot', { ...deps, verify }))).toBe(true);
+    expect(connectToConfiguredNetwork.mock.calls.map((call) => call[0])).toEqual([
+      'Hotspot',
+      'Backup',
+    ]);
+    const second = setup([wifi('Campus', 1)], { wifiReconnectRetries: 2 }, ['Campus']);
+    const reject = vi.fn(async () => ({ online: false, authenticated: false, retryable: true }));
+    expect(await run(executeAutoReconnect('Campus', { ...second.deps, verify: reject }))).toBe(
+      false
+    );
+    expect(reject).toHaveBeenCalledTimes(2);
+  });
+  it('同名规则按断线前的配置 ID 优先，关闭该规则后只尝试其他开启的规则', async () => {
+    const rules = [
+      { ...wifi('Campus', 1), id: 'open' },
+      { ...wifi('Campus', 5), id: 'secure' },
+    ];
+    expect(planReconnect('Campus', rules, 'secure').map((rule) => rule.id)).toEqual([
+      'secure',
+      'open',
+    ]);
+    const { deps, connectToConfiguredNetwork } = setup(
+      [{ ...rules[1], autoConnect: false }, rules[0]],
+      {},
+      ['open']
+    );
+    expect(await run(executeAutoReconnect('Campus', { ...deps, currentWifiId: 'secure' }))).toBe(
+      true
+    );
+    expect(connectToConfiguredNetwork.mock.calls.map((call) => call[0])).toEqual(['open']);
+  });
+  it('优先级相同时保留用户配置顺序', () => {
+    expect(planReconnect(null, [wifi('Z', 1), wifi('A', 1)]).map((rule) => rule.id)).toEqual([
+      'Z',
+      'A',
+    ]);
   });
 });

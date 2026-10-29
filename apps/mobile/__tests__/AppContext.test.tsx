@@ -14,6 +14,7 @@ import { AppProvider, useApp } from '../src/context/AppContext';
 import { createMobileServices } from '../src/context/mobileServices';
 import * as NativeAuth from '../src/native/AutoAuth';
 import * as Wifi from '../src/native/WifiModule';
+import { queryPersistentLogPage } from '../src/native/Logs';
 
 jest.mock('../src/context/mobileServices', () => ({ createMobileServices: jest.fn() }));
 jest.mock('../src/hooks/useAutoAuth', () => ({ useAutoAuth: jest.fn() }));
@@ -90,7 +91,11 @@ const initial = () =>
       },
     ],
   });
-async function setup(config: AppConfig = initial(), existing?: MemoryStorageAdapter) {
+async function setup(
+  config: AppConfig = initial(),
+  existing?: MemoryStorageAdapter,
+  waitUntilSaved = true
+) {
   const storage = existing ?? new MemoryStorageAdapter();
   if (!existing) await storage.set('app_config', config);
   const manager = new ConfigManager(storage);
@@ -112,7 +117,8 @@ async function setup(config: AppConfig = initial(), existing?: MemoryStorageAdap
   const view = renderHook(useApp, {
     wrapper: ({ children }: { children: React.ReactNode }) => <AppProvider>{children}</AppProvider>,
   });
-  await waitFor(() => expect(view.result.current.configurationState).toBe('saved'));
+  if (waitUntilSaved)
+    await waitFor(() => expect(view.result.current.configurationState).toBe('saved'));
   return { ...view, storage, manager, auth };
 }
 beforeEach(() => {
@@ -232,4 +238,59 @@ test('较早的异步网络读取不会覆盖新网络', async () => {
     await older;
   });
   expect(result.current.networkInfo.ssid).toBe('New');
+});
+
+test('初始化读取失败显示错误，手动重试重新读取原配置', async () => {
+  const storage = new MemoryStorageAdapter();
+  await storage.set('app_config', initial());
+  jest.spyOn(storage, 'get').mockRejectedValueOnce(new Error('temporarily locked'));
+  // setup 等待 saved；在该等待期间通过当前 provider 的重试入口恢复。
+  const manager = new ConfigManager(storage);
+  const logger = createLogger();
+  (createMobileServices as jest.Mock).mockReturnValue({ configManager: manager, logger });
+  const view = renderHook(useApp, { wrapper: AppProvider });
+  await waitFor(() => expect(view.result.current.configurationState).toBe('error'));
+  expect(view.result.current.configurationError).toContain('temporarily locked');
+  expect(await storage.get('app_config')).toEqual(initial());
+  await act(async () => {
+    await view.result.current.retryConfigurationSync();
+  });
+  expect(view.result.current.configurationState).toBe('saved');
+  expect(view.result.current.accounts).toEqual(initial().accounts);
+  view.unmount();
+});
+
+test('历史日志查询失败仍能加载配置和完成原生同步', async () => {
+  (queryPersistentLogPage as jest.Mock).mockRejectedValueOnce(new Error('log unavailable'));
+  const view = await setup();
+  expect(view.result.current.accounts).toEqual(initial().accounts);
+  view.unmount();
+});
+test('初始化原生同步失败后，手动重试继续同步且不重建服务', async () => {
+  (NativeAuth.isAutoAuthAvailable as jest.Mock).mockReturnValue(true);
+  (NativeAuth.syncAutoAuthProfile as jest.Mock).mockResolvedValueOnce(false);
+  const view = await setup(initial(), undefined, false);
+  await waitFor(() => expect(view.result.current.configurationState).toBe('error'));
+  const read = jest.spyOn(view.storage, 'get');
+  await act(async () => {
+    await view.result.current.retryConfigurationSync();
+  });
+  expect(view.result.current.configurationState).toBe('saved');
+  expect(view.result.current.accounts).toEqual(initial().accounts);
+  expect(createMobileServices).toHaveBeenCalledTimes(1);
+  expect(read).not.toHaveBeenCalled();
+  view.unmount();
+});
+test('Enterprise/WEP 旧配置仅关闭自动连接，保留认证和关联', async () => {
+  const config = initial();
+  config.wifiList = ['EAP', 'WEP'].map((security, index) => ({
+    ...config.wifiList[0],
+    id: `w${index}`,
+    security,
+  }));
+  const view = await setup(config);
+  expect(view.result.current.config.wifiList).toEqual(
+    config.wifiList.map(wifi => ({ ...wifi, autoConnect: false }))
+  );
+  view.unmount();
 });

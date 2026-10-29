@@ -15,7 +15,7 @@ const AppContent: React.FC = () => {
     <div className="app-container">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <div className="main-content">
-        {activeTab === 'home' && <Home />}
+        {activeTab === 'home' && <Home onConfigure={() => setActiveTab('settings')} />}
         {activeTab === 'settings' && <Settings />}
         {activeTab === 'logs' && <Logs />}
         {activeTab === 'about' && <About />}

@@ -56,13 +56,14 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     fun syncProfile(json: String, promise: Promise) {
         try {
             val before = AutoAuthStore.loadProfile(reactApplicationContext)
-            val profile = AutoAuthStore.saveProfile(reactApplicationContext, json)
+            val profile = AutoAuthStore.saveProfile(reactApplicationContext, json) { candidate ->
+                WifiSuggestions.reconcile(reactApplicationContext, candidate, before?.wifiRules != candidate.wifiRules || before?.enabled != candidate.enabled)
+            }
             com.netmate.app.service.BackgroundService.configurationChanged()
-            WifiSuggestions.reconcile(reactApplicationContext, profile, before?.wifiRules != profile.wifiRules || before?.enabled != profile.enabled)
             if (before == null || before.enabled != profile.enabled || before.wifiRules != profile.wifiRules || before.wifiCooldownMinutes != profile.wifiCooldownMinutes || before.wifiRetries != profile.wifiRetries) {
                 AutoAuthEngine.resetBackoff()
                 if (!profile.enabled || profile.autoConnectWifis.isEmpty()) AutoAuthEngine.stopReconnect(reactApplicationContext)
-                else AutoAuthEngine.onStartup(reactApplicationContext)
+                else AutoAuthEngine.checkAsync(reactApplicationContext, AutoAuthEngine.TRIGGER_NETWORK)
             }
             if (profile.enabled) {
                 AutoAuthWorker.schedule(reactApplicationContext)
@@ -100,6 +101,7 @@ class AutoAuthModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         promise.resolve(AutoAuthEngine.snapshot(reactApplicationContext).toNativeMap())
         AutoAuthEngine.checkAsync(reactApplicationContext, "status")
     }
+    @ReactMethod fun retryNow(promise: Promise) { AutoAuthEngine.retryNow(reactApplicationContext); promise.resolve(true) }
     @ReactMethod fun getReconnectProgress(promise: Promise) { promise.resolve(ReconnectEvents.latest.toNativeMap()) }
 
     @ReactMethod

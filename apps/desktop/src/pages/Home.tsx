@@ -23,7 +23,7 @@ import { HeartbeatStatusCard } from '../components/heartbeat/HeartbeatStatusCard
 import { ReconnectProgressBanner } from '../components/heartbeat/ReconnectProgressBanner';
 import { HomeNoticeCard, HomeToast } from '../components/notice/HomeNoticeCard';
 
-export const Home: React.FC = () => {
+export const Home: React.FC<{ onConfigure?: () => void }> = ({ onConfigure }) => {
   const {
     networkStatus,
     login,
@@ -158,6 +158,7 @@ export const Home: React.FC = () => {
             {!initialCheckDone ? '请稍候，正在检查网络连接状态' : '正在获取网络配置信息，请稍候'}
           </p>
         </div>
+        <HomeToast toast={toast} />
       </div>
     );
   }
@@ -199,7 +200,16 @@ export const Home: React.FC = () => {
           heartbeat={heartbeat}
         />
 
+        {config && (
+          <WifiSwitcherCard
+            config={config}
+            currentSsid={null}
+            onSwitch={handleWifiSwitch}
+            switching={switching}
+          />
+        )}
         <ReconnectProgressBanner progress={reconnectProgress} />
+        <HomeToast toast={toast} />
       </div>
     );
   }
@@ -209,7 +219,7 @@ export const Home: React.FC = () => {
     ? matchWifiRule(config.wifiList, { ...fullNetworkStatus, ssid: wifiSSID ?? '' })
     : null;
 
-  if (!wifiConfig) {
+  if (!wifiConfig && !fullNetworkStatus?.requiresAuth) {
     return (
       <div className="page-home">
         <h1 className="page-title">
@@ -280,12 +290,13 @@ export const Home: React.FC = () => {
             </p>
           }
         />
+        <HomeToast toast={toast} />
       </div>
     );
   }
 
   // 第三优先级：检查是否需要认证
-  if (!wifiConfig.requiresAuth) {
+  if (!(wifiConfig?.requiresAuth ?? fullNetworkStatus?.requiresAuth)) {
     return (
       <div className="page-home">
         <h1 className="page-title">
@@ -338,7 +349,11 @@ export const Home: React.FC = () => {
           iconColor="#22c55e"
           tintRgb="34, 197, 94"
           title="无需认证"
-          description="当前 WiFi 无需校园网认证，可直接使用。"
+          description={
+            fullNetworkStatus?.connected
+              ? '当前 WiFi 无需校园网认证，互联网可达。'
+              : '当前 WiFi 无需校园网认证，互联网暂不可达。'
+          }
           hint={
             <>
               <p
@@ -357,6 +372,7 @@ export const Home: React.FC = () => {
             </>
           }
         />
+        <HomeToast toast={toast} />
       </div>
     );
   }
@@ -432,6 +448,10 @@ export const Home: React.FC = () => {
             </p>
           }
         />
+        <button className="btn btn-primary" onClick={onConfigure}>
+          添加认证账号
+        </button>
+        <HomeToast toast={toast} />
       </div>
     );
   }
@@ -463,8 +483,20 @@ export const Home: React.FC = () => {
         icon={AlertCircle}
         iconColor="#f59e0b"
         tintRgb="245, 158, 11"
-        title="需要认证"
-        description="当前 WiFi 需要校园网认证，请点击下方按钮进行认证。"
+        title={
+          fullNetworkStatus?.authenticated
+            ? fullNetworkStatus.connected
+              ? '已认证并联网'
+              : '已认证，互联网不可达'
+            : '需要认证'
+        }
+        description={
+          fullNetworkStatus?.authenticated
+            ? fullNetworkStatus.connected
+              ? '当前 WiFi 已通过认证且可访问互联网。'
+              : '门户已确认认证成功，正在检查互联网连接。'
+            : '当前 WiFi 需要校园网认证，请点击下方按钮进行认证。'
+        }
         hint={
           <>
             <p
@@ -475,7 +507,7 @@ export const Home: React.FC = () => {
                 color: 'var(--text-primary)',
               }}
             >
-              此 WiFi 已配置为「需要认证」
+              {wifiConfig ? '此 WiFi 已配置为「需要认证」' : '根据当前网络信息识别为校园网'}
             </p>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               如校园网 CMCC/CUCC/CTCC
@@ -483,7 +515,7 @@ export const Home: React.FC = () => {
           </>
         }
         action={
-          networkStatus === 'disconnected' ? (
+          networkStatus !== 'connecting' && !fullNetworkStatus?.authenticated ? (
             <button
               className="btn btn-primary"
               style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}
@@ -492,7 +524,7 @@ export const Home: React.FC = () => {
               <LogIn size={16} style={{ marginRight: 6 }} />
               立即连接
             </button>
-          ) : networkStatus === 'connected' ? (
+          ) : fullNetworkStatus?.authenticated ? (
             <button
               className="btn btn-danger"
               style={{ padding: '8px 20px', fontSize: '0.9rem', height: 'auto', flexShrink: 0 }}

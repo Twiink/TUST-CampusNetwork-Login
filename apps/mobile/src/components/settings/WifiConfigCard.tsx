@@ -1,4 +1,5 @@
 import React from 'react';
+import { usesSystemWifiSettings } from '../../services/wifiPolicy';
 import { View, Text, TextInput, TouchableOpacity, Switch, Keyboard } from 'react-native';
 import type { AccountConfig, WifiConfig } from '@repo/shared';
 import { GlassView } from '../GlassView';
@@ -118,6 +119,11 @@ export const WifiConfigCard: React.FC<{
                       </Text>
                     </View>
                   </View>
+                  {usesSystemWifiSettings(wifi.security) && (
+                    <Text style={{ color: theme.colors.textSecondary }}>
+                      此安全类型通过系统 WiFi 设置连接，自动连接不可用
+                    </Text>
+                  )}
                   {wifi.requiresAuth && (
                     <Text style={[styles.accountUrl, { color: theme.colors.textSecondary }]}>
                       关联账号:{' '}
@@ -146,7 +152,8 @@ export const WifiConfigCard: React.FC<{
                   </TouchableOpacity>
                   <Switch
                     accessibilityLabel={`自动连接 ${wifi.ssid}`}
-                    value={wifi.autoConnect}
+                    disabled={usesSystemWifiSettings(wifi.security)}
+                    value={wifi.autoConnect && !usesSystemWifiSettings(wifi.security)}
                     onValueChange={() => onToggleAutoConnect?.(wifi.id)}
                   />
                 </View>

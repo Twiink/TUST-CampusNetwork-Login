@@ -17,7 +17,8 @@ type ElectronFixtures = {
     | 'unlinked'
     | 'no-auth'
     | 'settings-empty'
-    | 'multiple-wifi';
+    | 'multiple-wifi'
+    | 'hidden-window';
   electronApp: ElectronApplication;
   appWindow: Page;
 };

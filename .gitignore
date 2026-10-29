@@ -120,6 +120,7 @@ release.keystore
 CLAUDE.md
 GEMINI.md
 AGENTS.md
+!/AGENTS.md
 
 # ZCode
 .zcode/
@@ -140,3 +141,10 @@ android-e2e-apks/
 release-smoke/
 release-assets/
 previous-release/
+
+# Native distribution and generated native IDE projects
+/dist-native/
+/apps/macos/.build/
+/apps/macos/generated/
+/apps/macos/NetMate.xcodeproj/
+**/__pycache__/

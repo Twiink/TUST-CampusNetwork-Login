@@ -8,3 +8,4 @@ export * from './validator';
 export * from './campus';
 
 export * from './redact';
+export * from './log-history';

@@ -22,9 +22,10 @@ object WifiReconnectPolicy {
     )
 
     /** 计算本轮应尝试的 WiFi 顺序：断开的 WiFi 优先，其余按优先级 */
-    fun plan(disconnectedSsid: String?, candidates: List<Candidate>): List<Candidate> {
-        val sorted = candidates.sortedWith(compareBy<Candidate> { it.priority }.thenBy { it.ssid })
-        val disconnected = sorted.firstOrNull { it.ssid == disconnectedSsid }
+    fun plan(disconnectedSsid: String?, candidates: List<Candidate>, currentId: String? = null): List<Candidate> {
+        val sorted = candidates.sortedBy { it.priority }
+        if (disconnectedSsid == null) return sorted
+        val disconnected = if (currentId != null) sorted.firstOrNull { it.id == currentId } else sorted.filter { it.ssid == disconnectedSsid }.singleOrNull()
         return listOfNotNull(disconnected) + sorted.filter { it.id != disconnected?.id }
     }
 

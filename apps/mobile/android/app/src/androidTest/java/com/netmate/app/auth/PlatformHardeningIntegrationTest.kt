@@ -74,8 +74,13 @@ class PlatformHardeningIntegrationTest {
     }
     @Test fun securityBuilderAndProductionHttpPolicyAreUsed() {
         assertTrue(NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("custom-campus.invalid"))
-        val response = UrlConnectionTransport().get("http://10.0.2.2:38081/radio", null, 5000, true)
-        assertEquals(200, response.first); assertTrue(response.second.contains("ssid"))
+        val server=java.net.ServerSocket(0)
+        val responder=kotlin.concurrent.thread(isDaemon=true) { server.accept().use { socket ->
+            val reader=socket.getInputStream().bufferedReader();while(!reader.readLine().isNullOrEmpty()) { }
+            val body="{\"ssid\":\"fixture\"}"
+            socket.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body".toByteArray())
+        } }
+        try {val response=UrlConnectionTransport().get("http://127.0.0.1:${server.localPort}/radio",null,5000,true);assertEquals(200,response.first);assertTrue(response.second.contains("ssid"))}finally{server.close();responder.join(1000)}
         if (Build.VERSION.SDK_INT >= 29) {
             assertNotNull(WifiConnector.suggestion(context, rule))
             assertNotNull(WifiConnector.suggestion(context, rule.copy(security = "Open", password = "")))

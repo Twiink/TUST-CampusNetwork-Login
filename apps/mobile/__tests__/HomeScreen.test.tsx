@@ -133,7 +133,7 @@ describe('HomeScreen', () => {
 
     expect(await screen.findByText('无需认证')).toBeTruthy();
     expect(screen.queryByText('立即连接')).toBeNull();
-    expect(screen.queryByText('断开连接')).toBeNull();
+    expect(screen.queryByText('注销登录')).toBeNull();
   });
 
   it('按 linkedAccountIds 顺序展示关联账号', async () => {
@@ -158,7 +158,7 @@ describe('HomeScreen', () => {
     expect(login).toHaveBeenCalledTimes(1);
 
     const { logout } = renderHome(makeConfig(), { networkStatus: 'connected' });
-    fireEvent.press(await screen.findByText('断开连接'));
+    fireEvent.press(await screen.findByText('注销登录'));
     expect(logout).toHaveBeenCalledTimes(1);
   });
 
@@ -183,5 +183,33 @@ describe('HomeScreen', () => {
       expect(nativeWifi.getNetworkInfo.mock.calls.length).toBeGreaterThan(callsBeforeRefresh)
     );
     expect(nativeWifi.getNetworkInfo.mock.calls.length).toBe(callsBeforeRefresh + 1);
+  });
+  it('R7: 未保存规则时采用原生认证策略，离线但已认证仍可注销', async () => {
+    const config = makeConfig();
+    config.wifiList = [];
+    const view = renderHome(config, { authSnapshot: { requiresAuth: true, authenticated: false } });
+    expect(await screen.findByText('立即连接')).toBeTruthy();
+    view.unmount();
+    const online = renderHome(config, {
+      networkStatus: 'disconnected',
+      authSnapshot: { requiresAuth: true, authenticated: true },
+    });
+    fireEvent.press(await screen.findByText('注销登录'));
+    expect(online.logout).toHaveBeenCalledTimes(1);
+  });
+  it('无账号时可直接进入配置，暂停后可恢复自动认证', async () => {
+    const config = makeConfig();
+    config.accounts = [];
+    config.currentAccountId = null;
+    config.wifiList = [];
+    config.settings.autoAuthPaused = true;
+    const resumeAutoAuth = jest.fn().mockResolvedValue(undefined);
+    renderHome(config, { authSnapshot: { requiresAuth: true }, resumeAutoAuth }).unmount();
+    const configure = jest.fn();
+    render(<HomeScreen onConfigure={configure} />);
+    fireEvent.press(await screen.findByText('添加认证账号'));
+    expect(configure).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByText('恢复自动认证'));
+    expect(resumeAutoAuth).toHaveBeenCalledTimes(1);
   });
 });

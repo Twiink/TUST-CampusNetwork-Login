@@ -209,7 +209,7 @@ describe('设置验证', () => {
   it.each([
     ['heartbeatIntervalSeconds', Number.NaN, '心跳间隔必须大于等于 5 秒'],
     ['heartbeatFailureThreshold', Number.POSITIVE_INFINITY, '连续失败阈值必须大于等于 1'],
-    ['wifiReconnectRetries', Number.NaN, 'WiFi 重试次数必须大于等于 0'],
+    ['wifiReconnectRetries', Number.NaN, 'WiFi 尝试次数必须为 1–10 的整数'],
     ['wifiReconnectCooldownMinutes', Number.NEGATIVE_INFINITY, '冷却期必须大于等于 0'],
     ['destroyHiddenWindowAfterMs', -1, '隐藏窗口销毁时间必须大于等于 0'],
   ] as const)('%s 拒绝非有限或越界值', (key, value, message) => {
@@ -285,4 +285,15 @@ describe('normalizeAppConfig 与 validateAppConfig', () => {
       expect.arrayContaining(['当前账户 ID 无效', 'WiFi 1: 关联账号 missing 不存在'])
     );
   });
+});
+
+it('N8: 旧的零次尝试归一为一次，表单与共享校验均采用 1–10', () => {
+  expect(normalizeAppSettings({ wifiReconnectRetries: 0 }).wifiReconnectRetries).toBe(1);
+  expect(normalizeAppSettings({ wifiReconnectRetries: 0 }).maxRetries).toBe(1);
+  expect(validateAppSettings({ ...DEFAULT_APP_SETTINGS, wifiReconnectRetries: 0 }).valid).toBe(
+    false
+  );
+  expect(validateAppSettings({ ...DEFAULT_APP_SETTINGS, wifiReconnectRetries: 10 }).valid).toBe(
+    true
+  );
 });

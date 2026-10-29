@@ -10,7 +10,14 @@
  */
 
 import { BrowserWindow } from 'electron';
-import type { NetworkDetector, Logger, WifiManager, ConfigManager } from '@repo/shared';
+import {
+  matchWifiRule,
+  type NetworkStatus,
+  type NetworkDetector,
+  type Logger,
+  type WifiManager,
+  type ConfigManager,
+} from '@repo/shared';
 import { enrichStatusAuthFields } from './network';
 import type { AutoReconnectService } from './auto-reconnect';
 import type { WifiSwitcherService } from './wifi-switcher';
@@ -45,6 +52,7 @@ export interface WifiEventListenerOptions {
   logger: Logger;
   /** 主窗口实例（用于发送 IPC 事件） */
   window: BrowserWindow | null;
+  publishNetworkStatus?: (status: import('@repo/shared').NetworkStatus) => void;
   /** WiFi管理器（可选） */
   wifiManager?: WifiManager;
   /** WiFi切换服务（可选） */
@@ -55,12 +63,14 @@ export interface WifiEventListenerOptions {
   autoReconnectService?: AutoReconnectService;
   /** 发送分场景系统通知（由 NotificationService 按设置开关过滤） */
   notify?: (kind: NotificationEventKind, body: string) => void;
+  onRecoveryProgress?: (progress: WifiReconnectProgress) => void;
 }
 
 /**
  * WiFi 事件监听器类
  */
 export class WifiEventListener {
+  private publishNetworkStatus?: WifiEventListenerOptions['publishNetworkStatus'];
   private platform: NodeJS.Platform;
   private checkInterval: number;
   private networkDetector: NetworkDetector;
@@ -73,11 +83,14 @@ export class WifiEventListener {
   private nativeEventTimer: ReturnType<typeof setTimeout> | null = null;
   private nativeWatchStarted = false;
   private lastSsid: string | null = null;
+  private lastIdentity: string | null = null;
+  private statusGeneration = 0;
   private isRunning = false;
   private isReconnecting = false; // 防止重复重连
   private lastErrorLogged = false; // 防止错误日志过多
   private autoReconnectService?: AutoReconnectService;
   private notify?: (kind: NotificationEventKind, body: string) => void;
+  private onRecoveryProgress?: WifiEventListenerOptions['onRecoveryProgress'];
   /** 最近一次「全部 WiFi 失败」的时间（冷却期起点） */
   private lastAllFailedAt = 0;
   private startupHandled = false;
@@ -85,6 +98,98 @@ export class WifiEventListener {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingSsid: string | null = null;
   private reconnectGeneration = 0;
+  private recoveryDone: Promise<void> = Promise.resolve();
+  private finishRecovery: (() => void) | null = null;
+  private manualConnecting = false;
+  private offlineStreak = 0;
+  private wasOnline = false;
+  private latestStatus: NetworkStatus | null = null;
+  private lastWifiId: string | undefined;
+  private failedList: WifiReconnectFailure[] = [];
+  private authenticatedIdentity: string | null = null;
+  private wifiDisabled = false;
+  private async checkWifiEnabled(): Promise<boolean> {
+    const enabled = await this.networkDetector.isWifiEnabled();
+    if (!enabled && !this.wifiDisabled) this.cancelRecovery('系统 WiFi 已关闭');
+    this.wifiDisabled = !enabled;
+    return enabled;
+  }
+  private identity(status: NetworkStatus): string {
+    return JSON.stringify([status.ssid, status.bssid, status.security, status.ip]);
+  }
+  private publish(status: NetworkStatus): void {
+    const authenticated =
+      status.authenticated || this.authenticatedIdentity === this.identity(status);
+    const next = { ...status, authenticated, internetReachable: status.connected };
+    this.latestStatus = next;
+    if (status.wifiConnected && status.ssid)
+      this.lastWifiId = matchWifiRule(
+        this.wifiManager?.getWifiConfigs() ?? [],
+        status as NetworkStatus & { ssid: string }
+      )?.id;
+    if (this.publishNetworkStatus) this.publishNetworkStatus(next);
+    else if (this.window && !this.window.isDestroyed())
+      this.window.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, next);
+  }
+  private cancelRecovery(reason = '操作已取消'): void {
+    this.reconnectGeneration++;
+    this.cancelRetry();
+    this.pendingSsid = null;
+    this.broadcastReconnectProgress({
+      ssid: this.lastSsid ?? '',
+      attempt: 0,
+      maxAttempts: 1,
+      status: 'cancelled',
+      reason,
+    });
+  }
+  async retryNow(): Promise<void> {
+    this.cancelRecovery();
+    this.lastAllFailedAt = 0;
+    await this.recoveryDone;
+    await this.handleWifiDisconnect(this.lastSsid, true);
+  }
+  private async waitForRecovery(ms: number, current: () => Promise<boolean>): Promise<boolean> {
+    for (let remaining = ms; remaining > 0; remaining -= 1000) {
+      if (!(await current())) return false;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1000, remaining)));
+    }
+    return current();
+  }
+  private async handleStatus(
+    status: NetworkStatus,
+    trigger: 'network' | 'heartbeat'
+  ): Promise<void> {
+    this.publish(status);
+    if (!(await this.checkWifiEnabled())) return;
+    if (status.connected) {
+      this.wasOnline = true;
+      this.offlineStreak = 0;
+      return;
+    }
+    if (
+      !this.startupHandled ||
+      this.manualConnecting ||
+      this.isReconnecting ||
+      !status.wifiConnected
+    )
+      return;
+    const settings = this.configManager?.getSettings();
+    if (settings?.autoReconnect === false || (settings?.autoAuthPaused && status.requiresAuth))
+      return;
+    if (
+      this.wasOnline &&
+      trigger === 'heartbeat' &&
+      ++this.offlineStreak < (settings?.heartbeatFailureThreshold ?? 3)
+    )
+      return;
+    if (this.wasOnline && status.requiresAuth) {
+      this.authenticatedIdentity = null;
+      this.networkDetector.rememberAuthentication?.(null);
+    }
+    if (status.ssid) await this.handleWifiDisconnect(status.ssid);
+  }
+
   private cancelRetry(): void {
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = null;
@@ -102,10 +207,6 @@ export class WifiEventListener {
             this.configManager?.getSettings().autoReconnect === false
           )
             return;
-          if (await probeCurrentSsid(this.platform, this.logger)) {
-            this.pendingSsid = null;
-            return;
-          }
           if (!(await this.networkDetector.isWifiEnabled())) return;
           await this.handleWifiDisconnect(this.pendingSsid);
         })().catch((error) => this.logger.error('WiFi 重试失败', error));
@@ -115,6 +216,7 @@ export class WifiEventListener {
   }
 
   constructor(options: WifiEventListenerOptions) {
+    this.publishNetworkStatus = options.publishNetworkStatus;
     this.platform = process.platform;
     this.checkInterval = options.checkInterval || 3000;
     this.networkDetector = options.networkDetector;
@@ -125,6 +227,20 @@ export class WifiEventListener {
     this.configManager = options.configManager;
     this.autoReconnectService = options.autoReconnectService;
     this.notify = options.notify;
+    this.onRecoveryProgress = options.onRecoveryProgress;
+    if (this.wifiManager && this.wifiSwitcherService && this.configManager)
+      this.autoReconnectService?.setRecoveryHandler?.((status, trigger) =>
+        this.handleStatus(status, trigger)
+      );
+    this.wifiSwitcherService?.setRetryHandler?.(() => this.retryNow());
+    this.wifiSwitcherService?.setManualConnectionHandler?.(() => {
+      this.manualConnecting = true;
+      this.cancelRecovery();
+      return () => {
+        this.manualConnecting = false;
+        void this.checkWifiChange(true);
+      };
+    });
   }
 
   /**
@@ -185,7 +301,7 @@ export class WifiEventListener {
         }
         this.nativeEventTimer = setTimeout(() => {
           this.nativeEventTimer = null;
-          this.checkWifiChange().catch((error) => {
+          this.checkWifiChange(true).catch((error) => {
             this.logger.error('原生 WiFi 事件检测失败', error);
           });
         }, 1000);
@@ -216,9 +332,7 @@ export class WifiEventListener {
     }
 
     this.isRunning = false;
-    this.reconnectGeneration++;
-    this.cancelRetry();
-    this.pendingSsid = null;
+    this.cancelRecovery('自动恢复服务已停止');
     this.lastSsid = null;
     this.logger.info('WiFi 事件监听器已停止');
   }
@@ -267,10 +381,23 @@ export class WifiEventListener {
   /**
    * 检测 WiFi 状态变化
    */
-  private async checkWifiChange(): Promise<void> {
+  private async checkWifiChange(force = false): Promise<void> {
     try {
+      if (force) this.networkDetector.invalidateCache?.();
       // 使用轻量级方法快速获取当前 SSID
       const currentSsid = await probeCurrentSsid(this.platform, this.logger);
+      const snapshot = await this.networkDetector.getWifiSnapshot?.();
+      if (this.wifiManager && this.wifiSwitcherService) await this.checkWifiEnabled();
+      const identity = snapshot
+        ? JSON.stringify([snapshot.ssid, snapshot.bssid, snapshot.security, snapshot.ipv4])
+        : currentSsid;
+      const identityChanged = identity !== this.lastIdentity;
+      if (identityChanged) {
+        this.lastIdentity = identity;
+        this.statusGeneration++;
+        this.networkDetector.invalidateCache?.();
+        this.autoReconnectService?.invalidateNetwork?.();
+      }
 
       // 重置错误标志（成功获取到SSID）
       if (this.lastErrorLogged) {
@@ -280,12 +407,14 @@ export class WifiEventListener {
 
       // 检测 SSID 是否发生变化
       if (currentSsid !== this.lastSsid) {
-        if (currentSsid) {
+        if (currentSsid && !this.isReconnecting) {
           this.cancelRetry();
           this.pendingSsid = null;
         }
         const prevSsid = this.lastSsid;
         this.lastSsid = currentSsid;
+        this.networkDetector.invalidateCache?.();
+        this.autoReconnectService?.invalidateNetwork?.();
 
         // 记录变化
         if (prevSsid === null && currentSsid) {
@@ -294,13 +423,17 @@ export class WifiEventListener {
           this.logger.info(`WiFi 已断开: ${prevSsid}`);
           this.notify?.('wifiDisconnected', `已断开 ${prevSsid}`);
 
-          // WiFi断开时尝试自动重连
+          // 先取消认证并派发断网，再等待物理重连。
+          await this.notifyNetworkStatusChange();
           await this.handleWifiDisconnect(prevSsid);
+          return;
         } else if (prevSsid && currentSsid) {
           this.logger.info(`WiFi 已切换: ${prevSsid} → ${currentSsid}`);
         }
 
         // 触发网络状态更新
+        await this.notifyNetworkStatusChange();
+      } else if ((force || identityChanged) && currentSsid) {
         await this.notifyNetworkStatusChange();
       }
     } catch (error) {
@@ -319,15 +452,24 @@ export class WifiEventListener {
    * 2. 优先级切换（按优先级尝试其他WiFi）
    * 3. 所有WiFi失败（停止重连，显示失败列表）
    */
-  private async handleWifiDisconnect(disconnectedSsid: string): Promise<void> {
+  private async handleWifiDisconnect(
+    disconnectedSsid: string | null,
+    explicit = false
+  ): Promise<void> {
     // 如果正在重连或没有配置WiFi管理器和切换服务，则跳过
-    if (this.isReconnecting || !this.wifiManager || !this.wifiSwitcherService) {
+    if (
+      this.isReconnecting ||
+      this.manualConnecting ||
+      !this.wifiManager ||
+      !this.wifiSwitcherService
+    ) {
       return;
     }
+    if (!explicit && this.retryTimer) return;
     this.pendingSsid = disconnectedSsid;
     const settings = this.configManager?.getConfig()?.settings;
     // 「断线自动重连」关闭时不重连 WiFi（与 Android 端一致）
-    if (settings && !settings.autoReconnect) {
+    if (!explicit && settings && !settings.autoReconnect) {
       this.logger.debug('断线自动重连已关闭，跳过 WiFi 重连');
       return;
     }
@@ -338,11 +480,25 @@ export class WifiEventListener {
     }
 
     this.isReconnecting = true;
+    this.recoveryDone = new Promise((resolve) => {
+      this.finishRecovery = resolve;
+    });
+    const generation = this.reconnectGeneration;
     try {
-      const result = await executeAutoReconnect(disconnectedSsid, this.reconnectDeps());
+      const result = await executeAutoReconnect(
+        disconnectedSsid,
+        this.reconnectDeps(false, explicit)
+      );
+      if (generation !== this.reconnectGeneration) return;
       this.recordReconnectResult(result, cooldownMinutes);
     } finally {
       this.isReconnecting = false;
+      this.finishRecovery?.();
+      this.finishRecovery = null;
+      if (generation !== this.reconnectGeneration && this.isRunning && !this.manualConnecting)
+        void this.checkWifiChange(true);
+      if (generation === this.reconnectGeneration && !(await this.networkDetector.isWifiEnabled()))
+        this.cancelRecovery('系统 WiFi 已关闭');
       this.logger.info(`===== WiFi自动重连流程结束 =====`);
     }
     return;
@@ -361,41 +517,180 @@ export class WifiEventListener {
     }
 
     this.isReconnecting = true;
+    this.recoveryDone = new Promise((resolve) => {
+      this.finishRecovery = resolve;
+    });
+    const generation = this.reconnectGeneration;
     try {
       const result = await executeStartupAutoConnect(this.lastSsid, {
-        ...this.reconnectDeps(),
+        ...this.reconnectDeps(true),
         scanAvailableSsids: async () => (await scanAvailableNetworks()).map((n) => n.ssid),
       });
+      if (generation !== this.reconnectGeneration) return;
       this.recordReconnectResult(
         result,
         this.configManager?.getConfig()?.settings.wifiReconnectCooldownMinutes ?? 0
       );
     } finally {
       this.isReconnecting = false;
+      this.finishRecovery?.();
+      this.finishRecovery = null;
     }
+    if (this.latestStatus && !this.latestStatus.connected)
+      void this.handleStatus(this.latestStatus, 'network');
   }
 
-  private reconnectDeps() {
+  private reconnectDeps(startup = false, explicit = false) {
     const generation = this.reconnectGeneration;
+    const revision = this.configManager?.getConfig()?.revision;
+    const current = async () =>
+      this.isRunning &&
+      !this.manualConnecting &&
+      generation === this.reconnectGeneration &&
+      revision === this.configManager?.getConfig()?.revision &&
+      (explicit ||
+        (startup
+          ? this.configManager?.getSettings().startupAutoConnect !== false
+          : this.configManager?.getSettings().autoReconnect !== false)) &&
+      (await this.networkDetector.isWifiEnabled());
+    const configs = this.wifiManager!.getWifiConfigs();
+    const currentRule = this.latestStatus?.ssid
+      ? matchWifiRule(configs, this.latestStatus as NetworkStatus & { ssid: string })
+      : null;
+    const candidates = configs.filter((w) => w.autoConnect);
+    if (currentRule && !currentRule.autoConnect && this.latestStatus?.wifiConnected)
+      candidates.unshift(currentRule);
+    if (this.latestStatus?.wifiConnected && this.latestStatus.ssid && !currentRule) {
+      candidates.unshift({
+        id: 'current-network',
+        ssid: this.latestStatus.ssid,
+        password: '',
+        security: this.latestStatus.security,
+        bssid: this.latestStatus.bssid,
+        autoConnect: true,
+        requiresAuth: this.latestStatus.requiresAuth ?? false,
+        linkedAccountIds: [],
+        priority: 0,
+        lastConnectedAt: null,
+      });
+    }
     return {
-      shouldContinue: async () =>
-        this.isRunning &&
-        generation === this.reconnectGeneration &&
-        this.configManager?.getSettings().autoReconnect !== false &&
-        (await this.networkDetector.isWifiEnabled()),
+      shouldContinue: current,
+      candidates,
+      currentWifiId:
+        currentRule?.id ??
+        (this.latestStatus?.wifiConnected
+          ? candidates[0]?.id === 'current-network'
+            ? 'current-network'
+            : undefined
+          : this.lastWifiId),
+      connect: async (wifi: import('@repo/shared').WifiConfig) => {
+        const snapshot = await this.networkDetector.getNetworkStatus({ fresh: true });
+        if (
+          snapshot.wifiConnected &&
+          matchWifiRule([wifi], snapshot as NetworkStatus & { ssid: string })
+        )
+          return true;
+        if (!wifi.autoConnect) return false;
+        return this.wifiSwitcherService!.connectToConfiguredNetwork(wifi.id, current);
+      },
+      verify: async (
+        wifi: import('@repo/shared').WifiConfig,
+        phase: (status: 'authenticating' | 'verifying') => void
+      ) => {
+        let status = await this.networkDetector.getNetworkStatus({ fresh: true });
+        for (
+          let elapsed = 0;
+          status.wifiConnected && !status.ip && elapsed < 15_000;
+          elapsed += 1000
+        ) {
+          if (!(await this.waitForRecovery(1000, current)))
+            return { online: false, authenticated: false, reason: '操作已取消' };
+          status = await this.networkDetector.getNetworkStatus({ fresh: true });
+        }
+        if (!(await current()))
+          return { online: false, authenticated: false, reason: '操作已取消' };
+        enrichStatusAuthFields(status, this.wifiManager!);
+        if (status.requiresAuth && this.configManager?.getSettings().autoAuthPaused) {
+          this.cancelRecovery();
+          return { online: false, authenticated: false, reason: '自动认证已暂停' };
+        }
+        let authenticated =
+          status.authenticated || this.authenticatedIdentity === this.identity(status);
+        let authFailure: string | undefined;
+        if (
+          !status.connected &&
+          status.requiresAuth &&
+          !authenticated &&
+          !this.configManager?.getSettings().autoAuthPaused
+        ) {
+          phase('authenticating');
+          const result = await this.autoReconnectService?.authenticateOnce(status, current);
+          authenticated = result?.success ?? false;
+          if (!authenticated) authFailure = result?.message;
+          if (authenticated && (await current()))
+            this.authenticatedIdentity = this.identity(status);
+        }
+        const threshold =
+          status.requiresAuth && !authenticated
+            ? 1
+            : (this.configManager?.getSettings().heartbeatFailureThreshold ?? 3);
+        phase('verifying');
+        for (let check = 0; check < threshold; check++) {
+          if (!(await current())) return { online: false, authenticated, reason: '操作已取消' };
+          if (
+            check > 0 &&
+            !(await this.waitForRecovery(
+              (this.configManager?.getSettings().heartbeatIntervalSeconds ?? 30) * 1000,
+              current
+            ))
+          )
+            return { online: false, authenticated, reason: '操作已取消' };
+          if (!(await current())) return { online: false, authenticated, reason: '操作已取消' };
+          status = await this.networkDetector.getNetworkStatus({ fresh: true });
+          if (!(await current())) return { online: false, authenticated, reason: '操作已取消' };
+          if (
+            !status.wifiConnected ||
+            !matchWifiRule([wifi], status as NetworkStatus & { ssid: string })
+          )
+            return { online: false, authenticated: false, reason: '系统未连接目标 WiFi' };
+          this.publish({ ...status, authenticated });
+          if (status.connected) return { online: true, authenticated };
+        }
+        return {
+          online: false,
+          authenticated,
+          retryable: !!status.requiresAuth && !authenticated,
+          reason: authenticated ? '已认证但互联网不可达' : (authFailure ?? '互联网不可达'),
+        };
+      },
       logger: this.logger,
       wifiManager: this.wifiManager!,
       wifiSwitcherService: this.wifiSwitcherService!,
       configManager: this.configManager,
-      onProgress: (progress: WifiReconnectProgress) => this.broadcastReconnectProgress(progress),
+      onProgress: (progress: WifiReconnectProgress) => {
+        if (generation === this.reconnectGeneration) this.broadcastReconnectProgress(progress);
+      },
       onAllFailed: (failedList: WifiReconnectFailure[]) => {
+        this.failedList = failedList;
+        this.broadcastReconnectProgress({
+          ssid: failedList[0]?.ssid ?? '',
+          status: 'failed',
+          attempt: 0,
+          maxAttempts: 1,
+          failedList,
+        });
         this.broadcastAllWifiFailed(failedList);
         const names = failedList.map((f) => f.ssid).join('、');
         this.notify?.('reconnectFailed', `已尝试 ${names}，均未连上`);
       },
       onReconnected: async (ssid: string) => {
-        this.notify?.('reconnectSuccess', `已连接到 ${ssid}`);
-        await this.finalizeSuccessfulReconnect();
+        if (!(await current())) return;
+        this.notify?.('reconnectSuccess', `网络已恢复：${ssid}`);
+        if (this.wasOnline && this.latestStatus?.requiresAuth)
+          this.notify?.('authRecovered', '校园网认证与联网已恢复');
+        this.wasOnline = true;
+        this.offlineStreak = 0;
       },
     };
   }
@@ -409,7 +704,18 @@ export class WifiEventListener {
       this.lastAllFailedAt = Date.now();
       this.pendingSsid ??=
         this.wifiManager?.getWifiConfigs().find((wifi) => wifi.autoConnect)?.ssid ?? null;
-      this.scheduleRetry(cooldownMinutes * 60_000);
+      if (this.configManager?.getSettings().autoReconnect !== false) {
+        const delay = Math.max(5000, cooldownMinutes * 60_000);
+        this.broadcastReconnectProgress({
+          ssid: this.pendingSsid ?? '',
+          status: 'cooldown',
+          attempt: 0,
+          maxAttempts: 1,
+          nextRetryAt: Date.now() + delay,
+          failedList: this.failedList,
+        });
+        this.scheduleRetry(delay);
+      }
       if (cooldownMinutes > 0) {
         this.logger.info(`WiFi 自动重连全部失败，${cooldownMinutes} 分钟内不再尝试`);
       }
@@ -420,28 +726,24 @@ export class WifiEventListener {
    * 配置变化后清除冷却期，新 WiFi/新密码可以立即尝试
    */
   resetCooldown(): void {
-    this.reconnectGeneration++;
+    if (this.configManager?.getSettings().autoAuthPaused) this.authenticatedIdentity = null;
+    const pending = this.pendingSsid ?? this.lastSsid;
+    this.cancelRecovery(
+      this.configManager?.getSettings().autoReconnect ? '配置已更新' : '断线自动重连已关闭'
+    );
     this.lastAllFailedAt = 0;
-    this.cancelRetry();
-    if (this.configManager?.getSettings().autoReconnect && this.pendingSsid)
+    if (this.configManager?.getSettings().autoReconnect && pending) {
+      this.pendingSsid = pending;
       this.scheduleRetry(5000);
-  }
-
-  /**
-   * 成功重连后的后续处理
-   */
-  private async finalizeSuccessfulReconnect(): Promise<void> {
-    // 等待WiFi连接稳定
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
-    // 更新网络状态
-    await this.notifyNetworkStatusChange();
+    }
   }
 
   /**
    * 广播WiFi重连进度到UI
    */
   private broadcastReconnectProgress(progress: WifiReconnectProgress): void {
+    this.onRecoveryProgress?.(progress);
+    this.wifiSwitcherService?.setRecoveryProgress?.(progress);
     if (!this.window || this.window.isDestroyed()) {
       return;
     }
@@ -466,13 +768,11 @@ export class WifiEventListener {
    */
   private async notifyNetworkStatusChange(): Promise<void> {
     const expectedSsid = this.lastSsid;
+    const generation = this.statusGeneration;
     try {
-      // 检查窗口是否有效
-      if (!this.window || this.window.isDestroyed()) {
-        this.logger.warn('窗口无效或已销毁，无法发送网络状态更新');
-        return;
-      }
-
+      const send = (event: string, payload: unknown) => {
+        if (this.window && !this.window.isDestroyed()) this.window.webContents.send(event, payload);
+      };
       // 如果WiFi已断开（SSID为null），立即发送断开状态，无需等待网络检测
       if (this.lastSsid === null) {
         this.logger.info('WiFi已断开，立即发送断开状态');
@@ -480,27 +780,33 @@ export class WifiEventListener {
           connected: false,
           authenticated: false,
           wifiConnected: false,
-          ssid: null,
+          ssid: undefined,
         };
-        this.window.webContents.send('event:network:statusChanged', disconnectedStatus);
+        void this.autoReconnectService
+          ?.handleStatusChange(disconnectedStatus as never, 'network')
+          .catch((error) => this.logger.error('认证断网处理失败', error));
+        if (this.publishNetworkStatus) this.publishNetworkStatus(disconnectedStatus);
+        else send('event:network:statusChanged', disconnectedStatus);
         return;
       }
 
       // WiFi已连接，获取完整网络状态
       // 立即发送 loading 状态，让 UI 显示加载动画
-      this.window.webContents.send('event:network:statusLoading', {
+      send('event:network:statusLoading', {
         loading: true,
         wifiConnected: true,
         ssid: this.lastSsid,
       });
 
-      // 等待网络接口完全初始化
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
       // 获取完整的网络状态
       this.logger.info('正在获取完整的网络状态信息...');
-      const networkStatus = await this.networkDetector.getNetworkStatus();
-      if (!this.isRunning || this.lastSsid !== expectedSsid || networkStatus.ssid !== expectedSsid)
+      const networkStatus = await this.networkDetector.getNetworkStatus({ fresh: true });
+      if (
+        !this.isRunning ||
+        generation !== this.statusGeneration ||
+        this.lastSsid !== expectedSsid ||
+        networkStatus.ssid !== expectedSsid
+      )
         return;
       this.logger.success('网络状态获取成功', {
         wifiConnected: networkStatus.wifiConnected,
@@ -514,8 +820,7 @@ export class WifiEventListener {
         enrichStatusAuthFields(networkStatus, this.wifiManager);
       }
 
-      // 发送完整网络状态到渲染进程
-      this.window.webContents.send('event:network:statusChanged', networkStatus);
+      this.publish(networkStatus);
 
       // WiFi 连接/切换后立即触发认证检测与自动登录（快速路径，不等心跳周期）。
       // 异步执行，避免登录重试阻塞状态推送；重入由 AutoReconnectService.isReconnecting 防护。

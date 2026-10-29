@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 const requiredJobs = [
   '质量门禁',
   '网络模拟回归',
+  'Linux 原生路由内存检查',
   '全平台验收门禁',
   'Android 原生回归与 E2E 构建',
   ...['ubuntu-latest', 'windows-latest', 'macos-latest'].flatMap((os) => [

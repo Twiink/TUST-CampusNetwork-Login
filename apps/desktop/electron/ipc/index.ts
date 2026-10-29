@@ -9,8 +9,10 @@ import {
   WifiManager,
   NetworkDetector,
   Logger,
+  type NetworkStatus,
 } from '@repo/shared';
 
+import type { AutoLaunchService } from '../services/auto-launch';
 import { registerAuthIPC } from './auth';
 import { registerConfigIPC, type ConfigChangedHandler } from './config';
 import { registerAppIPC } from './app';
@@ -24,6 +26,7 @@ import { registerNotificationIPC } from './notification';
 import { registerUpdaterIPC } from './updater';
 import { AutoReconnectService } from '../services/auto-reconnect';
 import { WifiSwitcherService } from '../services/wifi-switcher';
+import type { FileLogger } from '../services/file-logger';
 import type { ElectronStorageAdapter } from '../services/store';
 
 export { registerTrayIPC, registerAutoLaunchIPC, registerNotificationIPC, registerUpdaterIPC };
@@ -41,7 +44,9 @@ export interface AppServices {
   wifiManager: WifiManager;
   networkDetector: NetworkDetector;
   logger: Logger;
+  fileLogger?: FileLogger;
   storage: ElectronStorageAdapter;
+  publishNetworkStatus?: (status: NetworkStatus | 'connecting') => void;
 }
 
 /**
@@ -50,20 +55,30 @@ export interface AppServices {
 export function registerAllIPC(
   services: AppServices,
   wifiSwitcherService?: WifiSwitcherService,
-  onConfigChanged?: ConfigChangedHandler
-): void {
+  onConfigChanged?: ConfigChangedHandler,
+  autoLaunch?: AutoLaunchService,
+  publishNetworkStatus = services.publishNetworkStatus
+): ReturnType<typeof registerConfigIPC> {
   const { authService, configManager, accountManager, wifiManager, networkDetector, logger } =
     services;
 
-  registerAuthIPC(authService, configManager, accountManager, logger, networkDetector);
+  registerAuthIPC(
+    authService,
+    configManager,
+    accountManager,
+    logger,
+    networkDetector,
+    publishNetworkStatus
+  );
   registerAppIPC(logger);
-  registerConfigIPC(configManager, logger, onConfigChanged);
+  const commands = registerConfigIPC(configManager, logger, onConfigChanged, autoLaunch);
   registerAccountIPC(accountManager, logger);
   registerWifiIPC(wifiManager, logger, wifiSwitcherService);
-  registerNetworkIPC(networkDetector, logger);
-  registerLogIPC(logger);
+  registerNetworkIPC(networkDetector, logger, wifiManager);
+  registerLogIPC(logger, services.fileLogger);
 
   logger.info('IPC 处理器已注册');
+  return commands;
 }
 
 /**
@@ -79,9 +94,10 @@ export function startBackgroundServices(
     services.networkDetector,
     services.logger,
     pollingInterval,
-    autoReconnectService,
+    services.configManager.getSettings().autoReconnect ? autoReconnectService : undefined,
     enableHeartbeat,
-    services.wifiManager
+    services.wifiManager,
+    services.publishNetworkStatus
   );
 }
 

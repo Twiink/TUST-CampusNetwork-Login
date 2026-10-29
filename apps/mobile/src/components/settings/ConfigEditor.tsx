@@ -1,3 +1,4 @@
+import { usesSystemWifiSettings } from '../../services/wifiPolicy';
 import React, { useMemo, useState } from 'react';
 import {
   Modal,
@@ -97,7 +98,13 @@ export function ConfigEditor({
       await onSave(current =>
         target.kind === 'account'
           ? editAccount(current, target.id, account as AccountConfig, password)
-          : editWifi(current, target.id, wifi as WifiConfig, password, clearPassword)
+          : editWifi(
+              current,
+              target.id,
+              { ...(wifi as WifiConfig), security: wifi.security || null },
+              password,
+              clearPassword
+            )
       );
       onClose();
     } catch (reason) {
@@ -204,11 +211,15 @@ export function ConfigEditor({
                     setWifi(previous => ({ ...previous, priority: Number(priority) }))
                   }
                 />
+                {usesSystemWifiSettings(wifi.security) && (
+                  <Text style={styles.text}>此安全类型通过系统 WiFi 设置连接，自动连接不可用</Text>
+                )}
                 <View style={styles.row}>
                   <Text style={styles.text}>自动连接此 WiFi</Text>
                   <Switch
                     accessibilityLabel="编辑自动连接"
-                    value={wifi.autoConnect}
+                    disabled={usesSystemWifiSettings(wifi.security)}
+                    value={wifi.autoConnect && !usesSystemWifiSettings(wifi.security)}
                     onValueChange={autoConnect =>
                       setWifi(previous => ({ ...previous, autoConnect }))
                     }

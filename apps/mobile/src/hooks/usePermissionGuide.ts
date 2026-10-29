@@ -69,23 +69,25 @@ function confirmStep(key: PermissionKey): Promise<boolean> {
 }
 
 /** 等待应用从设置页回到前台（最多等 2 分钟，避免引导永久挂起） */
-function waitForForeground(): Promise<void> {
-  return new Promise(resolve => {
-    let left = false;
-    const timer = setTimeout(() => {
-      subscription.remove();
-      resolve();
-    }, 120_000);
-    const subscription = AppState.addEventListener('change', state => {
-      if (state !== 'active') {
-        left = true;
-      } else if (left) {
-        clearTimeout(timer);
-        subscription.remove();
-        resolve();
-      }
-    });
+function waitForForeground() {
+  let finish!: () => void;
+  const promise = new Promise<void>(resolve => {
+    finish = resolve;
   });
+  let left = AppState.currentState !== 'active';
+  const subscription = AppState.addEventListener('change', state => {
+    if (state !== 'active') left = true;
+    else if (left) finish();
+  });
+  const timer = setTimeout(finish, 120_000);
+  return {
+    promise,
+    cancel: () => {
+      clearTimeout(timer);
+      subscription.remove();
+      finish();
+    },
+  };
 }
 
 export interface UsePermissionGuideOptions {
@@ -127,11 +129,17 @@ export function usePermissionGuide({
 
   const requestOne = useCallback(async (key: PermissionKey): Promise<void> => {
     const before = await checkPermission(key);
-    let state = await requestPermission(key);
-    // 跳转设置页/系统对话框的项，回到前台后再查询真实状态
-    if (state === 'unknown') {
-      await waitForForeground();
-      state = await checkPermission(key);
+    const foreground = waitForForeground();
+    let state;
+    try {
+      state = await requestPermission(key);
+      // 跳转设置页/系统对话框的项，回到前台后再查询真实状态
+      if (state === 'unknown') {
+        await foreground.promise;
+        state = await checkPermission(key);
+      }
+    } finally {
+      foreground.cancel();
     }
     if (key === 'location' && state === 'granted' && before !== 'granted') {
       onLocationGrantedRef.current?.();

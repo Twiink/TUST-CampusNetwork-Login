@@ -61,6 +61,8 @@ beforeEach(() => {
         switch: vi.fn(),
       },
       wifi: {
+        retry: vi.fn().mockResolvedValue(undefined),
+        getReconnectProgress: vi.fn().mockResolvedValue(null),
         list: vi.fn(),
         add: vi.fn(),
         update: vi.fn(),
@@ -76,6 +78,9 @@ beforeEach(() => {
         getFullInfo: vi.fn(),
       },
       log: {
+        query: vi
+          .fn()
+          .mockResolvedValue({ entries: [], nextCursor: null, hasMore: false, total: 0 }),
         get: vi.fn(),
         clear: vi.fn(),
         export: vi.fn(),

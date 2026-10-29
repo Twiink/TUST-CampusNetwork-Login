@@ -20,7 +20,7 @@ export const WifiSwitcherCard: React.FC<{
     : null;
 
   // 如果只有一个或没有WiFi配置，不显示切换卡片
-  if (sortedWifiList.length <= 1) {
+  if (sortedWifiList.length === 0) {
     return null;
   }
 
@@ -109,7 +109,7 @@ export const WifiSwitcherCard: React.FC<{
                     borderRadius: '10px',
                   }}
                 >
-                  {wifi.requiresAuth ? '需认证' : '无需认证'}
+                  {wifi.requiresAuth ? '校园网认证' : '普通热点'}
                 </span>
                 <span
                   style={{

@@ -67,9 +67,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // 计算连接状态
   const getConnectionStatus = useCallback((): ConnectionStatus => {
     if (authStatus === 'authenticating') return 'connecting';
-    if (isAuthenticated) return 'connected';
+    if (isConnected) return 'connected';
     return 'disconnected';
-  }, [authStatus, isAuthenticated]);
+  }, [authStatus, isConnected]);
 
   const login = useCallback(async () => {
     const result = await authLogin();

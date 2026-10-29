@@ -488,7 +488,43 @@ export class WifiSwitcherService {
    * @param ssid WiFi SSID
    * @throws 抛出包含详细错误信息的 Error
    */
-  async connectToConfiguredNetwork(idOrSsid: string): Promise<boolean> {
+  private connectionQueue: Promise<unknown> = Promise.resolve();
+  private retryHandler?: () => Promise<void>;
+  private recoveryProgress:
+    | import('./wifi-event-listener/reconnect-flow').WifiReconnectProgress
+    | null = null;
+  setRetryHandler(handler: () => Promise<void>): void {
+    this.retryHandler = handler;
+  }
+  retry(): Promise<void> {
+    return this.retryHandler?.() ?? Promise.resolve();
+  }
+  setRecoveryProgress(
+    progress: import('./wifi-event-listener/reconnect-flow').WifiReconnectProgress
+  ): void {
+    this.recoveryProgress = progress;
+  }
+  getRecoveryProgress() {
+    return this.recoveryProgress;
+  }
+  private manualHandler?: () => () => void;
+  setManualConnectionHandler(handler: () => () => void): void {
+    this.manualHandler = handler;
+  }
+  beginManualConnection(): () => void {
+    return this.manualHandler?.() ?? (() => undefined);
+  }
+  connectToConfiguredNetwork(
+    idOrSsid: string,
+    current: () => boolean | Promise<boolean> = () => true
+  ): Promise<boolean> {
+    const pending = this.connectionQueue.then(async () =>
+      (await current()) ? this.connectConfigured(idOrSsid) : false
+    );
+    this.connectionQueue = pending.catch(() => undefined);
+    return pending;
+  }
+  private async connectConfigured(idOrSsid: string): Promise<boolean> {
     const byId = this.configuredNetworks.find((n) => n.id === idOrSsid);
     const sameSsid = this.configuredNetworks.filter((n) => n.ssid === idOrSsid);
     if (!byId && sameSsid.length > 1) throw new Error('存在同名 WiFi，请选择具体配置');

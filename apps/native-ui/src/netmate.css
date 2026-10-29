@@ -1,0 +1,176 @@
+/* Visual authority: apps/desktop/src/App.css. Native controls share the original palette. */
+window.netmate {
+  color: #1e293b;
+  background-image: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #dbeafe 100%);
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-size: 15px;
+}
+window.netmate.dark {
+  color: #f1f5f9;
+  background-image: linear-gradient(135deg, #0f172a, #1e293b);
+}
+.netmate .sidebar {
+  padding: 32px 12px;
+  background: rgba(255, 255, 255, 0.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.7);
+}
+.netmate.dark .sidebar {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.netmate .brand {
+  color: #0369a1;
+  font-size: 23px;
+  font-weight: 800;
+  margin: 0 8px 28px;
+}
+.netmate.dark .brand {
+  color: #38bdf8;
+}
+.netmate .navigation {
+  padding: 12px;
+  border-radius: 16px;
+  color: #475569;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+.netmate.dark .navigation {
+  color: #94a3b8;
+  background: transparent;
+  border-color: transparent;
+}
+.netmate .navigation:hover {
+  color: #0284c7;
+  background: rgba(255, 255, 255, 0.2);
+}
+.netmate .navigation:checked {
+  color: #0284c7;
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(255, 255, 255, 0.7);
+  font-weight: 700;
+}
+.netmate.dark .navigation:checked {
+  color: #38bdf8;
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.netmate .main-content {
+  padding: 40px 48px;
+}
+.netmate .page-title {
+  font-size: 34px;
+  font-weight: 800;
+  color: #0c4a6e;
+  margin-bottom: 16px;
+}
+.netmate.dark .page-title,
+.netmate.dark .card-title {
+  color: #e2e8f0;
+}
+.netmate .card {
+  padding: 28px 32px;
+  border-radius: 24px;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 24px rgba(31, 38, 135, 0.05);
+}
+.netmate.dark .card {
+  background: rgba(30, 41, 59, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+.netmate .card-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #0c4a6e;
+  margin-bottom: 8px;
+}
+.netmate .secondary {
+  color: #64748b;
+}
+.netmate.dark .secondary {
+  color: #cbd5e1;
+}
+.netmate .connection-state {
+  font-size: 28px;
+  font-weight: 700;
+}
+.netmate .connected {
+  color: #15803d;
+}
+.netmate.dark .connected {
+  color: #4ade80;
+}
+.netmate .disconnected {
+  color: #b91c1c;
+}
+.netmate.dark .disconnected {
+  color: #fca5a5;
+}
+.netmate button {
+  border-radius: 16px;
+  padding: 11px 18px;
+  color: #0284c7;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(14, 165, 233, 0.16);
+  box-shadow: none;
+}
+.netmate.dark button {
+  background: rgba(15, 23, 42, 0.4);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.25);
+}
+.netmate button.primary {
+  background: #0ea5e9;
+  color: white;
+  font-weight: 700;
+}
+.netmate.dark button.primary {
+  background: #38bdf8;
+  color: #0f172a;
+}
+.netmate button.danger {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+.netmate entry,
+.netmate dropdown {
+  color: inherit;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(14, 165, 233, 0.15);
+  padding: 8px;
+}
+.netmate.dark entry,
+.netmate.dark dropdown {
+  background: rgba(15, 23, 42, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.netmate listview {
+  background: transparent;
+  color: inherit;
+}
+.netmate listview row {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 6px;
+}
+.netmate.dark listview row {
+  background: rgba(15, 23, 42, 0.5);
+}
+.netmate button:focus-visible,
+.netmate entry:focus {
+  outline: 2px solid #0ea5e9;
+  outline-offset: 2px;
+}
+.netmate .theme-switch,
+.netmate.dark .theme-switch {
+  border-radius: 24px;
+  padding: 6px;
+  background: transparent;
+  border-color: transparent;
+}

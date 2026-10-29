@@ -142,7 +142,7 @@ export const WifiInfoCard: React.FC<{
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>连接速度</Text>
               <Text style={{ fontSize: 14, fontWeight: '600', color: linkSpeedStatus.color }}>
-                {linkSpeed} Mbps · {linkSpeedStatus.text}
+                {linkSpeed > 0 ? `${linkSpeed} Mbps · ${linkSpeedStatus.text}` : '未知'}
               </Text>
             </View>
           </View>
@@ -161,7 +161,13 @@ export const WifiInfoCard: React.FC<{
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 11, color: theme.colors.textSecondary }}>频段</Text>
               <Text style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text }}>
-                {frequency >= 5000 ? '5GHz' : frequency >= 2400 ? '2.4GHz' : '未知'}
+                {frequency >= 5925 && frequency <= 7125
+                  ? '6GHz'
+                  : frequency >= 4900 && frequency < 5925
+                    ? '5GHz'
+                    : frequency >= 2400 && frequency <= 2500
+                      ? '2.4GHz'
+                      : '未知'}
               </Text>
             </View>
           </View>

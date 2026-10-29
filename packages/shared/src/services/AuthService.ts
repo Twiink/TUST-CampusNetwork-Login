@@ -378,7 +378,7 @@ export class AuthService {
    * result === 1 即注销成功（此前误用 result === 0 判定，且依赖 dr1005 回调名，
    * 会把真实成功响应判为失败）。解析不依赖 callback 名，取括号内 JSON。
    */
-  async logout(wlanUserIp?: string): Promise<LogoutResult> {
+  async logout(wlanUserIp?: string, serverUrl?: string): Promise<LogoutResult> {
     this.logger?.log('info', `开始登出认证`, {
       category: 'auth',
       source: 'AuthService',
@@ -386,7 +386,7 @@ export class AuthService {
     });
 
     try {
-      const url = buildLogoutUrl(this.lastSuccessfulServerUrl || this.serverUrl);
+      const url = buildLogoutUrl(serverUrl || this.lastSuccessfulServerUrl || this.serverUrl);
       this.logger?.log('debug', '发送门户注销请求', {
         category: 'request',
         source: 'AuthService',

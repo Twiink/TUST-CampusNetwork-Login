@@ -1,4 +1,5 @@
 import { UpdateCard } from '../components/settings/UpdateCard';
+import { usesSystemWifiSettings } from '../services/wifiPolicy';
 import React, { useState } from 'react';
 import { Alert, View, Text, StyleSheet, ScrollView } from 'react-native';
 import { useApp } from '../context/AppContext';
@@ -329,6 +330,12 @@ export const SettingsScreen: React.FC = () => {
           onConnectWifi={id => {
             const wifi = config.wifiList.find(item => item.id === id);
             if (!wifi) return;
+            if (usesSystemWifiSettings(wifi.security)) {
+              openWifiSettings().catch(error =>
+                addLog?.('warn', error instanceof Error ? error.message : '无法打开系统 WiFi 设置')
+              );
+              return;
+            }
             addLog?.('info', `正在连接 ${wifi.ssid}，请确认系统 WiFi 授权`);
             connectToWifi(wifi.ssid, wifi.password, wifi.security, wifi.bssid, wifi.id)
               .then(success => {

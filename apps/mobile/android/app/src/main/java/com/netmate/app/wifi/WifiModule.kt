@@ -85,16 +85,17 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
         } catch (_: Exception) { promise.reject("WIFI_INFO", "读取 WiFi 信息失败，请检查权限") }
     }
     @ReactMethod fun connectToWifi(ssid: String, password: String?, security: String?, bssid: String?, ruleId: String?, promise: Promise) {
-        connections.execute {
+        com.netmate.app.auth.AutoAuthEngine.beginManualConnection(context)
+        com.netmate.app.auth.AutoAuthEngine.runConnection {
             try {
-                if (!WifiConnector.connect(context, ssid, password, security, bssid, manual = true, ruleId = ruleId ?: ssid)) { promise.resolve(false); return@execute }
+                if (!WifiConnector.connect(context, ssid, password, security, bssid, manual = true, ruleId = ruleId ?: ssid)) { promise.resolve(false); return@runConnection }
                 ReconnectEvents.publish(org.json.JSONObject().put("status", "awaiting-system").put("ssid", ssid))
                 WifiConnector.openSelection(context, ssid, password, security, bssid)
                 for (attempt in 0 until 60) {
                     val value = state()
-                    if (value.connected && value.ssid == ssid && (bssid.isNullOrBlank() || WifiSecurity.bssid(value.bssid) == WifiSecurity.bssid(bssid)) && value.ipv4 != null) {
-                        ReconnectEvents.publish(org.json.JSONObject().put("status", "success").put("ssid", ssid))
-                        changed(); promise.resolve(true); return@execute
+                    if (WifiSecurity.connected(com.netmate.app.auth.AutoAuthWifiRule(ssid, false, emptyList(), security = security, bssid = bssid), value)) {
+                        ReconnectEvents.publish(org.json.JSONObject().put("status", "idle").put("ssid", ssid).put("message", "WiFi 已关联"))
+                        changed(); promise.resolve(true); return@runConnection
                     }
                     Thread.sleep(500)
                 }
@@ -102,6 +103,7 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
                 promise.resolve(false)
             } catch (e: IllegalArgumentException) { promise.reject("WIFI_SECURITY", e.message ?: "请通过系统设置连接此网络") }
             catch (_: Exception) { promise.reject("WIFI_CONNECT", "连接失败，请检查密码或系统授权") }
+            finally { com.netmate.app.auth.AutoAuthEngine.endManualConnection(context) }
         }
     }
     @ReactMethod fun openWifiSettings(promise: Promise) {
@@ -151,5 +153,5 @@ class WifiModule(private val context: ReactApplicationContext) : ReactContextBas
             catch (_: Exception) { promise.reject("WIFI_SCAN", "扫描失败，请检查定位服务和附近设备权限") }
         }
     }
-    private fun channel(frequency: Int) = when { frequency == 2484 -> 14; frequency in 2412..2472 -> (frequency - 2407) / 5; frequency in 5000..5900 -> (frequency - 5000) / 5; else -> 0 }
+    private fun channel(frequency: Int) = when { frequency == 2484 -> 14; frequency in 2412..2472 -> (frequency - 2407) / 5; frequency == 5935 -> 2; frequency in 5955..7115 -> (frequency - 5950) / 5; frequency in 5000..5900 -> (frequency - 5000) / 5; else -> 0 }
 }

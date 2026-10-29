@@ -1,8 +1,10 @@
+> 2.0 原生版本的当前实现与验证以 [原生验收记录](NATIVE-ACCEPTANCE.md) 为准。本文保留重写前功能基线的详细行为和历史检查记录。
+
 # 测试与 CI
 
 ## 本地检查
 
-本机允许 `pnpm test`、`pnpm test:network`、`pnpm type-check`、`pnpm lint`、`pnpm format:check` 和构建。Android JVM 单测可用 `bash gradlew :app:testDebugUnitTest`；构建 E2E 专用入口不等于执行 E2E。经本次授权，可运行隔离本地 E2E。Linux 使用 `bash shell/test-linux-e2e.sh`，启动独立 D-Bus、临时钥匙串和 Xvfb；不会使用个人配置。Android 与 CI 共用 `apps/mobile/e2e/run-ci.sh`，本地必须设置 `ANDROID_SERIAL=emulator-端口`，且 AVD 名称为 `netmate-v102-*`。所有 adb 和 Maestro 操作绑定该设备，不能使用个人模拟器或真机。
+本机允许 `pnpm test`、`pnpm test:network`、`pnpm type-check`、`pnpm lint`、`pnpm format:check`、Android JVM/Rust 测试及构建。Android JVM 单测可用 `bash gradlew :app:testDebugUnitTest`。E2E 仅在 GitHub Actions 执行；本地可以构建 E2E 专用入口，不启动 Playwright、Maestro 或 instrumentation 流程。
 
 ## GitHub Actions 门禁
 
@@ -12,6 +14,7 @@
 | ------------------ | ------------------------------------------------------------------------------------ |
 | quality            | lint、类型、普通测试、Prettier                                                       |
 | network-simulation | 共享网络模拟和 netem 链路检查                                                        |
+| native-asan        | nightly AddressSanitizer 执行 Linux 生产路由查询与 Netlink 尺寸/解析回归             |
 | desktop-build      | Windows/macOS/Linux Rust 测试、原生 API、生产构建和正式包启动；macOS 从 DMG 复制安装 |
 | desktop-e2e        | 三平台 Playwright；Linux 使用独立 D-Bus、真实 libsecret 和 xvfb                      |
 | android-build      | JVM 单测、独立 E2E APK、instrumentation APK、同签名更高版本 APK、错误签名 APK        |
@@ -23,6 +26,8 @@
 `apps/desktop/electron/e2e-main.ts` 是独立构建入口，安装无线硬件、受控 HTTP 门户、系统自启、更新器、日志保存对话框的适配器后导入正式 main。preload、IPC 注册、ConfigManager、账号选择、AuthService、重连编排、加密存储都运行正式代码。正式 main 不导入测试入口。
 
 `pnpm test:e2e` 先构建 `dist-e2e` 和 shared，再运行 Playwright。每个场景使用隔离 userData；覆盖配置增删改、重启保留、扫描连接、账号回退、暂停恢复、冷却后重连和日志。失败归档 trace、截图、渲染错误与主进程日志。
+
+隐藏窗口场景通过正式 main 的计时器实际 destroy 窗口，再切换受控 WiFi，检查窗口不存在时仍发出认证请求，并在 activate 重建后核对网络状态。仅注入较短销毁延时；E2E 模式不再跳过窗口销毁。Linux runner 的脚本使用独立 D-Bus、临时钥匙串和 Xvfb。
 
 清空日志用例先等待主进程初始化信号及首次 WiFi 状态推送完成，清空 IPC 同时丢弃待发送批次；随后检查空态、导出按钮，再主动查询网络并检查对应日志继续到达。Playwright 默认会追加 basic 密码存储参数，专用 Linux 测试入口恢复真实 libsecret；存储不可用分支另由回归验证。运行中的后台服务仍可追加新的诊断记录。
 
@@ -39,6 +44,10 @@ CI 构建基础版本 1.0.2-e2e（10020）和同签名 1.0.3-e2e（10030），�
 桌面 artifact 为 `desktop-e2e-<os>`；Android 为 `android-e2e-api-<api>`，包括 Maestro JUnit、截图、logcat、门户请求证据及最终安装信息。JVM 报告独立归档。
 
 当前缺陷映射及实际验证状态保存在 [REMEDIATION.md](./REMEDIATION.md)。自动化验证不使用真实账号，不承诺受控硬件适配器能覆盖实际网卡、真实校园网门户或厂商后台限制。
+
+两轮功能复审的 R1、R3–R8、N1–N8，以及两端日志重设计的正式回归、执行命令和平台状态见 [功能完善验收记录](./FUNCTIONAL-COMPLETION-2026-10-29.md)。恢复回归覆盖启动/断线开关四种组合、认证成功但无法联网、普通热点故障、候选失败与冷却、手动操作抢占及终止状态；日志回归覆盖持久历史、分页、前台补取、查询与写入交错、清空代次和导出。
+
+桌面日志布局的本地视觉检查使用普通组件测试输出的静态 HTML，分别检查浅色、深色和窄窗口，不启动应用端到端流程。Android 组件测试验证两套主题、长文本、详情反馈及触控区域；设备上的实际字体、软键盘、安全区和分享面板仍由 CI/实机验收。
 
 ## v1.0.2 正式发布门禁
 

@@ -1,0 +1,6 @@
+# These hosted labels are documented in GitHub's current runner reference.
+# Keep them explicit while the installed actionlint catalog catches up.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04-arm
+    - xcode-27

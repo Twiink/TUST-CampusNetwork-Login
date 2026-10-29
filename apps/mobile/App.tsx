@@ -23,7 +23,7 @@ function AppContent(): React.JSX.Element {
           translucent
         />
         <View style={styles.content}>
-          {activeTab === 'home' && <HomeScreen />}
+          {activeTab === 'home' && <HomeScreen onConfigure={() => setActiveTab('settings')} />}
           {activeTab === 'settings' && <SettingsScreen />}
           {activeTab === 'logs' && <LogsScreen />}
         </View>

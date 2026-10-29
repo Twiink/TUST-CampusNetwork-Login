@@ -108,6 +108,7 @@ export class UpdaterService {
     this.updater.on('update-downloaded', (info) => {
       this.status.downloading = false;
       this.status.downloaded = true;
+      this.status.error = null;
       this.status.progress = 100;
       this.logger.info(`更新下载完成: ${info.version}`);
       this.callbacks.onUpdateDownloaded?.(info);
@@ -156,6 +157,9 @@ export class UpdaterService {
 
     try {
       this.status.downloading = true;
+      this.status.downloaded = false;
+      this.status.progress = 0;
+      this.status.error = null;
       this.broadcastStatus();
       await this.updater.downloadUpdate();
     } catch (error) {

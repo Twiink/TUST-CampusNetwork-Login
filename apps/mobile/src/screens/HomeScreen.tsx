@@ -1,7 +1,7 @@
 import { matchWifiRule, resolveLoginAccounts } from '@repo/shared';
 import { AutoAuthStatus } from '../components/home/AutoAuthStatus';
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import {
   useSharedValue,
   useAnimatedStyle,
@@ -23,9 +23,10 @@ import {
 import { styles } from '../components/home/homeScreenStyles';
 
 const infoCardStyle = { padding: 16, marginBottom: 16 };
-export const HomeScreen: React.FC = () => {
+export const HomeScreen: React.FC<{ onConfigure?: () => void }> = ({ onConfigure }) => {
   const {
     networkStatus,
+    authSnapshot,
     ipAddress,
     login,
     logout,
@@ -154,7 +155,7 @@ export const HomeScreen: React.FC = () => {
   // 第二优先级：检查 WiFi 是否在配置列表中
   const wifiConfig = matchWifiRule(config.wifiList, { ...wifiInfo, ssid: wifiSSID });
 
-  if (!wifiConfig) {
+  if (!wifiConfig && !authSnapshot?.requiresAuth) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.bg }]}>
         <ScrollView
@@ -198,7 +199,7 @@ export const HomeScreen: React.FC = () => {
   }
 
   // 第三优先级：检查是否需要认证
-  if (!wifiConfig.requiresAuth) {
+  if (!(wifiConfig?.requiresAuth ?? authSnapshot?.requiresAuth)) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.bg }]}>
         <ScrollView
@@ -266,6 +267,9 @@ export const HomeScreen: React.FC = () => {
             hint='⚙️ 点击底部菜单的"配置设置"添加账户并关联'
             theme={theme}
           />
+          <Pressable accessibilityRole="button" onPress={onConfigure} style={styles.btn}>
+            <Text style={{ color: theme.colors.primary }}>添加认证账号</Text>
+          </Pressable>
         </ScrollView>
       </View>
     );
@@ -283,6 +287,7 @@ export const HomeScreen: React.FC = () => {
         <AutoAuthStatus />
 
         <NetworkStatusCard
+          authenticated={authSnapshot?.authenticated}
           networkStatus={networkStatus}
           statusText={getStatusText(networkStatus)}
           ipAddress={ipAddress}

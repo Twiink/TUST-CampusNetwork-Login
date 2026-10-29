@@ -5,11 +5,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecException } from 'node:child_process';
 
-const { execMock, nativeCurrentWifiMock, nativeNetworkInfoMock } = vi.hoisted(() => ({
-  execMock: vi.fn(),
-  nativeCurrentWifiMock: vi.fn(() => null),
-  nativeNetworkInfoMock: vi.fn((): Record<string, unknown> | null => null),
-}));
+const { execMock, nativeCurrentWifiMock, nativeNetworkInfoMock, networkInterfacesMock } =
+  vi.hoisted(() => ({
+    execMock: vi.fn(),
+    nativeCurrentWifiMock: vi.fn(() => null),
+    nativeNetworkInfoMock: vi.fn((): Record<string, unknown> | null => null),
+    networkInterfacesMock: vi.fn(),
+  }));
+
+vi.mock('node:os', () => ({ networkInterfaces: networkInterfacesMock }));
 
 vi.mock('node:child_process', () => ({
   default: { exec: execMock, execFile: execMock },
@@ -80,11 +84,82 @@ beforeEach(() => {
   vi.clearAllMocks();
   nativeCurrentWifiMock.mockReturnValue(null);
   nativeNetworkInfoMock.mockReturnValue(null);
+  networkInterfacesMock.mockReturnValue({});
   mockExecOutput('');
   resetNativeWifiModuleForTests();
 });
 
 describe('DesktopWifiAdapter.getNetworkInfo', () => {
+  it.each([true, false])(
+    'Linux fallback keeps WiFi addresses separate from VPN (IPv4 ready=%s)',
+    async (ready) => {
+      mockExecOutput(
+        [
+          'GENERAL.TYPE:tun\nIP4.ADDRESS[1]:10.88.0.2/24\nIP6.ADDRESS[1]:2001\\:db8\\:\\:99/64',
+          `GENERAL.TYPE:wifi\n${ready ? 'IP4.ADDRESS[1]:192.168.5.10/24\n' : ''}IP6.ADDRESS[1]:2001\\:db8\\:\\:10/64\nGENERAL.HWADDR:AA\\:BB\\:CC\\:DD\\:EE\\:FF`,
+        ].join('\n\n')
+      );
+      const info = await makeAdapter('linux').getNetworkInfo();
+      expect(info.ipv4).toBe(ready ? '192.168.5.10' : undefined);
+      expect(info.ipv6).toBe('2001:db8::10');
+      expect(info.mac).toBe('AA:BB:CC:DD:EE:FF');
+    }
+  );
+
+  it.each([true, false])(
+    'macOS fallback uses actual en1 WiFi interface (IPv4 ready=%s)',
+    async (ready) => {
+      const ipv4 = (address: string) => ({
+        family: 'IPv4',
+        address,
+        internal: false,
+        netmask: '255.255.255.0',
+        mac: 'aa:bb:cc:dd:ee:ff',
+      });
+      networkInterfacesMock.mockReturnValue({
+        en0: [ipv4('10.1.1.2')],
+        utun0: [ipv4('10.88.0.2')],
+        en1: [
+          ...(ready ? [ipv4('192.168.5.10')] : []),
+          { family: 'IPv6', address: '2001:db8::10', internal: false },
+        ],
+      });
+      execMock.mockImplementation((...args: unknown[]) => {
+        const command = args[0] as string;
+        const stdout = command.includes('-listallhardwareports')
+          ? 'Hardware Port: Ethernet\nDevice: en0\n\nHardware Port: Wi-Fi\nDevice: en1\n'
+          : command.includes('netstat')
+            ? 'default 192.168.5.1 UGSc en1'
+            : '';
+        extractCallback(args)(null, { stdout, stderr: '' });
+      });
+      const info = await makeAdapter('darwin').getNetworkInfo();
+      expect(info.ipv4).toBe(ready ? '192.168.5.10' : undefined);
+      expect(info.ipv6).toBe('2001:db8::10');
+      expect(execMock.mock.calls.some((call) => String(call[0]).includes('grep en1'))).toBe(true);
+    }
+  );
+
+  it.each([true, false])(
+    'Windows fallback does not borrow adjacent VPN adapter (IPv4 ready=%s)',
+    async (ready) => {
+      mockExecOutput(
+        Buffer.from(
+          [
+            'Windows IP Configuration',
+            '\nWireless LAN adapter Wi-Fi:\n\n',
+            ready ? '   IPv4 Address . . . : 192.168.5.10\n' : '',
+            '   IPv6 Address . . . : 2001:db8::10\n',
+            '\nEthernet adapter VPN:\n\n   IPv4 Address . . . : 10.88.0.2\n   IPv6 Address . . . : 2001:db8::99\n',
+          ].join('')
+        )
+      );
+      const info = await makeAdapter('win32').getNetworkInfo();
+      expect(info.ipv4).toBe(ready ? '192.168.5.10' : undefined);
+      expect(info.ipv6).toBe('2001:db8::10');
+    }
+  );
+
   it('原生 networkInfo 优先且 15s 内复用缓存，不触发 spawn', async () => {
     const adapter = makeAdapter('linux');
     nativeNetworkInfoMock.mockReturnValue({
@@ -237,6 +312,10 @@ describe('DesktopWifiAdapter.getCurrentWifi', () => {
       const command = typeof args[0] === 'string' ? args[0] : (args[0] as string[]).join(' ');
       void command;
       const callback = extractCallback(args);
+      if (command.includes('-listallhardwareports')) {
+        callback(null, { stdout: 'Hardware Port: Wi-Fi\nDevice: en0\n', stderr: '' });
+        return;
+      }
       if (command.startsWith('/System/Library')) {
         const error = new Error('timeout') as ExecException;
         callback(error, { stdout: '', stderr: 'timeout' });
@@ -346,4 +425,28 @@ describe('派生指标', () => {
     await expect(adapter.getSignalStrength()).resolves.toBe(0);
     await expect(adapter.getLinkSpeed()).resolves.toBe(0);
   });
+});
+
+it('invalidated in-flight network queries cannot refill the new cache', async () => {
+  const adapter = makeAdapter('linux');
+  let finish!: (value: { ipv4: string }) => void;
+  const fallback = vi
+    .spyOn(
+      adapter as unknown as { resolveFallbackNetworkInfo: () => Promise<{ ipv4: string }> },
+      'resolveFallbackNetworkInfo'
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    )
+    .mockResolvedValue({ ipv4: '192.168.2.2' });
+  const stale = adapter.getNetworkInfo();
+  adapter.invalidateCache();
+  expect(await adapter.getNetworkInfo()).toMatchObject({ ipv4: '192.168.2.2' });
+  finish({ ipv4: '10.1.1.2' });
+  expect(await stale).toMatchObject({ ipv4: '192.168.2.2' });
+  expect(await adapter.getNetworkInfo()).toMatchObject({ ipv4: '192.168.2.2' });
+  expect(fallback).toHaveBeenCalledTimes(2);
 });

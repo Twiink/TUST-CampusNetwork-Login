@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron';
 import { createLogger } from '@repo/shared';
 import { AutoLaunchService } from '../services/auto-launch';
+import type { ConfigApplyResult } from './config';
 import { IPC_CHANNELS } from './channels';
 
 /**
@@ -12,7 +13,8 @@ import { IPC_CHANNELS } from './channels';
  */
 export function registerAutoLaunchIPC(
   autoLaunchService: AutoLaunchService,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
+  updateSettings: (settings: { autoLaunch: boolean }) => Promise<ConfigApplyResult>
 ) {
   /**
    * 获取开机自启状态
@@ -29,16 +31,7 @@ export function registerAutoLaunchIPC(
   /**
    * 设置开机自启状态
    */
-  ipcMain.handle(IPC_CHANNELS.AUTO_LAUNCH_SET, async (_, enabled: boolean): Promise<boolean> => {
-    try {
-      const result = await autoLaunchService.setEnabled(enabled);
-      if (result) {
-        logger.info(`开机自启已${enabled ? '启用' : '禁用'}`);
-      }
-      return result;
-    } catch (error) {
-      logger.error('设置开机自启状态失败', error);
-      return false;
-    }
-  });
+  ipcMain.handle(IPC_CHANNELS.AUTO_LAUNCH_SET, (_, enabled: boolean) =>
+    updateSettings({ autoLaunch: enabled })
+  );
 }

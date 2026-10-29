@@ -31,10 +31,25 @@ export function useWifiReconnect() {
   const progressResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+    let eventReceived = false;
+    window.electronAPI.wifi.getReconnectProgress?.().then((progress) => {
+      if (mounted && !eventReceived && progress)
+        setState({
+          isReconnecting: ['connecting', 'authenticating', 'verifying'].includes(progress.status),
+          progress,
+          allFailed: progress.failedList ? { failedList: progress.failedList } : null,
+        });
+    });
     // 监听 WiFi 重连进度事件
     const unsubscribeProgress = window.electronAPI.on(
       IPC_EVENTS.WIFI_RECONNECT_PROGRESS,
       (...args: unknown[]) => {
+        eventReceived = true;
+        if (progressResetTimerRef.current) {
+          clearTimeout(progressResetTimerRef.current);
+          progressResetTimerRef.current = null;
+        }
         const progress = args[0] as WifiReconnectProgress;
         console.log('[useWifiReconnect] 收到重连进度:', progress);
 
@@ -51,7 +66,13 @@ export function useWifiReconnect() {
           // 如果状态是 connecting 或 failed，更新进度
           return {
             ...prev,
-            isReconnecting: progress.status === 'connecting',
+            allFailed:
+              progress.status === 'cancelled' || progress.status === 'connecting'
+                ? null
+                : progress.failedList
+                  ? { failedList: progress.failedList }
+                  : prev.allFailed,
+            isReconnecting: ['connecting', 'authenticating', 'verifying'].includes(progress.status),
             progress,
           };
         });
@@ -79,16 +100,17 @@ export function useWifiReconnect() {
         const failed = args[0] as WifiAllReconnectsFailed;
         console.log('[useWifiReconnect] 所有WiFi重连失败:', failed);
 
-        setState({
+        setState((previous) => ({
           isReconnecting: false,
-          progress: null,
+          progress: previous.progress,
           allFailed: failed,
-        });
+        }));
       }
     );
 
     // 清理监听器
     return () => {
+      mounted = false;
       if (progressResetTimerRef.current) {
         clearTimeout(progressResetTimerRef.current);
         progressResetTimerRef.current = null;

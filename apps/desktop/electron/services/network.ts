@@ -95,51 +95,12 @@ export function getLocalIPv4(): string | null {
   return firstWithIpv4?.ipv4 || null;
 }
 
-/** 判断是否私网 IPv4（10/8、172.16/12、192.168/16） */
-function isPrivateIPv4(ip: string): boolean {
-  const parts = ip.split('.').map(Number);
-  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) {
-    return false;
-  }
-  const [a, b] = parts;
-  if (a === 10) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  return false;
-}
-
-/**
- * 解析本机 IPv4（异步，登录前调用）
- * 优先级对齐生产验证的参考实现，并针对全局代理 TUN 做了加固：
- * 1. UDP 路由探测（通往认证服务器的出口网卡 IP，最准确）；
- *    若探测结果非私网地址（如 fake-ip 网段，被 TUN 劫持），降级处理
- * 2. 接口枚举优先 10.x（portal 固定在 10.x 内网，通往它的源地址必为 10.x）
- * 3. 探测结果（私网）或按接口名/首个接口的现有同步逻辑兜底
- */
-export async function resolveLocalIPv4(): Promise<string | null> {
-  const { host, port } = parsePortalEndpoint(DEFAULT_SERVER_URL);
-  const probed = await probeRouteIPv4(host, port);
-
-  // 回退：优先 10.x 地址（对齐参考实现的 selectIPv4）
-  const tenX = getNetworkInterfaces().find((i) => i.ipv4?.startsWith('10.'));
-
-  if (probed && isPrivateIPv4(probed)) {
-    // 探测到私网出口 IP，且无更优的 10.x 候选（或探测结果本身就是 10.x）
-    if (probed.startsWith('10.') || !tenX?.ipv4) {
-      return probed;
-    }
-    return tenX.ipv4;
-  }
-
-  if (tenX?.ipv4) {
-    return tenX.ipv4;
-  }
-
-  if (probed) {
-    return probed;
-  }
-
-  return getLocalIPv4();
+/** 按本次门户的系统路由解析地址，不按地址网段猜测网络接口。 */
+export async function resolveLocalIPv4(
+  serverUrl: string = DEFAULT_SERVER_URL
+): Promise<string | null> {
+  const { host, port } = parsePortalEndpoint(serverUrl);
+  return (await probeRouteIPv4(host, port)) ?? getLocalIPv4();
 }
 
 /**
@@ -161,15 +122,19 @@ export function getNetworkInfo(): {
  * 获取网络信息（异步，登录/重连前调用）
  * IPv4 走路由探测确保拿到出口 IP；IPv6/MAC 用同步枚举即可。
  */
-export async function resolveNetworkInfo(): Promise<{
+export async function resolveNetworkInfo(serverUrl: string = DEFAULT_SERVER_URL): Promise<{
   ipv4: string | null;
   ipv6: string | null;
   mac: string | null;
 }> {
-  const ipv4 = await resolveLocalIPv4();
+  const ipv4 = await resolveLocalIPv4(serverUrl);
   // IPv6 优先取与认证 IPv4 同一网卡的地址，避免 VPN/虚拟网卡的 IPv6 与 IPv4 错配
-  const ipv6 = (ipv4 ? getIPv6ForIPv4(ipv4) : null) ?? getLocalIPv6();
-  return { ipv4, ipv6, mac: getLocalMAC() };
+  const ipv6 = ipv4 ? getIPv6ForIPv4(ipv4) : null;
+  const mac =
+    getNetworkInterfaces()
+      .find((iface) => iface.ipv4 === ipv4)
+      ?.mac?.replace(/:/g, '') ?? null;
+  return { ipv4, ipv6, mac };
 }
 
 /**

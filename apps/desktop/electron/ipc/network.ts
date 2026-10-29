@@ -23,14 +23,16 @@ let lastNetworkStatus: NetworkStatus | null = null;
  */
 export function registerNetworkIPC(
   networkDetector: NetworkDetector,
-  logger: ReturnType<typeof createLogger>
+  logger: ReturnType<typeof createLogger>,
+  wifiManager?: WifiManager
 ) {
   /**
    * 获取网络状态
    */
   ipcMain.handle(IPC_CHANNELS.NETWORK_STATUS, async (): Promise<NetworkStatus> => {
     try {
-      const status = await networkDetector.getNetworkStatus();
+      const status = await networkDetector.getNetworkStatus({ fresh: true });
+      if (wifiManager) enrichStatusAuthFields(status, wifiManager);
       return status;
     } catch (error) {
       logger.error('IPC错误：获取网络状态失败', {
@@ -133,7 +135,8 @@ export function startNetworkPolling(
   intervalMs: number = 30000,
   autoReconnectService?: AutoReconnectService,
   enableHeartbeat: boolean = false,
-  wifiManager?: WifiManager
+  wifiManager?: WifiManager,
+  publish?: (status: NetworkStatus) => void
 ) {
   logger.info('===== 启动网络监控服务 =====', {
     心跳检测: enableHeartbeat ? '已启用' : '已禁用',
@@ -156,10 +159,11 @@ export function startNetworkPolling(
     lastNetworkStatus = status;
 
     // 广播给所有窗口
-    const windows = BrowserWindow.getAllWindows();
-    windows.forEach((win) => {
-      win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);
-    });
+    if (publish) publish(status);
+    else
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send(IPC_EVENTS.NETWORK_STATUS_CHANGED, status);
+      });
 
     // 如果有自动重连服务，处理状态变化
     if (autoReconnectService) {

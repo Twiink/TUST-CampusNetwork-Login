@@ -7,7 +7,7 @@
  */
 export interface StorageAdapter {
   /**
-   * 获取值
+   * 获取值；null 仅表示不存在，读取/解析失败必须抛错。
    */
   get<T>(key: string): Promise<T | null>;
 

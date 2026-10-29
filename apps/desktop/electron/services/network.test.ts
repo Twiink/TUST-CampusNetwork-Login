@@ -237,7 +237,13 @@ describe('resolveLocalIPv4', () => {
     await expect(resolveLocalIPv4()).resolves.toBe('10.10.5.24');
   });
 
-  it('探测到非 10.x 私网且存在 10.x 接口时优先 10.x', async () => {
+  it('探测本次账号门户，而不是固定校园门户', async () => {
+    const { socket } = stubUdpProbe('192.168.1.23');
+    await resolveLocalIPv4('http://192.0.2.20:8080');
+    expect(socket.connect).toHaveBeenCalledWith(8080, '192.0.2.20', expect.any(Function));
+  });
+
+  it('保留实际门户路由结果，不被无关 10.x 接口覆盖', async () => {
     stubUdpProbe('192.168.1.23');
     osMock.networkInterfaces.mockReturnValue({
       ...makeOsInterfaces(),
@@ -254,7 +260,7 @@ describe('resolveLocalIPv4', () => {
       ],
     } as never);
 
-    await expect(resolveLocalIPv4()).resolves.toBe('10.3.2.1');
+    await expect(resolveLocalIPv4()).resolves.toBe('192.168.1.23');
   });
 
   it('探测失败时回退到 10.x 接口枚举', async () => {

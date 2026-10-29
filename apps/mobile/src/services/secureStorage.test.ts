@@ -1,5 +1,5 @@
 /**
- * 安全存储装饰器测试：加密往返、旧明文迁移、条目缺失回退、remove/clear 清理
+ * 安全存储装饰器测试：加密往返、迁移、提交失败与清理
  */
 
 import * as Keychain from 'react-native-keychain';
@@ -87,14 +87,30 @@ describe('createSecureStorage', () => {
     expect(secondRead?.accounts[0].password).toBe('secret-pass');
   });
 
-  it('keychain 条目丢失时回退为空字符串而非占位符', async () => {
+  it('keychain 条目丢失时报告读取失败并保留配置', async () => {
     await storage.set('app_config', sampleConfig);
     const persisted = await inner.get<typeof sampleConfig>('app_config');
     const service = (persisted?.accounts[0].password as string).replace('__keychain__:', '');
     await Keychain.resetGenericPassword({ service });
 
-    const loaded = await storage.get<typeof sampleConfig>('app_config');
-    expect(loaded?.accounts[0].password).toBe('');
+    await expect(storage.get('app_config')).rejects.toThrow('密码条目不存在');
+    expect(await inner.get('app_config')).toEqual(persisted);
+  });
+
+  it('读取旧下标引用，成功保存后迁移并保持账号和关联顺序', async () => {
+    const service = 'netmate:secure:accounts.0.password';
+    await Keychain.setGenericPassword('password', sampleConfig.accounts[0].password, { service });
+    const legacy = {
+      ...sampleConfig,
+      accounts: [{ ...sampleConfig.accounts[0], password: `__keychain__:${service}` }],
+    };
+    await inner.set('app_config', legacy);
+    expect(await storage.get('app_config')).toEqual(sampleConfig);
+    await storage.set('app_config', await storage.get('app_config'));
+    const next = await inner.get<typeof sampleConfig>('app_config');
+    expect(next!.accounts[0].password).not.toBe(legacy.accounts[0].password);
+    expect(await storage.get('app_config')).toEqual(sampleConfig);
+    expect(await Keychain.getGenericPassword({ service })).toBe(false);
   });
 
   it('remove 时清理对应 keychain 条目', async () => {
@@ -124,7 +140,8 @@ describe('createSecureStorage', () => {
 
     expect(await Keychain.getGenericPassword({ service: removedService })).toBe(false);
     // wifi 密码条目仍保留
-    const wifiService = (persisted?.wifiList[0].password as string).replace('__keychain__:', '');
+    const committed = await inner.get<typeof sampleConfig>('app_config');
+    const wifiService = (committed?.wifiList[0].password as string).replace('__keychain__:', '');
     const wifiEntry = await Keychain.getGenericPassword({ service: wifiService });
     expect(wifiEntry !== false && wifiEntry.password).toBe('wifi-pass');
   });
@@ -148,14 +165,14 @@ describe('createSecureStorage', () => {
     expect(await inner.get('app_config')).toBeNull();
   });
 
-  it('keychain 读取抛错时回退为空字符串', async () => {
+  it('keychain 读取抛错后可重试，不替换真实密码', async () => {
     await storage.set('app_config', sampleConfig);
 
     const { getGenericPassword } = jest.requireMock('react-native-keychain');
     getGenericPassword.mockRejectedValueOnce(new Error('read failed'));
 
-    const loaded = await storage.get<typeof sampleConfig>('app_config');
-    expect(loaded?.accounts[0].password).toBe('');
+    await expect(storage.get('app_config')).rejects.toThrow('read failed');
+    expect(await storage.get('app_config')).toEqual(sampleConfig);
   });
 
   it('深层嵌套的 userPassword 字段同样被保护', async () => {
@@ -186,7 +203,7 @@ describe('createSecureStorage', () => {
   it('同一配置反复保存，旧引用条目被清理不累积', async () => {
     await storage.set('app_config', sampleConfig);
 
-    // 第二次保存带新密码（数组顺序不变 → 引用相同），随后删除账户
+    // 第二次保存使用独立引用，成功提交后清理旧引用。
     const next = {
       ...sampleConfig,
       accounts: [{ ...sampleConfig.accounts[0], password: 'rotated-pass' }],
@@ -208,5 +225,77 @@ describe('createSecureStorage', () => {
     await storage.set('app_config', config);
     const persisted = await inner.get<typeof config>('app_config');
     expect(persisted?.accounts[0].password).toBe('');
+  });
+
+  it.each(['delete', 'reorder'])(
+    'JSON 保存失败时 %s 不改变旧账号与密码的对应关系',
+    async operation => {
+      const original = {
+        ...sampleConfig,
+        accounts: [
+          sampleConfig.accounts[0],
+          { ...sampleConfig.accounts[0], id: 'a2', password: 'second' },
+        ],
+      };
+      await storage.set('app_config', original);
+      const before = await inner.get('app_config');
+      jest.spyOn(inner, 'set').mockRejectedValueOnce(new Error('disk full'));
+      const accounts =
+        operation === 'delete' ? original.accounts.slice(1) : [...original.accounts].reverse();
+      await expect(storage.set('app_config', { ...original, accounts })).rejects.toThrow(
+        'disk full'
+      );
+      expect(await inner.get('app_config')).toEqual(before);
+      expect(await storage.get('app_config')).toEqual(original);
+    }
+  );
+
+  it('部分秘密写入失败后只清理新批次，旧配置仍可读取', async () => {
+    await storage.set('app_config', sampleConfig);
+    const write = Keychain.setGenericPassword as jest.Mock;
+    const originalWrite = write.getMockImplementation()!;
+    write.mockImplementation((username, password, options) => {
+      if (options?.service?.includes('wifiList.0.password'))
+        return Promise.reject(new Error('write failed'));
+      return originalWrite(username, password, options);
+    });
+    await expect(
+      storage.set('app_config', {
+        ...sampleConfig,
+        accounts: [{ ...sampleConfig.accounts[0], password: 'changed' }],
+      })
+    ).rejects.toThrow('write failed');
+    write.mockImplementation(originalWrite);
+    expect(await storage.get('app_config')).toEqual(sampleConfig);
+  });
+
+  it('清理失败不撤销成功提交，保留索引供下次保存清理', async () => {
+    await storage.set('app_config', sampleConfig);
+    const before = await inner.get<typeof sampleConfig>('app_config');
+    const oldService = before!.accounts[0].password.replace('__keychain__:', '');
+    const reset = Keychain.resetGenericPassword as jest.Mock;
+    const originalReset = reset.getMockImplementation()!;
+    reset.mockImplementation(options =>
+      options?.service === oldService
+        ? Promise.reject(new Error('cleanup failed'))
+        : originalReset(options)
+    );
+    const next = { ...sampleConfig, accounts: [] };
+    await expect(storage.set('app_config', next)).resolves.toBeUndefined();
+    expect(await storage.get('app_config')).toEqual(next);
+    const index = await Keychain.getGenericPassword({ service: 'netmate:secure-index' });
+    expect(index && JSON.parse(index.password)).toContain(oldService);
+    reset.mockImplementation(originalReset);
+    await storage.set('app_config', next);
+    expect(await Keychain.getGenericPassword({ service: oldService })).toBe(false);
+  });
+
+  it.each(['remove', 'clear'] as const)('%s 提交失败时不删除秘密', async operation => {
+    await storage.set('app_config', sampleConfig);
+    jest.spyOn(inner, operation).mockRejectedValueOnce(new Error('delete failed'));
+    await expect(
+      operation === 'remove' ? storage.remove('app_config') : storage.clear()
+    ).rejects.toThrow('delete failed');
+    expect(await storage.get('app_config')).toEqual(sampleConfig);
   });
 });

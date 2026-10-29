@@ -102,6 +102,22 @@ test('WiFi 保存失败显示错误并保留弹窗，重试可明确清除密码
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(saved?.wifiList[0]).toMatchObject({ id: 'w1', password: '', linkedAccountIds: ['a1'] });
 });
+test.each(['EAP', 'WEP'])('编辑 %s 保留认证入口但禁用自动连接', security => {
+  const saved = config();
+  saved.wifiList[0].security = security;
+  saved.wifiList[0].autoConnect = false;
+  render(
+    <ConfigEditor
+      config={saved}
+      target={{ kind: 'wifi', id: 'w1' }}
+      onClose={jest.fn()}
+      onSave={jest.fn()}
+    />
+  );
+  expect(screen.getByLabelText('编辑自动连接').props.disabled).toBe(true);
+  expect(screen.getByLabelText('编辑自动连接').props.value).toBe(false);
+  expect(screen.getByLabelText('编辑认证要求').props.value).toBe(true);
+});
 test('扫描权限错误可重试，已保存网络进入编辑', async () => {
   (scanWifiNetworks as jest.Mock)
     .mockRejectedValueOnce(new Error('定位权限被拒绝'))
@@ -127,4 +143,24 @@ test('更新下载失败和取消均可重试，安装授权有明确入口', as
   fireEvent.press(screen.getByText('下载更新'));
   fireEvent.press(await screen.findByText('取消下载'));
   await waitFor(() => expect(Updates.cancelUpdateDownload).toHaveBeenCalled());
+});
+
+test.each([
+  [2412, '2.4GHz'],
+  [5180, '5GHz'],
+  [5935, '6GHz'],
+  [7115, '6GHz'],
+  [0, '未知'],
+])('N6: %s MHz 的移动端频段为 %s', (frequency, band) => {
+  const { WifiInfoCard } = require('../src/components/wifi/WifiInfoCard');
+  render(
+    <WifiInfoCard
+      wifiInfo={{ connected: true, frequency }}
+      theme={jest.requireActual('../src/constants/theme').getTheme('dark')}
+      onRefresh={jest.fn()}
+      refreshing={false}
+    />
+  );
+  expect(screen.getAllByText(band).length).toBeGreaterThan(0);
+  expect(screen.queryByText(/0 Mbps/)).toBeNull();
 });

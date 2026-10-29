@@ -1,0 +1,55 @@
+name: NetMate
+options:
+  deploymentTarget:
+    macOS: '27.0'
+packages:
+  NetMateIPC:
+    path: .
+settings:
+  base:
+    CODE_SIGN_IDENTITY: '-'
+    SWIFT_VERSION: '5.0'
+targets:
+  NetMateApplication:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/NetMate
+    dependencies:
+      - package: NetMateIPC
+        product: NetMateIPC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.netmate.native
+        PRODUCT_NAME: NetMate
+    info:
+      path: generated/Info.plist
+      properties:
+        NSLocationWhenInUseUsageDescription: 读取 WiFi 名称以应用对应的连接和认证规则
+    postBuildScripts:
+      - name: Include Rust background agent
+        script: |
+          cp "${NETMATE_AGENT_BINARY:-$SRCROOT/../../target/release/netmate-agent}" "$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/netmate-agent"
+          cp "$SRCROOT/.build/release/netmate-host" "$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/netmate-host"
+  NativeUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - Tests/NativeUITests
+    dependencies:
+      - target: NetMateApplication
+      - package: NetMateIPC
+        product: NetMateIPC
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.netmate.native.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  NativeUITests:
+    build:
+      targets:
+        NetMateApplication: all
+        NativeUITests: [test]
+    test:
+      targets:
+        - NativeUITests

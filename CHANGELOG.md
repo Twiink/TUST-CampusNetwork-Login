@@ -1,5 +1,12 @@
 # 更新日志 (CHANGELOG)
 
+## 2.0.0 — 原生替代验收中
+
+- 新增 Rust 独立后台与 GTK4、Win32、AppKit 原生界面；Android 改为 Kotlin Views 与独立 Binder 服务。
+- 原生界面沿用原侧栏/底部导航、蓝色卡片和日夜主题，主题切换保留当前页面与输入；视觉截图及新包验收留在 CI。
+- 新增版本化本地协议、系统凭据、SQLite 索引日志、流式签名更新、原生打包和逐平台测量工具。
+- 保留认证/恢复行为及现有功能修复；完成状态与实测限制见 `docs/NATIVE-ACCEPTANCE.md`。
+
 所有显著的变更都会记录在此文件。每次发布 GitHub Release 后，Release 说明会自动追加到对应版本条目下。
 
 本项目遵循[语义化版本控制](https://semver.org/lang/zh-CN/) (Semantic Versioning)。
