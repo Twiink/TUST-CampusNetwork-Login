@@ -9,7 +9,7 @@ use windows::{
     Win32::{
         Foundation::*,
         Graphics::Gdi::*,
-        System::LibraryLoader::GetModuleHandleW,
+        System::{LibraryLoader::GetModuleHandleW, SystemServices::SS_OWNERDRAW},
         UI::{Controls::*, HiDpi::*, WindowsAndMessaging::*},
     },
     core::{PCWSTR, PWSTR, w},
@@ -76,13 +76,20 @@ unsafe fn child(
     } else {
         WS_TABSTOP.0
     };
+    let owner_static = id == 0 || matches!(id, 80..=83 | 90 | 900 | 902);
     let (x, y) = if chrome { (x, y) } else { (x + 224, y + 80) };
     let text = wide(text);
     let result = CreateWindowExW(
         WINDOW_EX_STYLE::default(),
         class,
         PCWSTR(text.as_ptr()),
-        WINDOW_STYLE(WS_CHILD.0 | WS_VISIBLE.0 | tab_stop | extra),
+        WINDOW_STYLE(
+            WS_CHILD.0
+                | WS_VISIBLE.0
+                | tab_stop
+                | extra
+                | if owner_static { SS_OWNERDRAW.0 } else { 0 },
+        ),
         scale(x, dpi),
         scale(y - if fixed { 0 } else { scroll }, dpi),
         scale(width, dpi),
@@ -1259,7 +1266,52 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
         WM_DRAWITEM => {
             let item = &*(l.0 as *const DRAWITEMSTRUCT);
             let s = UI.get().unwrap().lock().unwrap();
-            appearance::button(item, s.page, s.dark, HFONT(s.normal_font as *mut _), s.dpi);
+            let mut root = RECT::default();
+            let _ = GetClientRect(h, &mut root);
+            if let Some(control) = s
+                .children
+                .iter()
+                .find(|c| c.handle == item.hwndItem.0 as isize)
+            {
+                let content_scale = appearance::content_scale(root.right, s.dpi);
+                let x = if control.fixed {
+                    control.x
+                } else {
+                    224 + ((control.x - 224) as f64 * content_scale) as i32
+                };
+                let y = if control.fixed && item.CtlID == 901 {
+                    (root.bottom * 96 / s.dpi as i32 - 92).max(380)
+                } else if control.fixed {
+                    control.y
+                } else {
+                    control.y - s.scroll
+                };
+                let dc = SaveDC(item.hDC);
+                let _ = SetViewportOrgEx(item.hDC, -scale(x, s.dpi), -scale(y, s.dpi), None);
+                appearance::background(
+                    item.hDC,
+                    root,
+                    Palette::new(s.dark),
+                    s.dpi,
+                    &s.cards,
+                    s.scroll,
+                );
+                let _ = RestoreDC(item.hDC, dc);
+                if item.CtlType == ODT_STATIC {
+                    let font = if matches!(item.CtlID, 80 | 902) {
+                        s.title_font
+                    } else if item.CtlID == 900 {
+                        s.brand_font
+                    } else if control.font_role == 1 {
+                        s.card_font
+                    } else {
+                        s.normal_font
+                    };
+                    appearance::static_text(item, &s, HFONT(font as *mut _));
+                } else {
+                    appearance::button(item, s.page, s.dark, HFONT(s.normal_font as *mut _), s.dpi);
+                }
+            }
             LRESULT(1)
         }
         WM_CTLCOLORSTATIC | WM_CTLCOLORBTN | WM_CTLCOLOREDIT | WM_CTLCOLORLISTBOX => {

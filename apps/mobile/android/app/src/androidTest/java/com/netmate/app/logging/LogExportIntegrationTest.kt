@@ -10,7 +10,9 @@ import java.io.StringWriter
 @RunWith(AndroidJUnit4::class)
 class LogExportIntegrationTest {
     @Test fun indexedHistoryPagesAndExportsBeyondTheUiLimit() {
-        val context = InstrumentationRegistry.getInstrumentation().context
+        // Instrumentation runs as the target app UID; its own APK context has a
+        // different data directory and cannot own the database being tested.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         context.deleteDatabase("native-logs-v1.db")
         val journal = SqliteJournal(context)
         val entries = (0 until 1200).map { JSONObject().put("level", "info").put("source", "test").put("message", "record $it password=fixture-log-value").put("data",JSONObject().put("sequence",it)) }

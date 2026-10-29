@@ -37,8 +37,9 @@ def main():
                     window.child_window(title='运行日志', control_type='Button').click()
                     search = window.child_window(auto_id='120', control_type='Edit')
                     search.set_edit_text('draft-filter')
+                    assert search.get_value() == 'draft-filter', 'UI Automation could not populate the filter'
                     window.child_window(title='切换至白天模式', control_type='Button').click()
-                    assert search.window_text() == 'draft-filter', 'Theme switch discarded an input'
+                    assert search.get_value() == 'draft-filter', 'Theme switch discarded an input'
                     assert Path(profile, 'appearance-v1').read_text().strip() == 'light'
                 else:
                     window.child_window(title='切换至黑夜模式', control_type='Button').wait('visible', timeout=5)

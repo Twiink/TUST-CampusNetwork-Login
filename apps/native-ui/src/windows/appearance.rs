@@ -353,3 +353,41 @@ pub unsafe fn button(item: &DRAWITEMSTRUCT, page: u16, dark: bool, font: HFONT, 
     }
     SelectObject(item.hDC, old);
 }
+pub unsafe fn static_text(item: &DRAWITEMSTRUCT, state: &Ui, font: HFONT) {
+    let p = Palette::new(state.dark);
+    let color = match item.CtlID {
+        900 => rgb(if state.dark { 0x38bdf8 } else { 0x0369a1 }),
+        902 => rgb(if state.dark { 0xe2e8f0 } else { 0x0c4a6e }),
+        80 if state.page == 1 => rgb(if state.state["internetReachable"] == true {
+            if state.dark { 0x4ade80 } else { 0x15803d }
+        } else if state.dark {
+            0xfca5a5
+        } else {
+            0xb91c1c
+        }),
+        83 | 90 => p.secondary,
+        _ => p.text,
+    };
+    let dc = item.hDC;
+    let old = SelectObject(dc, font.into());
+    let _ = SetTextColor(dc, color);
+    let _ = SetBkMode(dc, TRANSPARENT);
+    let mut text = vec![0u16; (GetWindowTextLengthW(item.hwndItem) + 1).max(1) as usize];
+    let count = GetWindowTextW(item.hwndItem, &mut text);
+    text.truncate(count.max(0) as usize);
+    let mut rect = item.rcItem;
+    DrawTextW(
+        dc,
+        &mut text,
+        &mut rect,
+        DT_LEFT
+            | DT_TOP
+            | DT_NOPREFIX
+            | if matches!(item.CtlID, 80 | 900 | 902) {
+                DT_SINGLELINE | DT_END_ELLIPSIS
+            } else {
+                DT_WORDBREAK
+            },
+    );
+    SelectObject(dc, old);
+}
