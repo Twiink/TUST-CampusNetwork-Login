@@ -1,8 +1,14 @@
 name: Native packaging tools
 on:
   workflow_dispatch:
+    inputs:
+      artifact_run:
+        description: Optional native artifact run to verify disk image creation
+        type: string
+        default: ''
 permissions:
   contents: read
+  actions: read
 jobs:
   macos-image-tools:
     runs-on: xcode-27
@@ -15,10 +21,12 @@ jobs:
           hdiutil create -help || true
       - uses: actions/checkout@v6
       - name: Verify new disk image packaging with the native artifact
+        if: ${{ inputs.artifact_run != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_RUN: ${{ inputs.artifact_run }}
         run: |
-          gh run download 40875059548 --name native-macos-arm64 --dir previous-native
+          gh run download "$ARTIFACT_RUN" --name native-macos-arm64 --dir previous-native
           mkdir -p image-source
           ditto -x -k previous-native/NetMate-2.0.0-macos-arm64.zip image-source
           ln -s /Applications image-source/Applications
