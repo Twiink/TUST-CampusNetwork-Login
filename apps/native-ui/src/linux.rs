@@ -406,6 +406,13 @@ fn detail(text: &str) -> gtk::Label {
     label.set_selectable(true);
     label
 }
+fn metric(value: &Value) -> String {
+    if value.is_null() {
+        "未知".into()
+    } else {
+        value.to_string()
+    }
+}
 fn refresh_home(ui: &Ui) {
     let state = &ui.network;
     let n = &state["network"];
@@ -433,9 +440,9 @@ fn refresh_home(ui: &Ui) {
         n["ipv4"].as_str().unwrap_or("未知"),
         n["ipv6"].as_str().unwrap_or("未知"),
         n["bssid"].as_str().unwrap_or("未知"),
-        n["rssi"],
-        n["frequency"],
-        n["linkSpeed"]
+        metric(&n["rssi"]),
+        metric(&n["frequency"]),
+        metric(&n["linkSpeed"])
     ));
     let account = ui.config["accounts"].as_array().and_then(|accounts| {
         accounts

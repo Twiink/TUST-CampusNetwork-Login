@@ -123,8 +123,9 @@ final class App:NSObject,NSApplicationDelegate,NSWindowDelegate,NSTableViewDataS
     }
     func refreshStatus(){
         let n=snapshot["network"] as? [String:Any] ?? [:];let online=snapshot["internetReachable"] as? Bool ?? false
+        func metric(_ key:String)->String{guard let value=n[key],!(value is NSNull)else{return "未知"};return "\(value)"}
         status.stringValue=online ? "已连接":(["connecting","authenticating"].contains(snapshot["phase"] as? String ?? "") ? "连接中…":"未连接");status.textColor=online ? NetMateColors.success:NetMateColors.danger
-        wifiStatus.stringValue="\(n["ssid"] ?? "未连接 WiFi")\nIPv4  \(n["ipv4"] ?? "未知")    IPv6  \(n["ipv6"] ?? "未知")\nBSSID  \(n["bssid"] ?? "未知")\n信号 \(n["rssi"] ?? "未知") dBm    频率 \(n["frequency"] ?? "未知") MHz    速率 \(n["linkSpeed"] ?? "未知") Mbps"
+        wifiStatus.stringValue="\(n["ssid"] ?? "未连接 WiFi")\nIPv4  \(n["ipv4"] ?? "未知")    IPv6  \(n["ipv6"] ?? "未知")\nBSSID  \(n["bssid"] ?? "未知")\n信号 \(metric("rssi")) dBm    频率 \(metric("frequency")) MHz    速率 \(metric("linkSpeed")) Mbps"
         let account=list("accounts").first{$0["id"] as? String==config["currentAccountId"] as? String};accountStatus.stringValue=account.map{"\($0["username"] ?? "")\n\($0["serverUrl"] ?? "")"} ?? "尚未配置认证账号，请添加账号并关联 WiFi。"
         let settings=config["settings"] as? [String:Any] ?? [:];heartbeatStatus.stringValue="\((settings["enableHeartbeat"] as? Bool ?? false) ? "心跳检测已开启":"心跳检测已关闭") · 每 \(settings["heartbeatIntervalSeconds"] ?? 30) 秒检测一次\n\(snapshot["message"] ?? "等待网络状态")"
     }

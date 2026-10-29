@@ -17,7 +17,7 @@ internal class SqliteJournal(context: Context) : SQLiteOpenHelper(context, "nati
     init { setWriteAheadLoggingEnabled(true) }
     override fun onConfigure(db: SQLiteDatabase) {
         db.execSQL("PRAGMA cache_size=-512")
-        db.execSQL("PRAGMA mmap_size=0")
+        db.rawQuery("PRAGMA mmap_size=0", null).use { it.moveToFirst() }
         db.rawQuery("PRAGMA journal_size_limit=1048576", null).use { it.moveToFirst() }
         db.rawQuery("PRAGMA wal_autocheckpoint=128", null).use { it.moveToFirst() }
         db.rawQuery("PRAGMA max_page_count=8192", null).use { it.moveToFirst() }

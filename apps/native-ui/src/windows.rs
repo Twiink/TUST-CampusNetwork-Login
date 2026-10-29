@@ -52,6 +52,13 @@ const REPLY: u32 = WM_APP + 20;
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(Some(0)).collect()
 }
+fn metric(value: &Value) -> String {
+    if value.is_null() {
+        "未知".into()
+    } else {
+        value.to_string()
+    }
+}
 unsafe fn child(
     parent: HWND,
     class: PCWSTR,
@@ -442,9 +449,9 @@ unsafe fn refresh_home(h: HWND) {
                 n["ipv4"].as_str().unwrap_or("未知"),
                 n["ipv6"].as_str().unwrap_or("未知"),
                 n["bssid"].as_str().unwrap_or("未知"),
-                n["rssi"],
-                n["frequency"],
-                n["linkSpeed"]
+                metric(&n["rssi"]),
+                metric(&n["frequency"]),
+                metric(&n["linkSpeed"])
             ),
         ),
         (
@@ -457,7 +464,7 @@ unsafe fn refresh_home(h: HWND) {
                         a["serverUrl"].as_str().unwrap_or("")
                     )
                 })
-                .unwrap_or_else(|| "尚未配置认证账号，请添加账号并关联 WiFi。".into()),
+                .unwrap_or_else(|| "尚未配置认证账号。\r\n请添加账号并关联 WiFi。".into()),
         ),
         (
             83,

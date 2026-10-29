@@ -210,10 +210,11 @@ class MainActivity : Activity() {
     }
     private fun updateStatus(){
         val network=status.optJSONObject("network") ?: JSONObject();val progress=status.optJSONObject("progress") ?: JSONObject()
+        fun metric(key:String):Any=if(network.isNull(key))"未知"else network.get(key)
         val online=status.optBoolean("internetReachable");stateLabel?.text=if(online)"已连接"else if(status.optBoolean("authenticating"))"连接中…"else"未连接";stateLabel?.setTextColor(if(online)appearance.success else appearance.danger)
         stateLabel?.background=appearance.surface(50,((if(online)appearance.success else appearance.danger)and 0x00ffffff)or 0x20000000)
         connectionAction?.let{button->val connecting=status.optBoolean("authenticating");button.text=if(connecting)"正在连接…"else if(status.optBoolean("authenticated"))"注销登录"else"立即连接";button.isEnabled=!connecting;paintAction(button)}
-        wifiLabel?.text="${network.optString("ssid","未连接 WiFi")}\nIPv4  ${network.optString("ipv4","未知")}\nIPv6  ${network.optString("ipv6","未知")}\nBSSID  ${network.optString("bssid","未知")}\n信号  ${network.opt("signal") ?: "未知"}    频率  ${network.opt("frequency") ?: "未知"} MHz\n速率  ${network.opt("linkSpeed") ?: "未知"} Mbps"
+        wifiLabel?.text="${network.optString("ssid","未连接 WiFi")}\nIPv4  ${network.optString("ipv4","未知")}\nIPv6  ${network.optString("ipv6","未知")}\nBSSID  ${network.optString("bssid","未知")}\n信号  ${metric("signal")}    频率  ${metric("frequency")} MHz\n速率  ${metric("linkSpeed")} Mbps"
         val account=items("accounts").firstOrNull{it.optString("id")==config.optString("currentAccountId")}
         accountLabel?.text=account?.let{"用户名  ${it.optString("username")}\n服务器  ${it.optString("serverUrl")}"} ?: "尚未配置认证账号，请在配置设置中添加账号并关联 WiFi。"
         heartbeatLabel?.text="${if(config.optBoolean("heartbeatEnabled",true))"心跳检测已开启"else"心跳检测已关闭"}  ·  每 ${config.optInt("heartbeatIntervalSeconds",30)} 秒检测一次\n${if(status.optBoolean("paused"))"自动认证已暂停"else if(status.optBoolean("authenticated"))"门户已认证"else progress.optString("reason","等待网络状态")}";heartbeatLabel?.setTextColor(appearance.secondary)
