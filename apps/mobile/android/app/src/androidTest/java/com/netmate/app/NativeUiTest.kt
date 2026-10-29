@@ -49,6 +49,10 @@ class NativeUiTest {
             device.pressHome()
             context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             assertNotNull(device.wait(Until.findObject(By.desc("配置设置")), 10000))
+            assertNotNull(device.wait(Until.findObject(By.scrollable(true)),5000))
+            // A rapid Home/reopen can retain the scroll position without stopping
+            // the Activity. The first configuration card can be outside the viewport.
+            UiScrollable(UiSelector().scrollable(true)).scrollToBeginning(8)
             assertNotNull(device.wait(Until.findObject(By.text("账号配置")), 5000))
             assertNotNull(device.findObject(By.desc("切换至黑夜模式")))
         }

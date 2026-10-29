@@ -32,3 +32,4 @@ jobs:
           ln -s /Applications image-source/Applications
           diskutil image create from --volumeName NetMate --format UDZO image-source NetMate.dmg
           test -s NetMate.dmg
+          python3 tools/native/macos_launch_diagnostic.py image-source/NetMate.app

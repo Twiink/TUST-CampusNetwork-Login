@@ -32,7 +32,7 @@ def main():
             while time.monotonic()<deadline:
                 ready=Path(profile,'ui-ready').exists()if args.ui else subprocess.run([str(args.binary.resolve()),'--status'],env=env,capture_output=True).returncode==0
                 if ready:break
-                if process.poll()is not None:raise RuntimeError('Agent exited before ready')
+                if process.poll()is not None:raise RuntimeError(f'Agent exited before ready (exit {process.returncode})')
                 time.sleep(.02)
             else:raise RuntimeError('Application did not become ready')
             time.sleep(args.warmup);known={};cpu={};samples=[]
@@ -57,5 +57,9 @@ def main():
             duration=samples[-1]['elapsed']-samples[0]['elapsed']
             result=dict(os=platform.platform(),machine=platform.machine(),binarySha256=hashlib.sha256(args.binary.read_bytes()).hexdigest(),mode='foreground'if args.ui else'background',debugger=False,memoryMetric='privateBytes'if system=='Windows'else'physicalFootprintBytes',peakMemoryBytes=max(s['memoryBytes']for s in samples),peakRssBytes=max(s['rssBytes']for s in samples),cpuSingleCorePercent=(samples[-1]['cpuSeconds']-samples[0]['cpuSeconds'])/duration*100,samples=samples,gpuBytes=None,gpuNote='Measure separately with platform GPU tools; no GPU estimate included in process memory')
             args.out.parent.mkdir(parents=True,exist_ok=True);args.out.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({k:v for k,v in result.items()if k!='samples'}))
-        finally:stop(process)
+        finally:
+            log.seek(0)
+            args.out.parent.mkdir(parents=True,exist_ok=True)
+            args.out.with_suffix('.stderr.log').write_bytes(log.read(262144))
+            stop(process)
 if __name__=='__main__':main()
