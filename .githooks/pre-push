@@ -1,16 +1,18 @@
 #!/usr/bin/env sh
 
 set -eu
-
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 . "$ROOT_DIR/shell/git-hooks/common.sh"
 cd "$ROOT_DIR"
 
-ensure_command pnpm || exit 1
-
-print_section '推送前检查（与 CI 质量门禁对齐）'
-pnpm install --frozen-lockfile --prefer-offline
-pnpm lint
-pnpm type-check
-
-printf '%s\n' '推送前检查通过。'
+# Product compilation, package builds and E2E belong to GitHub Actions.
+# cargo fmt invokes rustfmt only and does not compile the workspace.
+print_section '推送前源码检查（构建与 E2E 交给远程 CI）'
+git diff --check HEAD
+if command -v cargo >/dev/null 2>&1; then
+  cargo fmt --all -- --check
+fi
+if command -v actionlint >/dev/null 2>&1; then
+  actionlint
+fi
+printf '%s\n' '源码检查通过；远程 CI 将执行编译、测试、性能与安装包验证。'
