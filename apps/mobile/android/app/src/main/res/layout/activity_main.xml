@@ -1,18 +1,24 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root" android:orientation="vertical"
     android:layout_width="match_parent" android:layout_height="match_parent">
-    <LinearLayout android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingStart="24dp" android:paddingEnd="24dp" android:paddingTop="24dp" android:paddingBottom="16dp"
+    <!-- .phone .rail: brand on the left, day/night toggle on the right. Top padding adds the status bar inset. -->
+    <LinearLayout android:id="@+id/top_bar" android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingStart="18dp" android:paddingEnd="14dp" android:paddingTop="14dp" android:paddingBottom="10dp"
         android:layout_width="match_parent" android:layout_height="wrap_content">
-        <TextView android:id="@+id/page_title" android:layout_width="0dp" android:layout_weight="1"
-            android:layout_height="wrap_content" android:text="运行状态" android:textSize="28sp" android:textStyle="bold" />
-        <Button android:id="@+id/appearance_toggle" android:layout_width="80dp" android:layout_height="48dp"
-            android:minWidth="48dp" android:minHeight="48dp" android:padding="4dp" android:contentDescription="切换白天、黑夜模式" />
+        <TextView android:id="@+id/brand" android:layout_width="0dp" android:layout_weight="1"
+            android:layout_height="wrap_content" android:text="NetMate" android:textSize="18sp" android:textFontWeight="800"
+            android:drawablePadding="10dp" android:gravity="center_vertical" android:importantForAccessibility="no" />
+        <com.netmate.app.DayNightToggle android:id="@+id/appearance_toggle" android:layout_width="96dp" android:layout_height="48dp"
+            android:minWidth="48dp" android:minHeight="48dp" android:contentDescription="切换白天、黑夜模式" />
     </LinearLayout>
-    <FrameLayout android:id="@+id/content" android:paddingStart="24dp" android:paddingEnd="24dp"
+    <TextView android:id="@+id/page_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingTop="18dp" android:paddingBottom="16dp"
+        android:accessibilityHeading="true" android:text="运行状态" android:textSize="22sp" android:textFontWeight="800" />
+    <FrameLayout android:id="@+id/content" android:paddingStart="16dp" android:paddingEnd="16dp"
         android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
     <TextView android:id="@+id/feedback" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:accessibilityLiveRegion="polite" android:textSize="13sp" android:paddingHorizontal="24dp" android:paddingVertical="8dp" />
+        android:accessibilityLiveRegion="polite" android:textSize="12.5sp" android:paddingHorizontal="16dp" android:paddingVertical="8dp" />
     <LinearLayout android:id="@+id/navigation" android:orientation="horizontal" android:gravity="center_vertical"
-        android:paddingTop="8dp" android:paddingBottom="8dp" android:layout_width="match_parent" android:layout_height="wrap_content" />
+        android:paddingStart="8dp" android:paddingEnd="8dp" android:paddingTop="6dp" android:paddingBottom="14dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content" />
 </LinearLayout>

@@ -1,176 +1,1166 @@
-/* Visual authority: apps/desktop/src/App.css. Native controls share the original palette. */
+/* NetMate sky theme. Visual authority: design/app.css and design/PORT-SPEC.md.
+   Day tokens: ground #eaf3fc, surface #ffffff, surface-2 #f2f7fc, line #d9e6f2, text #0f2a44,
+   text-2 #4f6a84, accent #2370c0, accent-soft #e1eefb, ok #17865c, warn #a8650a, bad #c93838.
+   Night tokens: ground #0a1222, surface #111c31, surface-2 #16233b, line #22324d, text #e4ebf5,
+   text-2 #94a6bf, accent #f0d98a, on-accent #1a1606, ok #5fd39f, warn #f2b45a, bad #ff7b7b. */
 window.netmate {
-  color: #1e293b;
-  background-image: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #dbeafe 100%);
-  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  font-size: 15px;
+  color: #0f2a44;
+  background: #eaf3fc;
+  font-family: 'PingFang SC', 'Noto Sans CJK SC', 'Noto Sans SC', 'Microsoft YaHei UI', sans-serif;
+  font-size: 14px;
+  transition: background 0.7s ease;
 }
 window.netmate.dark {
-  color: #f1f5f9;
-  background-image: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #e4ebf5;
+  background: #0a1222;
 }
-.netmate .sidebar {
-  padding: 32px 12px;
-  background: rgba(255, 255, 255, 0.3);
-  border-right: 1px solid rgba(255, 255, 255, 0.7);
+
+/* Sidebar rail: gradient, static clouds or stars drawn behind it in linux.rs. */
+.netmate .rail {
+  background-image: linear-gradient(180deg, #2a68ad, #4a90d9);
 }
-.netmate.dark .sidebar {
-  background: rgba(15, 23, 42, 0.4);
-  border-color: rgba(255, 255, 255, 0.1);
+.netmate.dark .rail {
+  background-image: linear-gradient(180deg, #070d1c, #15213b);
+}
+.netmate .rail-items {
+  padding: 22px 12px 20px;
+  color: #ffffff;
+}
+.netmate.dark .rail-items {
+  color: #e4ebf5;
 }
 .netmate .brand {
-  color: #0369a1;
-  font-size: 23px;
+  padding: 0 10px 26px;
+  font-size: 19px;
   font-weight: 800;
-  margin: 0 8px 28px;
+  letter-spacing: 0.01em;
 }
-.netmate.dark .brand {
-  color: #38bdf8;
-}
-.netmate .navigation {
-  padding: 12px;
-  border-radius: 16px;
-  color: #475569;
-  background: transparent;
-  border: 1px solid transparent;
+.netmate .navigation,
+.netmate.dark .navigation {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
   box-shadow: none;
-  font-weight: 500;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  font-weight: 600;
 }
 .netmate.dark .navigation {
-  color: #94a3b8;
-  background: transparent;
-  border-color: transparent;
+  color: #94a6bf;
 }
-.netmate .navigation:hover {
-  color: #0284c7;
-  background: rgba(255, 255, 255, 0.2);
+.netmate .navigation:hover,
+.netmate.dark .navigation:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
 }
 .netmate .navigation:checked {
-  color: #0284c7;
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(255, 255, 255, 0.7);
-  font-weight: 700;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.2);
 }
 .netmate.dark .navigation:checked {
-  color: #38bdf8;
-  background: rgba(30, 41, 59, 0.7);
-  border-color: rgba(255, 255, 255, 0.1);
+  color: #f0d98a;
+  background: rgba(240, 217, 138, 0.12);
 }
-.netmate .main-content {
-  padding: 40px 48px;
+.netmate .navigation:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -2px;
 }
-.netmate .page-title {
-  font-size: 34px;
-  font-weight: 800;
-  color: #0c4a6e;
-  margin-bottom: 16px;
+.netmate .rail-caption {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.78);
 }
-.netmate.dark .page-title,
-.netmate.dark .card-title {
-  color: #e2e8f0;
+.netmate.dark .rail-caption {
+  color: #94a6bf;
 }
-.netmate .card {
-  padding: 28px 32px;
-  border-radius: 24px;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.35));
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 8px 24px rgba(31, 38, 135, 0.05);
-}
-.netmate.dark .card {
-  background: rgba(30, 41, 59, 0.6);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-}
-.netmate .card-title {
-  font-size: 19px;
-  font-weight: 700;
-  color: #0c4a6e;
-  margin-bottom: 8px;
-}
-.netmate .secondary {
-  color: #64748b;
-}
-.netmate.dark .secondary {
-  color: #cbd5e1;
-}
-.netmate .connection-state {
-  font-size: 28px;
-  font-weight: 700;
-}
-.netmate .connected {
-  color: #15803d;
-}
-.netmate.dark .connected {
-  color: #4ade80;
-}
-.netmate .disconnected {
-  color: #b91c1c;
-}
-.netmate.dark .disconnected {
-  color: #fca5a5;
-}
-.netmate button {
-  border-radius: 16px;
-  padding: 11px 18px;
-  color: #0284c7;
-  background: rgba(255, 255, 255, 0.4);
-  border: 1px solid rgba(14, 165, 233, 0.16);
+/* The toggle is fully drawn by Cairo; the button itself stays invisible. */
+.netmate button.theme-switch,
+.netmate.dark button.theme-switch,
+.netmate button.theme-switch:hover,
+.netmate button.theme-switch:checked {
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
   box-shadow: none;
 }
+.netmate button.theme-switch:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: -6px;
+}
+.netmate.dark button.theme-switch:focus-visible {
+  outline-color: #f0d98a;
+}
+
+/* Main column and page headings. */
+.netmate .main-content {
+  padding: 30px 36px 28px;
+}
+.netmate .page-title-row {
+  margin-bottom: 22px;
+}
+.netmate .page-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.netmate .page-title-icon {
+  color: #2370c0;
+}
+.netmate.dark .page-title-icon {
+  color: #f0d98a;
+}
+.netmate .page-content {
+  padding-bottom: 24px;
+}
+.netmate .secondary {
+  color: #4f6a84;
+}
+.netmate.dark .secondary {
+  color: #94a6bf;
+}
+
+/* Cards (.panel in the prototype): radius 14, 1px line border, light shadow. */
+.netmate .card {
+  padding: 20px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #d9e6f2;
+  box-shadow:
+    0 1px 2px rgba(15, 42, 68, 0.06),
+    0 6px 18px rgba(15, 42, 68, 0.06);
+  transition:
+    background 0.7s ease,
+    border-color 0.7s ease;
+}
+.netmate.dark .card {
+  background: #111c31;
+  border-color: #22324d;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.netmate .card-title {
+  font-size: 15px;
+  font-weight: 700;
+  padding-bottom: 12px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid #d9e6f2;
+}
+.netmate.dark .card-title {
+  border-bottom-color: #22324d;
+}
+.netmate .card-title.inline-title {
+  padding-bottom: 0;
+  margin-bottom: 0;
+  border-bottom: none;
+}
+.netmate .card-heading {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d9e6f2;
+}
+.netmate.dark .card-heading {
+  border-bottom-color: #22324d;
+}
+
+/* Buttons: height 36, radius 9. */
+.netmate button {
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #0f2a44;
+  background-color: #ffffff;
+  border: 1px solid #d9e6f2;
+  box-shadow: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.netmate button:hover {
+  background-color: #f2f7fc;
+}
 .netmate.dark button {
-  background: rgba(15, 23, 42, 0.4);
-  color: #38bdf8;
-  border-color: rgba(56, 189, 248, 0.25);
+  color: #e4ebf5;
+  background-color: #111c31;
+  border-color: #22324d;
+}
+.netmate.dark button:hover {
+  background-color: #16233b;
+}
+.netmate button:disabled {
+  opacity: 0.55;
 }
 .netmate button.primary {
-  background: #0ea5e9;
-  color: white;
-  font-weight: 700;
+  color: #ffffff;
+  background: #2370c0;
+  border-color: #2370c0;
+}
+.netmate button.primary:hover {
+  filter: brightness(1.06);
 }
 .netmate.dark button.primary {
-  background: #38bdf8;
-  color: #0f172a;
+  color: #1a1606;
+  background: #f0d98a;
+  border-color: #f0d98a;
 }
-.netmate button.danger {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.2);
+.netmate button.danger,
+.netmate.dark button.danger {
+  color: #c93838;
 }
+.netmate.dark button.danger {
+  color: #ff7b7b;
+}
+.netmate button.icon-btn {
+  min-width: 34px;
+  padding: 0;
+}
+.netmate button.compact {
+  min-height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.netmate button.auto-on {
+  color: #17865c;
+}
+.netmate.dark button.auto-on {
+  color: #5fd39f;
+}
+.netmate button.auto-off {
+  color: #4f6a84;
+}
+.netmate.dark button.auto-off {
+  color: #94a6bf;
+}
+.netmate button:focus-visible {
+  outline: 2px solid #2370c0;
+  outline-offset: 2px;
+}
+.netmate.dark button:focus-visible {
+  outline-color: #f0d98a;
+}
+
+/* Window controls keep the theme's icons: they are background images, so only clear colours and spacing. */
+.netmate windowcontrols button.close,
+.netmate windowcontrols button.close:hover,
+.netmate windowcontrols button.close:active,
+.netmate windowcontrols button.close:backdrop,
+.netmate windowcontrols button.minimize,
+.netmate windowcontrols button.minimize:hover,
+.netmate windowcontrols button.minimize:active,
+.netmate windowcontrols button.minimize:backdrop,
+.netmate windowcontrols button.maximize,
+.netmate windowcontrols button.maximize:hover,
+.netmate windowcontrols button.maximize:active,
+.netmate windowcontrols button.maximize:backdrop,
+.netmate.dark windowcontrols button.close,
+.netmate.dark windowcontrols button.close:hover,
+.netmate.dark windowcontrols button.close:active,
+.netmate.dark windowcontrols button.close:backdrop,
+.netmate.dark windowcontrols button.minimize,
+.netmate.dark windowcontrols button.minimize:hover,
+.netmate.dark windowcontrols button.minimize:active,
+.netmate.dark windowcontrols button.minimize:backdrop,
+.netmate.dark windowcontrols button.maximize,
+.netmate.dark windowcontrols button.maximize:hover,
+.netmate.dark windowcontrols button.maximize:active,
+.netmate.dark windowcontrols button.maximize:backdrop {
+  min-height: 16px;
+  min-width: 16px;
+  padding: 4px 1px;
+  border-color: transparent;
+  background-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* Inputs: height 36, radius 9, line border; focus ring in accent. */
 .netmate entry,
-.netmate dropdown {
+.netmate spinbutton,
+.netmate entry.form-control,
+.netmate spinbutton.form-control {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
   color: inherit;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.35);
-  border: 1px solid rgba(14, 165, 233, 0.15);
-  padding: 8px;
+  background: #ffffff;
+  border: 1px solid #d9e6f2;
+  box-shadow: none;
 }
 .netmate.dark entry,
-.netmate.dark dropdown {
-  background: rgba(15, 23, 42, 0.5);
-  border-color: rgba(255, 255, 255, 0.1);
+.netmate.dark spinbutton,
+.netmate.dark entry.form-control,
+.netmate.dark spinbutton.form-control {
+  background: #111c31;
+  border-color: #22324d;
+}
+.netmate spinbutton {
+  padding: 0;
+}
+.netmate spinbutton > text {
+  padding: 0 10px;
+}
+.netmate spinbutton > button,
+.netmate.dark spinbutton > button {
+  min-height: 0;
+  min-width: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  border-left: 1px solid #d9e6f2;
+  background: #f2f7fc;
+  font-size: 16px;
+}
+.netmate.dark spinbutton > button {
+  border-left-color: #22324d;
+  background: #16233b;
+}
+.netmate entry:focus-within,
+.netmate spinbutton:focus-within {
+  border-color: #2370c0;
+  box-shadow: 0 0 0 3px #e1eefb;
+  outline: none;
+}
+.netmate.dark entry:focus-within,
+.netmate.dark spinbutton:focus-within {
+  border-color: #f0d98a;
+  box-shadow: 0 0 0 3px rgba(240, 217, 138, 0.13);
+}
+.netmate entry > text > placeholder {
+  color: #4f6a84;
+}
+.netmate.dark entry > text > placeholder {
+  color: #94a6bf;
+}
+
+/* Dropdowns (运营商 / 导出范围 / 格式): the button looks like an input; the arrow turns while open. */
+.netmate dropdown.select > button,
+.netmate.dark dropdown.select > button {
+  min-height: 34px;
+  min-width: 140px;
+  padding: 0 10px 0 12px;
+  border-radius: 9px;
+  font-weight: 500;
+  color: inherit;
+  background: #ffffff;
+  border: 1px solid #d9e6f2;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.netmate.dark dropdown.select > button {
+  background: #111c31;
+  border-color: #22324d;
+}
+.netmate dropdown.select > button:hover {
+  border-color: #93b7dc;
+}
+.netmate.dark dropdown.select > button:hover {
+  border-color: #6c6a5a;
+}
+.netmate dropdown.select > button:checked {
+  border-color: #2370c0;
+  box-shadow: 0 0 0 3px #e1eefb;
+}
+.netmate.dark dropdown.select > button:checked {
+  border-color: #f0d98a;
+  box-shadow: 0 0 0 3px rgba(240, 217, 138, 0.13);
+}
+.netmate dropdown.select > button arrow {
+  min-width: 16px;
+  min-height: 16px;
+  color: #4f6a84;
+  transition: -gtk-icon-transform 0.2s ease;
+}
+.netmate.dark dropdown.select > button arrow {
+  color: #94a6bf;
+}
+.netmate dropdown.select > button:checked arrow {
+  color: #2370c0;
+  -gtk-icon-transform: rotate(180deg);
+}
+.netmate.dark dropdown.select > button:checked arrow {
+  color: #f0d98a;
+}
+.netmate dropdown.select popover > contents {
+  padding: 5px;
+  border-radius: 11px;
+  background: #ffffff;
+  border: 1px solid #d9e6f2;
+  box-shadow:
+    0 14px 34px rgba(15, 42, 68, 0.18),
+    0 2px 6px rgba(15, 42, 68, 0.08);
+}
+.netmate.dark dropdown.select popover > contents {
+  background: #111c31;
+  border-color: #22324d;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+.netmate dropdown.select popover listview,
+.netmate.dark dropdown.select popover listview {
+  background: transparent;
+}
+.netmate dropdown.select popover listview row,
+.netmate.dark dropdown.select popover listview row {
+  min-height: 34px;
+  margin: 0;
+  padding: 0 12px 0 10px;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13.5px;
+}
+.netmate dropdown.select popover listview row:hover,
+.netmate dropdown.select popover listview row:focus-visible {
+  background: #f2f7fc;
+  outline: none;
+}
+.netmate.dark dropdown.select popover listview row:hover,
+.netmate.dark dropdown.select popover listview row:focus-visible {
+  background: #16233b;
+}
+.netmate dropdown.select popover listview row image {
+  color: #2370c0;
+}
+.netmate.dark dropdown.select popover listview row image {
+  color: #f0d98a;
+}
+.netmate dropdown.select popover listview row:selected {
+  color: #2370c0;
+  font-weight: 600;
+}
+.netmate.dark dropdown.select popover listview row:selected {
+  color: #f0d98a;
+}
+
+/* Forms and settings. */
+.netmate .form-group {
+  margin-bottom: 12px;
+}
+.netmate .form-label,
+.netmate .field-caption {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4f6a84;
+}
+.netmate.dark .form-label,
+.netmate.dark .field-caption {
+  color: #94a6bf;
+}
+.netmate .form-heading,
+.netmate .section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #4f6a84;
+  margin-top: 12px;
+}
+.netmate.dark .form-heading,
+.netmate.dark .section-title {
+  color: #94a6bf;
+}
+.netmate checkbutton {
+  font-weight: 600;
+}
+.netmate checkbutton check {
+  min-width: 18px;
+  min-height: 18px;
+  border-radius: 5px;
+  border: 1px solid #d9e6f2;
+  background: #ffffff;
+}
+.netmate.dark checkbutton check {
+  border-color: #22324d;
+  background: #111c31;
+}
+.netmate checkbutton check:checked {
+  color: #ffffff;
+  background: #2370c0;
+  border-color: #2370c0;
+}
+.netmate.dark checkbutton check:checked {
+  color: #1a1606;
+  background: #f0d98a;
+  border-color: #f0d98a;
+}
+.netmate .strong {
+  font-weight: 700;
+}
+.netmate .small {
+  font-size: 12.5px;
+}
+.netmate .tiny {
+  font-size: 12px;
+}
+.netmate .mono {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', monospace;
+  font-size: 13px;
+  font-feature-settings: 'tnum';
+}
+.netmate .faded {
+  opacity: 0.5;
+}
+.netmate .divider-top {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #d9e6f2;
+}
+.netmate.dark .divider-top {
+  border-top-color: #22324d;
+}
+.netmate .list-row {
+  padding: 11px 4px;
+  border-top: 1px solid #d9e6f2;
+}
+.netmate.dark .list-row {
+  border-top-color: #22324d;
+}
+.netmate .list > .list-row:first-child {
+  border-top: none;
+}
+.netmate .empty-box {
+  padding: 28px;
+  border-radius: 12px;
+  border: 1px dashed #d9e6f2;
+}
+.netmate.dark .empty-box {
+  border-color: #22324d;
+}
+.netmate .warning-box {
+  padding: 10px 14px;
+  border-radius: 9px;
+  color: #a8650a;
+  background: #fbf0dc;
+}
+.netmate.dark .warning-box {
+  color: #f2b45a;
+  background: rgba(242, 180, 90, 0.12);
+}
+.netmate .error-text {
+  color: #c93838;
+}
+.netmate.dark .error-text {
+  color: #ff7b7b;
+}
+.netmate button.choice,
+.netmate button.log-filter {
+  color: #4f6a84;
+}
+.netmate.dark button.choice,
+.netmate.dark button.log-filter {
+  color: #94a6bf;
+}
+.netmate button.choice:checked {
+  color: #2370c0;
+  background: #e1eefb;
+  border-color: #2370c0;
+}
+.netmate.dark button.choice:checked {
+  color: #f0d98a;
+  background: rgba(240, 217, 138, 0.13);
+  border-color: #f0d98a;
+}
+
+/* Badges: radius 6, height 22. */
+.netmate .badge {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4f6a84;
+  background: #f2f7fc;
+}
+.netmate.dark .badge {
+  color: #94a6bf;
+  background: #16233b;
+}
+.netmate .badge-auth,
+.netmate .badge-isp,
+.netmate .badge-current {
+  color: #2370c0;
+  background: #e1eefb;
+}
+.netmate.dark .badge-auth,
+.netmate.dark .badge-isp,
+.netmate.dark .badge-current {
+  color: #f0d98a;
+  background: rgba(240, 217, 138, 0.13);
+}
+.netmate .badge-auto {
+  color: #17865c;
+  background: #e0f4ea;
+}
+.netmate.dark .badge-auto {
+  color: #5fd39f;
+  background: rgba(95, 211, 159, 0.12);
+}
+.netmate .badge-open,
+.netmate .badge-manual {
+  color: #4f6a84;
+  background: #f2f7fc;
+}
+.netmate.dark .badge-open,
+.netmate.dark .badge-manual {
+  color: #94a6bf;
+  background: #16233b;
+}
+.netmate .prio-highest,
+.netmate .prio-high {
+  color: #17865c;
+  background: #e0f4ea;
+}
+.netmate .prio-normal {
+  color: #2370c0;
+  background: #e1eefb;
+}
+.netmate .prio-low,
+.netmate .prio-lowest {
+  color: #4f6a84;
+  background: #f2f7fc;
+}
+.netmate.dark .prio-highest,
+.netmate.dark .prio-high {
+  color: #5fd39f;
+  background: rgba(95, 211, 159, 0.12);
+}
+.netmate.dark .prio-normal {
+  color: #f0d98a;
+  background: rgba(240, 217, 138, 0.13);
+}
+.netmate.dark .prio-low,
+.netmate.dark .prio-lowest {
+  color: #94a6bf;
+  background: #16233b;
+}
+.netmate .dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 999px;
+}
+.netmate .dot-idle {
+  background: #4f6a84;
+}
+.netmate.dark .dot-idle {
+  background: #94a6bf;
+}
+.netmate .dot-ok {
+  background: #17865c;
+  box-shadow: 0 0 0 3px #e0f4ea;
+}
+.netmate.dark .dot-ok {
+  background: #5fd39f;
+  box-shadow: 0 0 0 3px rgba(95, 211, 159, 0.12);
+}
+.netmate .dot-bad {
+  background: #c93838;
+  box-shadow: 0 0 0 3px #fbe5e5;
+}
+.netmate.dark .dot-bad {
+  background: #ff7b7b;
+  box-shadow: 0 0 0 3px rgba(255, 123, 123, 0.12);
+}
+.netmate .grade-excellent,
+.netmate .grade-good {
+  color: #17865c;
+}
+.netmate .grade-fair,
+.netmate .grade-poor {
+  color: #a8650a;
+}
+.netmate .grade-bad {
+  color: #c93838;
+}
+.netmate.dark .grade-excellent,
+.netmate.dark .grade-good {
+  color: #5fd39f;
+}
+.netmate.dark .grade-fair,
+.netmate.dark .grade-poor {
+  color: #f2b45a;
+}
+.netmate.dark .grade-bad {
+  color: #ff7b7b;
+}
+
+/* Home: sky panel, radius 16; gradients at 160deg per weather and theme. */
+.netmate .sky {
+  min-height: 196px;
+  border-radius: 16px;
+  color: #ffffff;
+  box-shadow: 0 10px 30px rgba(35, 90, 150, 0.22);
+  transition: background 0.7s ease;
+}
+.netmate.dark .sky {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.netmate .sky.clear {
+  background-image: linear-gradient(160deg, #3d84d0 0%, #6fb0ee 60%, #a9d3f7 100%);
+}
+.netmate .sky.cloudy {
+  background-image: linear-gradient(160deg, #6b8fb6 0%, #9db8d4 60%, #c9d8e6 100%);
+}
+.netmate .sky.storm {
+  background-image: linear-gradient(160deg, #56606f 0%, #7d8795 60%, #a5adb8 100%);
+}
+.netmate.dark .sky.clear {
+  background-image: linear-gradient(160deg, #070d1c 0%, #111a30 55%, #1f3156 100%);
+}
+.netmate.dark .sky.cloudy {
+  background-image: linear-gradient(160deg, #141b2c 0%, #253149 60%, #34415a 100%);
+}
+.netmate.dark .sky.storm {
+  background-image: linear-gradient(160deg, #1d1416 0%, #3a2427 60%, #4b3033 100%);
+}
+.netmate .sky-content {
+  padding: 26px 32px 22px 28px;
+}
+.netmate .sky-where {
+  font-size: 13px;
+  opacity: 0.88;
+}
+.netmate .sky-title {
+  margin: 6px 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.netmate .sky-body {
+  font-size: 13.5px;
+  opacity: 0.9;
+}
+.netmate .sky-chips {
+  margin-top: 12px;
+}
+.netmate .sky-chip {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.2);
+}
+.netmate .sky-chip.strong {
+  background: rgba(255, 255, 255, 0.3);
+}
+.netmate .sky-chip.alert {
+  background: rgba(255, 90, 90, 0.85);
+}
+.netmate .sky-progress {
+  margin-top: 14px;
+}
+.netmate .sky-progress .sky-chip {
+  background: transparent;
+  padding: 0;
+}
+.netmate progressbar.sky-bar trough {
+  min-height: 5px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.28);
+}
+.netmate progressbar.sky-bar progress {
+  min-height: 5px;
+  border-radius: 99px;
+  background: #ffffff;
+}
+.netmate.dark progressbar.sky-bar progress {
+  background: #f0d98a;
+}
+.netmate .sky button,
+.netmate.dark .sky button,
+.netmate .sky button.danger {
+  color: #ffffff;
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.55);
+}
+.netmate .sky button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.netmate .sky button.primary {
+  color: #12406f;
+  background: rgba(255, 255, 255, 0.95);
+  border-color: transparent;
+}
+.netmate.dark .sky button.primary {
+  color: #1a1606;
+  background: #f0d98a;
+}
+.netmate .sky button:focus-visible {
+  outline-color: #ffffff;
+}
+
+/* Metric strip: one card, five equal cells split by vertical rules. */
+.netmate .card.strip {
+  padding: 0;
+}
+.netmate .strip-cell {
+  padding: 14px 20px;
+}
+.netmate .strip-cell.divided {
+  border-left: 1px solid #d9e6f2;
+}
+.netmate.dark .strip-cell.divided {
+  border-left-color: #22324d;
+}
+.netmate .metric-title {
+  font-size: 12.5px;
+  color: #4f6a84;
+}
+.netmate.dark .metric-title {
+  color: #94a6bf;
+}
+.netmate .metric-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-feature-settings: 'tnum';
+}
+.netmate .metric-grade {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.netmate .countdown {
+  font-weight: 500;
+  font-feature-settings: 'tnum';
+}
+
+/* Two equal columns: 网络详情 | 切换 WiFi. */
+.netmate .card.panel {
+  padding: 0;
+}
+.netmate .panel-head {
+  min-height: 36px;
+  padding: 16px 20px 0;
+}
+.netmate .panel-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+.netmate .kv {
+  padding: 14px 20px 18px;
+}
+.netmate .kv-key {
+  font-size: 13px;
+  color: #4f6a84;
+}
+.netmate.dark .kv-key {
+  color: #94a6bf;
+}
+.netmate .kv-value {
+  font-size: 13.5px;
+}
+.netmate .panel-note,
+.netmate .panel-text {
+  margin: 0 20px 18px;
+}
+.netmate .panel-text {
+  margin-top: 14px;
+}
+.netmate .wifi-list {
+  margin-top: 10px;
+}
+.netmate .wifi-row {
+  padding: 12px 20px;
+  border-top: 1px solid #d9e6f2;
+}
+.netmate.dark .wifi-row {
+  border-top-color: #22324d;
+}
+.netmate .wifi-list > .wifi-row:first-child {
+  border-top: none;
+}
+.netmate .wifi-row:last-child {
+  border-radius: 0 0 13px 13px;
+}
+.netmate .wifi-row.current {
+  background: #e1eefb;
+  box-shadow: inset 3px 0 0 #2370c0;
+}
+.netmate.dark .wifi-row.current {
+  background: rgba(240, 217, 138, 0.13);
+  box-shadow: inset 3px 0 0 #f0d98a;
+}
+.netmate .wifi-icon {
+  color: #4f6a84;
+}
+.netmate.dark .wifi-icon {
+  color: #94a6bf;
+}
+.netmate .wifi-row-name {
+  font-weight: 600;
+}
+.netmate .wifi-tag {
+  padding: 0 4px;
+}
+.netmate button.wifi-switch {
+  min-height: 30px;
+  padding: 0;
+}
+.netmate .wifi-current {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #2370c0;
+}
+.netmate.dark .wifi-current {
+  color: #f0d98a;
+}
+
+/* Remaining home cards. */
+.netmate .progress-card.tone-danger {
+  border-color: #c93838;
+}
+.netmate.dark .progress-card.tone-danger {
+  border-color: #ff7b7b;
+}
+.netmate .notice-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+.netmate .hint-strong {
+  font-weight: 600;
+}
+.netmate .muted-box {
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: #f2f7fc;
+}
+.netmate.dark .muted-box {
+  background: #16233b;
+}
+.netmate .loading-card {
+  padding: 48px 32px;
+}
+.netmate progressbar trough {
+  min-height: 6px;
+  border-radius: 99px;
+  background: #f2f7fc;
+}
+.netmate.dark progressbar trough {
+  background: #16233b;
+}
+.netmate progressbar progress {
+  min-height: 6px;
+  border-radius: 99px;
+  background: #2370c0;
+}
+.netmate.dark progressbar progress {
+  background: #f0d98a;
+}
+
+/* About: hero card, then features | update and project cards. */
+.netmate .about-hero {
+  padding: 24px;
+}
+.netmate .about-mark {
+  border-radius: 16px;
+  color: #ffffff;
+  background-image: linear-gradient(160deg, #3d84d0, #6fb0ee 60%, #a9d3f7);
+}
+.netmate.dark .about-mark {
+  background-image: linear-gradient(160deg, #070d1c, #111a30 55%, #1f3156);
+  color: #f0d98a;
+}
+.netmate .about-name {
+  font-size: 22px;
+  font-weight: 800;
+}
+.netmate .version-pill {
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2370c0;
+  background: #e1eefb;
+}
+.netmate.dark .version-pill {
+  color: #f0d98a;
+  background: rgba(240, 217, 138, 0.13);
+}
+.netmate .ok-icon {
+  color: #17865c;
+}
+.netmate.dark .ok-icon {
+  color: #5fd39f;
+}
+.netmate .about-link,
+.netmate.dark .about-link {
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: #2370c0;
+  font-weight: 600;
+}
+.netmate.dark .about-link {
+  color: #f0d98a;
+}
+
+/* Logs: toolbar, level segments, four-column rows, footer. */
+.netmate .logs-heading {
+  margin-bottom: 8px;
+}
+.netmate .logs-heading .page-title-row {
+  margin-bottom: 0;
+}
+.netmate .logs-card {
+  padding: 0;
+}
+.netmate .logs-toolbar,
+.netmate .logs-controls,
+.netmate .logs-footer {
+  padding: 14px 16px;
+}
+.netmate .logs-toolbar,
+.netmate .logs-controls {
+  border-bottom: 1px solid #d9e6f2;
+}
+.netmate .logs-footer {
+  padding: 12px 16px;
+  border-top: 1px solid #d9e6f2;
+}
+.netmate.dark .logs-toolbar,
+.netmate.dark .logs-controls,
+.netmate.dark .logs-footer {
+  border-color: #22324d;
+}
+.netmate button.log-filter,
+.netmate.dark button.log-filter {
+  min-height: 0;
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  font-size: 12.5px;
+}
+.netmate .seg {
+  padding: 3px;
+  border-radius: 9px;
+  background: #f2f7fc;
+}
+.netmate.dark .seg {
+  background: #16233b;
+}
+.netmate button.log-filter:checked {
+  color: #0f2a44;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+.netmate.dark button.log-filter:checked {
+  color: #e4ebf5;
+  background: #22324d;
+}
+.netmate .logs-empty {
+  color: #4f6a84;
+}
+.netmate.dark .logs-empty {
+  color: #94a6bf;
 }
 .netmate listview {
   background: transparent;
   color: inherit;
 }
-.netmate listview row {
-  background: rgba(255, 255, 255, 0.35);
-  border-radius: 10px;
-  padding: 10px;
-  margin-bottom: 6px;
-}
-.netmate.dark listview row {
-  background: rgba(15, 23, 42, 0.5);
-}
-.netmate button:focus-visible,
-.netmate entry:focus {
-  outline: 2px solid #0ea5e9;
-  outline-offset: 2px;
-}
-.netmate .theme-switch,
-.netmate.dark .theme-switch {
-  border-radius: 24px;
-  padding: 6px;
+.netmate listview.log-list row,
+.netmate.dark listview.log-list row {
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
   background: transparent;
-  border-color: transparent;
+  border-bottom: 1px solid #d9e6f2;
+}
+.netmate.dark listview.log-list row {
+  border-bottom-color: #22324d;
+}
+.netmate listview.log-list row:hover {
+  background: #f2f7fc;
+}
+.netmate.dark listview.log-list row:hover {
+  background: #16233b;
+}
+.netmate .log-row {
+  padding: 9px 16px;
+}
+.netmate .log-time,
+.netmate .log-source {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', monospace;
+  font-size: 12.5px;
+  color: #4f6a84;
+}
+.netmate.dark .log-time,
+.netmate.dark .log-source {
+  color: #94a6bf;
+}
+.netmate .log-time {
+  min-width: 150px;
+}
+.netmate .log-level {
+  min-width: 40px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.netmate .log-source {
+  min-width: 76px;
+}
+.netmate .level-info {
+  color: #2370c0;
+}
+.netmate .level-success {
+  color: #17865c;
+}
+.netmate .level-warn {
+  color: #a8650a;
+}
+.netmate .level-error {
+  color: #c93838;
+}
+.netmate .level-debug {
+  color: #4f6a84;
+}
+.netmate.dark .level-info {
+  color: #f0d98a;
+}
+.netmate.dark .level-success {
+  color: #5fd39f;
+}
+.netmate.dark .level-warn {
+  color: #f2b45a;
+}
+.netmate.dark .level-error {
+  color: #ff7b7b;
+}
+.netmate.dark .level-debug {
+  color: #94a6bf;
+}
+.netmate .log-message {
+  font-size: 13.5px;
+}
+.netmate textview.log-detail,
+.netmate textview.log-detail text {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', monospace;
+  padding: 12px;
+  border-radius: 9px;
+  color: inherit;
+  background: #f2f7fc;
+}
+.netmate.dark textview.log-detail,
+.netmate.dark textview.log-detail text {
+  background: #16233b;
+}
+
+/* Dialogs. */
+window.netmate.dialog .dialog-body {
+  padding: 24px 28px;
+}
+
+/* Logs: the item count stays on one line; toolbar controls share one 36px row. */
+.netmate .log-count {
+  font-variant-numeric: tabular-nums;
+}
+.netmate .logs-footer > *,
+.netmate .logs-toolbar > * {
+  min-height: 36px;
+}
+.netmate .logs-footer dropdown.select {
+  min-width: 150px;
 }

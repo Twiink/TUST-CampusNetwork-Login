@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>日夜切换按钮：Cairo 绘制原型</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font:
+          13px system-ui,
+          sans-serif;
+        background: #eaf3fc;
+        color: #0f2a44;
+      }
+      body.dark {
+        background: #0a1222;
+        color: #e4ebf5;
+      }
+      h2 {
+        font-size: 14px;
+        margin: 18px 0 8px;
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .rail {
+        width: 220px;
+        padding: 18px 0;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        gap: 6px;
+        background: linear-gradient(#2a68ad, #4a90d9);
+        color: rgba(255, 255, 255, 0.75);
+        font-size: 12px;
+      }
+      body.dark .rail {
+        background: linear-gradient(#070d1c, #15213b);
+      }
+      canvas {
+        display: block;
+        cursor: pointer;
+      }
+      figure {
+        margin: 0;
+        text-align: center;
+      }
+      figcaption {
+        margin-top: 4px;
+        opacity: 0.7;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>侧栏实际尺寸（点击切换，悬停放大）</h2>
+    <div class="row">
+      <div class="rail"><canvas id="live"></canvas><span>白天 / 黑夜</span></div>
+    </div>
+    <h2>切换过程（放大 3 倍）</h2>
+    <div class="row" id="frames"></div>
+    <script>
+      // Mirrors draw_toggle in apps/native-ui/src/linux.rs: same design space (200×90), same shapes and easing.
+      const SCALE = 0.44,
+        BOX = [100, 54],
+        SWITCH = 550,
+        LIFT = 200;
+      const TAU = Math.PI * 2;
+      const rgb = (h) => [((h >> 16) & 255) / 255, ((h >> 8) & 255) / 255, (h & 255) / 255];
+      const mix = (a, b, k) => {
+        a = rgb(a);
+        b = rgb(b);
+        return a.map((v, i) => v + (b[i] - v) * k);
+      };
+      const css = (c, a = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(',')},${a})`;
+      function bezier(x1, y1, x2, y2, t) {
+        const c = (a, b, s) => 3 * (1 - s) ** 2 * s * a + 3 * (1 - s) * s * s * b + s ** 3;
+        let lo = 0,
+          hi = 1;
+        for (let i = 0; i < 24; i++) {
+          const m = (lo + hi) / 2;
+          if (c(x1, x2, m) < t) lo = m;
+          else hi = m;
+        }
+        return c(y1, y2, (lo + hi) / 2);
+      }
+      const overshoot = (t) => bezier(0.68, -0.1, 0.265, 1.2, t);
+      const inOut = (t) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2);
+      function pill(cr, x, y, w, h) {
+        const r = Math.min(w, h) / 2;
+        cr.beginPath();
+        cr.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+        cr.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5);
+        cr.closePath();
+      }
+      const disc = (cr, x, y, r) => {
+        cr.moveTo(x + r, y);
+        cr.arc(x, y, r, 0, TAU);
+      };
+      // themeswitch CloudStyle: nine 17px circles in a 60×30 cell (left, top of each circle).
+      const PUFFS = [
+        [26, 1],
+        [38, 1],
+        [10, 12],
+        [23, 12],
+        [32, 13],
+        [43, 8],
+        [16, 3],
+        [5, 2],
+        [0, 8],
+      ];
+      // Four cloud cells as in themeswitch (x, y in its 120×50 space, opacity, how far x moves at night).
+      const CS = 1.3;
+      const CLOUDS = [
+        [-10, 20, 0.55, -60],
+        [65, 20, 0.55, 70],
+        [0, 30, 1, -60],
+        [55, 30, 1, 70],
+      ];
+      // themeswitch GalaxyStyle stars in its 80×50 cell; bright ones twinkle.
+      const STARS = [
+        [40, 21, 1],
+        [48, 6, 0],
+        [68, 30, 1],
+        [4, 24, 0],
+        [8, 28, 0],
+        [21, 6, 1],
+        [51, 27, 0],
+        [28, 39, 0],
+        [67, 8, 0],
+        [26, 14, 0],
+        [63, 20, 0],
+        [16, 35, 0],
+        [60, 35, 0],
+        [36, 6, 1],
+        [56, 12, 1],
+        [43, 37, 1],
+        [23, 27, 1],
+        [12, 12, 1],
+      ];
+
+      function draw(cr, w, h, t) {
+        cr.save();
+        const s = SCALE * (1 + 0.07 * t.lift);
+        cr.translate(w / 2, h / 2 - 2);
+        cr.scale(s, s);
+        cr.translate(-100, -45);
+        const k = Math.min(Math.max(t.progress, 0), 1),
+          day = 1 - k,
+          slide = inOut(k);
+        // Drop shadow 0 8px 22px.
+        const sh = mix(0x2a68ad, 0x000000, k);
+        for (let i = 0; i < 5; i++) {
+          const g = i * 4;
+          pill(cr, 10 - g / 2, 12 - g / 2, 180 + g, 82 + g);
+          cr.fillStyle = css(sh, (0.2 + 0.05 * k) / 6);
+          cr.fill();
+        }
+        cr.save();
+        pill(cr, 0, 0, 200, 90);
+        cr.clip();
+        const bg = cr.createLinearGradient(27.5, -27.5, 172.5, 117.5);
+        bg.addColorStop(0, css(mix(0x4a90d9, 0x070d1c, k)));
+        bg.addColorStop(0.55, css(mix(0x6fb0ee, 0x111a30, k)));
+        bg.addColorStop(1, css(mix(0x9bcbf5, 0x1c2a48, k)));
+        cr.fillStyle = bg;
+        cr.fillRect(0, 0, 200, 90);
+        // Stars rise into place as night falls; bright ones twinkle while the window is active.
+        if (k > 0) {
+          for (const [i, [x, y, bright]] of STARS.entries()) {
+            const tw = bright
+              ? (t.motion * (1 - Math.cos((TAU * (t.clock - i * 0.37)) / 2.2))) / 2
+              : 0;
+            const a = k * (bright ? 1 - 0.6 * tw : 0.45);
+            cr.beginPath();
+            disc(cr, 14 + x * 1.7, 8 + y * 1.5 + 10 * day, (bright ? 1.9 : 1.3) * (1 + 0.5 * tw));
+            cr.fillStyle = `rgba(255,255,255,${a})`;
+            cr.fill();
+          }
+        }
+        const cx = 45 + 110 * t.position,
+          cy = 45;
+        // Halo rings around the knob (themeswitch), breathing gently while active.
+        const breathe = 1 + (t.motion * 0.04 * (1 - Math.cos((TAU * t.clock) / 3))) / 2;
+        for (const [grow, a] of [
+          [44, 0.07],
+          [29, 0.1],
+          [15, 0.14],
+        ]) {
+          cr.beginPath();
+          disc(cr, cx, cy, (37 + grow) * breathe);
+          cr.fillStyle = `rgba(255,255,255,${a * (day + 0.45 * k)})`;
+          cr.fill();
+        }
+        // Two cloud layers along the bottom; at night they part to both sides and fade.
+        for (const [j, [x, y, a, away]] of CLOUDS.entries()) {
+          const sway = t.motion * 3 * Math.sin(TAU * (t.clock / 7 + j * 0.25));
+          const ox = (x + 22 + away * slide) * 1.6 + sway,
+            oy = y * 1.6 + 4;
+          cr.beginPath();
+          for (const [px, py] of PUFFS)
+            disc(cr, ox + (px + 8.5) * CS, oy + (py + 8.5) * CS, 8.5 * CS);
+          cr.fillStyle = `rgba(255,255,255,${a * (1 - 0.85 * k)})`;
+          cr.fill();
+        }
+        // Knob: the sun by day, the full moon by night.
+        const r = 37;
+        cr.beginPath();
+        disc(cr, cx, cy + 3, r + 2);
+        cr.fillStyle = `rgba(0,0,0,${0.16 + 0.12 * k})`;
+        cr.fill();
+        const glow = cr.createRadialGradient(cx, cy, r * 0.8, cx, cy, r + 14);
+        glow.addColorStop(0, css(mix(0xffc94d, 0xffebaa, k), 0.75 * breathe - 0.2 * k));
+        glow.addColorStop(1, css(mix(0xffc94d, 0xffebaa, k), 0));
+        cr.beginPath();
+        disc(cr, cx, cy, r + 14);
+        cr.fillStyle = glow;
+        cr.fill();
+        const fx = cx - r * 0.3,
+          fy = cy - r * 0.32;
+        const ball = cr.createRadialGradient(fx, fy, 0, fx, fy, r * 1.75);
+        ball.addColorStop(0, css(mix(0xfff1b8, 0xffffff, k)));
+        ball.addColorStop(0.55, css(mix(0xffc23d, 0xfff6d9, k)));
+        ball.addColorStop(1, css(mix(0xf59e0b, 0xe9d79a, k)));
+        cr.beginPath();
+        disc(cr, cx, cy, r);
+        cr.fillStyle = ball;
+        cr.fill();
+        const crater = Math.min(Math.max((k - 0.4) / 0.6, 0), 1);
+        if (crater > 0) {
+          for (const [dx, dy, cr0] of [
+            [-11, -10, 8],
+            [12, 4, 6],
+            [-5, 15, 4.5],
+            [14, -15, 3.5],
+          ]) {
+            cr.beginPath();
+            disc(cr, cx + dx, cy + dy, cr0);
+            cr.fillStyle = `rgba(214,196,140,${0.5 * crater})`;
+            cr.fill();
+          }
+        }
+        const hi = cr.createLinearGradient(0, cy - r, 0, cy + r);
+        hi.addColorStop(0, 'rgba(255,255,255,.45)');
+        hi.addColorStop(0.12, 'rgba(255,255,255,0)');
+        hi.addColorStop(0.85, 'rgba(0,0,0,0)');
+        hi.addColorStop(1, 'rgba(0,0,0,.1)');
+        cr.beginPath();
+        disc(cr, cx, cy, r);
+        cr.fillStyle = hi;
+        cr.fill();
+        cr.restore();
+        pill(cr, 1, 1, 198, 88);
+        cr.lineWidth = 2;
+        cr.strokeStyle = `rgba(255,255,255,${(0.25 + 0.2 * t.lift) * day + (0.08 + 0.1 * t.lift) * k})`;
+        cr.stroke();
+        cr.restore();
+      }
+
+      function canvas(el, zoom) {
+        const dpr = window.devicePixelRatio || 1;
+        el.width = BOX[0] * zoom * dpr;
+        el.height = BOX[1] * zoom * dpr;
+        el.style.width = BOX[0] * zoom + 'px';
+        el.style.height = BOX[1] * zoom + 'px';
+        const cr = el.getContext('2d');
+        cr.scale(zoom * dpr, zoom * dpr);
+        return cr;
+      }
+      const frames = document.getElementById('frames');
+      for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+        const f = document.createElement('figure'),
+          c = document.createElement('canvas');
+        f.append(c);
+        const cap = document.createElement('figcaption');
+        cap.textContent = Math.round(p * 100) + '%';
+        f.append(cap);
+        frames.append(f);
+        draw(canvas(c, 3), BOX[0], BOX[1], {
+          progress: p,
+          position: overshoot(p),
+          lift: 0,
+          motion: 0,
+          clock: 0,
+        });
+      }
+      const live = document.getElementById('live'),
+        cr = canvas(live, 1);
+      const t = {
+        night: false,
+        progress: 0,
+        position: 0,
+        from: [0, 0],
+        target: 0,
+        start: null,
+        hover: false,
+        lift: 0,
+        motion: 1,
+        clock: 0,
+        last: null,
+      };
+      live.onmouseenter = () => (t.hover = true);
+      live.onmouseleave = () => (t.hover = false);
+      live.onclick = () => {
+        t.night = !t.night;
+        t.from = [t.position, t.progress];
+        t.target = +t.night;
+        t.start = null;
+        document.body.classList.toggle('dark', t.night);
+      };
+      function tick(now) {
+        const dt = t.last == null ? 0 : now - t.last;
+        t.last = now;
+        if (t.progress !== t.target || t.position !== t.target) {
+          t.start ??= now;
+          const q = Math.min((now - t.start) / SWITCH, 1);
+          t.position = t.from[0] + (t.target - t.from[0]) * overshoot(q);
+          t.progress = t.from[1] + (t.target - t.from[1]) * bezier(0.25, 0.1, 0.25, 1, q);
+          if (q >= 1) {
+            t.position = t.progress = t.target;
+            t.start = null;
+          }
+        }
+        const lt = t.hover ? 1 : 0;
+        t.lift = t.lift < lt ? Math.min(t.lift + dt / LIFT, lt) : Math.max(t.lift - dt / LIFT, lt);
+        t.clock += dt / 1000;
+        cr.clearRect(0, 0, BOX[0], BOX[1]);
+        draw(cr, BOX[0], BOX[1], t);
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    </script>
+  </body>
+</html>

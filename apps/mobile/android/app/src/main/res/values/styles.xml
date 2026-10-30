@@ -2,18 +2,18 @@
     <style name="AppTheme" parent="NetMateLight" />
     <style name="NetMateLight" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#0ea5e9</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:colorAccent">#2370c0</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">true</item>
-        <item name="android:windowBackground">#f0f9ff</item>
+        <item name="android:windowBackground">#eaf3fc</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
     <style name="NetMateDark" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#38bdf8</item>
+        <item name="android:colorAccent">#f0d98a</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:windowBackground">#0f172a</item>
+        <item name="android:windowBackground">#0a1222</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
 </resources>

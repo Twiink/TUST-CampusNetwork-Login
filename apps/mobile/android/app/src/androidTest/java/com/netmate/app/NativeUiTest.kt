@@ -15,6 +15,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.regex.Pattern
 @RunWith(AndroidJUnit4::class)
 class NativeUiTest {
     @Test fun nativeNavigationReopensAndSettingsAreAccessible() {
@@ -28,14 +29,15 @@ class NativeUiTest {
         for((theme,switch,nextSwitch)in listOf(Triple("light","切换至白天模式","切换至黑夜模式"),Triple("dark","切换至黑夜模式","切换至白天模式"))){
             device.findObject(By.desc(switch))?.click()
             assertNotNull(device.wait(Until.findObject(By.desc(nextSwitch)),5000))
-            for((page,ready)in listOf("运行状态" to "网络状态","配置设置" to "账号配置","运行日志" to "筛选")){
+            // The home page shows one of the HomeScreen branches, depending on the emulator WiFi.
+            for((page,ready)in listOf("运行状态" to Pattern.compile("网络状态|当前 WiFi|未连接 WiFi|正在获取网络状态"),"配置设置" to Pattern.compile("通用设置"),"运行日志" to Pattern.compile("筛选"))){
                 device.findObject(By.desc(page)).click()
                 assertNotNull(device.wait(Until.findObject(By.text(ready)),5000))
                 assertTrue(device.takeScreenshot(java.io.File(screenshots,"$theme-$page.png")))
             }
         }
         device.findObject(By.desc("配置设置")).click()
-        assertNotNull(device.wait(Until.findObject(By.text("账号配置")),5000))
+        assertNotNull(device.wait(Until.findObject(By.text("通用设置")),5000))
         // A theme change must keep the Activity/Binder connection and the current page.
         var activity:android.app.Activity?=null
         instrumentation.runOnMainSync{activity=ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).single()}
@@ -53,7 +55,7 @@ class NativeUiTest {
             // A rapid Home/reopen can retain the scroll position without stopping
             // the Activity. The first configuration card can be outside the viewport.
             UiScrollable(UiSelector().scrollable(true)).scrollToBeginning(8)
-            assertNotNull(device.wait(Until.findObject(By.text("账号配置")), 5000))
+            assertNotNull(device.wait(Until.findObject(By.text("通用设置")), 5000))
             assertNotNull(device.findObject(By.desc("切换至黑夜模式")))
         }
     }

@@ -2,7 +2,7 @@
 
 校园网认证与 WiFi 连接管理。2.0 使用系统原生界面和独立后台，默认构建不包含 Electron、React Native、Hermes 或 JavaScript 运行时。
 
-目前处于原生替代验收阶段。界面沿用原来的侧栏/底部导航、卡片及白天/黑夜主题，视觉依据见 [界面约定](docs/NATIVE-APPEARANCE.md)。按用户要求，当前工作区不在本机执行构建或 E2E；本轮界面源码仅完成静态检查，实际渲染与新安装包待 CI。Windows/macOS 原生运行、Swift 编译、四平台无线硬件和校园门户的验收状态见 [实施与验收记录](docs/NATIVE-ACCEPTANCE.md)。未运行的验收不视为通过。
+界面沿用原来的侧栏/底部导航、卡片及白天/黑夜主题，视觉依据见 [界面约定](docs/NATIVE-APPEARANCE.md)。构建、原生 UI 自动化和性能验收在 GitHub Actions 执行；当前工作区不在本机执行构建或 E2E。平台证据及实际无线硬件、校园门户等待验证项目见 [实施与验收记录](docs/NATIVE-ACCEPTANCE.md)。
 
 | 平台                 | 界面                            | 后台                                           |
 | -------------------- | ------------------------------- | ---------------------------------------------- |
@@ -52,7 +52,7 @@ bash apps/mobile/android/gradlew -p apps/mobile/android :app:testDebugUnitTest :
 python3 tools/native/copy_apk.py
 ```
 
-输出位于 `dist-native/`。没有发布签名环境变量的 Android Release 为**未签名 APK**；`assembleBenchmark` 生成调试证书签名、启用 R8 的性能验证包。正式签名通过 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 注入。macOS 使用 `APPLE_SIGNING_IDENTITY`；未配置时仅作 ad-hoc 签名，用于构建检查。
+输出位于 `dist-native/`。没有发布签名环境变量的 Android Release 为**未签名 APK**；`assembleBenchmark` 生成调试证书签名、启用 R8 的性能验证包。正式签名通过 `ANDROID_KEYSTORE_FILE`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 注入。macOS 使用 `APPLE_SIGNING_IDENTITY`；未配置时使用 ad-hoc 签名，未作 Apple 公证。受限的 WiFi 事件 entitlement 仅附加到使用正式身份签名的菜单栏宿主；ad-hoc 发行会明确显示监听权限受限，并沿用前台 2 秒、后台 15 秒的检测兜底，心跳间隔不变。
 
 ## 数据与权限
 
@@ -70,8 +70,8 @@ cargo clippy --locked -p netmate-core -p netmate-agent -p netmate-ui -- -D warni
 cargo fmt --all -- --check
 ```
 
-本轮本机只执行不产生产物的源码检查；上面的 Cargo 测试/编译检查命令也保留给 CI。原生 UI E2E 保持在 CI 或专用验收设备执行。`.github/workflows/ci.yml` 调用原生四平台构建与验证；平台适配器受控版本单独构建，不进入正式包。测试包含 AT-SPI、UI Automation、XCTest、Android instrumentation、日夜截图、主题切换输入保留与 100 次窗口生命周期。CI 尚未运行。测量方法和限制见 [性能记录](docs/NATIVE-PERFORMANCE.md)。
+本轮本机只执行不产生产物的源码检查；上面的 Cargo 测试/编译检查命令也保留给 CI。原生 UI E2E 保持在 CI 或专用验收设备执行。`.github/workflows/ci.yml` 调用原生四平台构建与验证；平台适配器受控版本单独构建，不进入正式包。测试包含 AT-SPI、UI Automation、XCTest、Android instrumentation、日夜截图、主题切换输入保留与 100 次窗口生命周期。CI 已实际执行，逐平台状态、测量方法和限制见 [性能记录](docs/NATIVE-PERFORMANCE.md)。
 
-`.github/workflows/release.yml` 手动触发全平台构建、两小时检测并生成原生发布草稿。更新源、公钥由 `NETMATE_UPDATE_ENDPOINT`、`NETMATE_UPDATE_PUBLIC_KEY` 在编译时配置，私钥只用于 `tools/native/manifest.py` 签名元数据，不进入程序。发布前须完成平台签名、macOS 公证、实机授权与安装更新验收。
+`.github/workflows/release.yml` 手动触发全平台构建、两小时检测并生成原生发布草稿。更新源、公钥由 `NETMATE_UPDATE_ENDPOINT`、`NETMATE_UPDATE_PUBLIC_KEY` 在编译时配置，私钥只用于 `tools/native/manifest.py` 签名元数据，不进入程序。Android 发行使用正式签名。当前 macOS 为 ad-hoc 签名且未公证，Windows 未作 Authenticode 签名；相应系统信任提示和实机授权、校园网与安装更新仍需专用设备验收。
 
 旧 Electron/RN 源码、旧依赖和协议测试夹具暂保留，作为功能基线；原生路径跨平台验收后再删除。根目录 `legacy:*` 命令仅用于历史行为对照，不进入新产品发布。实施前完整工作区快照为 `refs/codex/baselines/native-rewrite-20261029`，不改变原 HEAD 和用户暂存区。

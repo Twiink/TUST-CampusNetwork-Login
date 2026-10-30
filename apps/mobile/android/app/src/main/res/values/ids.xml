@@ -1,0 +1,4 @@
+<resources>
+    <!-- Runnable that repaints a view with the current day/night palette. -->
+    <item name="painter" type="id" />
+</resources>

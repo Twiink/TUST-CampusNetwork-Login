@@ -1,0 +1,17 @@
+- generic [active] [ref=f1e1]:
+  - heading "侧栏实际尺寸（点击切换，悬停放大）" [level=2] [ref=f1e2]
+  - generic [ref=f1e4]:
+    - generic [ref=f1e5] [cursor=pointer]
+    - generic [ref=f1e6]: 白天 / 黑夜
+  - heading "切换过程（放大 3 倍）" [level=2] [ref=f1e7]
+  - generic [ref=f1e8]:
+    - figure "0%" [ref=f1e9]:
+      - generic [ref=f1e10] [cursor=pointer]
+    - figure "25%" [ref=f1e12]:
+      - generic [ref=f1e13] [cursor=pointer]
+    - figure "50%" [ref=f1e15]:
+      - generic [ref=f1e16] [cursor=pointer]
+    - figure "75%" [ref=f1e18]:
+      - generic [ref=f1e19] [cursor=pointer]
+    - figure "100%" [ref=f1e21]:
+      - generic [ref=f1e22] [cursor=pointer]

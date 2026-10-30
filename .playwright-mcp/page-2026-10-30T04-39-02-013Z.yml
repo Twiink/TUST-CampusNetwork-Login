@@ -1,0 +1,95 @@
+- generic [active] [ref=e1]:
+  - generic "原型控制" [ref=e2]:
+    - generic [ref=e3]: 首页状态：
+    - button "已联网" [pressed] [ref=e4] [cursor=pointer]
+    - button "重连中" [ref=e5] [cursor=pointer]
+    - button "未连接" [ref=e6] [cursor=pointer]
+    - button "Android 视图" [ref=e7] [cursor=pointer]
+  - generic [ref=e8]:
+    - complementary [ref=e9]:
+      - generic [ref=e10]: NetMate
+      - navigation "页面" [ref=e16]:
+        - button "运行状态" [ref=e17] [cursor=pointer]
+        - button "配置设置" [ref=e24] [cursor=pointer]
+        - button "运行日志" [ref=e28] [cursor=pointer]
+        - button "关于" [ref=e33] [cursor=pointer]
+      - generic [ref=e38]:
+        - button "切换至黑夜模式" [ref=e40] [cursor=pointer]
+        - generic [ref=e41]: 白天 / 黑夜
+    - main [ref=e42]:
+      - heading "运行状态" [level=1] [ref=e45]
+      - region "网络连接状态" [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]: 当前 WiFi
+          - heading "已认证并联网" [level=2] [ref=e49]
+          - paragraph [ref=e50]: TUST 已通过校园网认证，互联网可达。
+          - generic [ref=e51]:
+            - generic [ref=e52]: 需要认证
+            - generic [ref=e53]: 中国移动 · 2023101234
+        - button "断开连接" [ref=e55] [cursor=pointer]
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - term [ref=e60]: 信号强度
+          - definition [ref=e61]: 72%良好
+        - generic [ref=e62]:
+          - term [ref=e63]: 连接速度
+          - definition [ref=e64]: 206 Mbps良好
+        - generic [ref=e65]:
+          - term [ref=e66]: 频段
+          - definition [ref=e67]: 5GHz
+        - generic [ref=e68]:
+          - term [ref=e69]: 互联网
+          - definition [ref=e70]: 可达
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - heading "心跳检测" [level=2] [ref=e76]
+              - generic [ref=e77]: 下次检测 18s
+            - generic [ref=e79]:
+              - generic [ref=e80]:
+                - generic [ref=e81]: 检测间隔
+                - strong [ref=e82]: 30 秒
+              - generic [ref=e83]:
+                - generic [ref=e84]: 连接状态
+                - strong [ref=e85]: 正常
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - heading "网络详情" [level=2] [ref=e88]
+              - button "刷新 WiFi 信息" [ref=e89] [cursor=pointer]
+            - generic [ref=e94]:
+              - term [ref=e95]: IPv4 地址
+              - definition [ref=e96]: 10.48.13.127
+              - term [ref=e97]: IPv6 地址
+              - definition [ref=e98]: 2001:da8:a005:330::23
+              - term [ref=e99]: BSSID
+              - definition [ref=e100]: 28:e4:24:2c:e5:c0
+              - term [ref=e101]: WiFi 信道
+              - definition [ref=e102]: "36"
+              - term [ref=e103]: 安全类型
+              - definition [ref=e104]: WPA2 个人
+        - generic [ref=e106]:
+          - heading "切换 WiFi" [level=2] [ref=e108]
+          - list [ref=e109]:
+            - listitem [ref=e110]:
+              - generic [ref=e114]:
+                - generic [ref=e115]: TUST
+                - generic [ref=e116]: WPA2 个人
+              - generic [ref=e117]: 校园网认证
+              - generic [ref=e118]: 优先级 1
+              - generic [ref=e119]: 当前
+            - listitem [ref=e120]:
+              - generic [ref=e124]:
+                - generic [ref=e125]: TUST-5G
+                - generic [ref=e126]: WPA2 个人 · 28:e4:24:2c:e5:d1
+              - generic [ref=e127]: 校园网认证
+              - generic [ref=e128]: 优先级 2
+              - button "切换" [ref=e129] [cursor=pointer]
+            - listitem [ref=e130]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: 宿舍热点
+                - generic [ref=e136]: WPA3 个人
+              - generic [ref=e137]: 普通热点
+              - generic [ref=e138]: 优先级 10
+              - button "切换" [ref=e139] [cursor=pointer]
+      - paragraph [ref=e140]

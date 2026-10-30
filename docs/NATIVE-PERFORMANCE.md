@@ -1,6 +1,35 @@
 # NetMate 原生性能记录
 
-记录日期：2026-10-29。以下数据来自界面还原前的历史构建。用户随后要求本机不执行构建和 E2E，并保持原页面及日夜主题；当前界面源码已继续修改，尚无对应的新构建、截图和性能数据。历史数字用于说明优化方向，不构成当前版本的验收结论。
+记录日期：2026-10-29。正式发行门禁为桌面后台 ≤50 MiB、前台 ≤150 MiB；Android 后台 ≤60 MiB、前台 ≤100 MiB；桌面启动 P95 ≤1 秒、Android ≤1.5 秒；桌面稳定后台单核 CPU ≤0.2%；两小时稳定内存增长 ≤5 MiB。MiB = 1,048,576 字节。预算未因本轮移植而放宽。
+
+## 远程验证
+
+界面还原后的 [CI 40882814262](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40882814262)，源码 `91ebc07913dc9e66b710b525871cbcdd6d9dc43c`：
+
+| 环境                            |               后台峰值 |               前台峰值 |       启动 P95 | 结论                                                   |
+| ------------------------------- | ---------------------: | ---------------------: | -------------: | ------------------------------------------------------ |
+| Ubuntu 26.04 x64 容器 / Xvfb    |           PSS 9.19 MiB |         PSS 106.71 MiB |       0.158 秒 | 短测通过                                               |
+| Windows Server 2025 x64 CI      | Private Bytes 2.97 MiB | Private Bytes 5.42 MiB |       0.233 秒 | 短测通过；Windows 11 x64 实机待验收                    |
+| Windows 11 ARM64 CI             | Private Bytes 3.34 MiB | Private Bytes 5.77 MiB |       0.261 秒 | 短测通过                                               |
+| Android API 37 / Pixel 7 模拟器 |       总 PSS 31.38 MiB |       总 PSS 31.60 MiB |       1.267 秒 | 短测通过；ART 编译状态未控制                           |
+| Ubuntu 26.04 ARM64 容器         |           通过后台预算 |       前台超过 150 MiB |         未继续 | 未通过；Cairo 路径仍初始化软件 GL 驱动，已修复待复测   |
+| macOS 27 ARM64 CI               |         未取得有效结果 |         未取得有效结果 | 未取得有效结果 | ad-hoc 包误带受限 entitlement 被系统终止，已修复待复测 |
+
+本表不代表整轮 CI 或四平台实机验收通过。该轮 Android 启动为 30 次冷进程启动，2 核、2 GiB、1080×2400、软件 GPU；完成配置加载和首次实际绘制后调用 `reportFullyDrawn()`。未控制 ART 编译状态的其他远程轮次曾超过 1.5 秒，不能忽略运行条件直接比较。
+
+[Release 40888029593](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40888029593) 对 `6daaded6a23efa48cc3a897e859a87385eed2c3d` 重新执行完整门禁；Android 明确安装 APK 随附 Baseline Profile 并用 `speed-profile` 编译后测冷进程启动。该条件不等于未编译的首次安装启动，必须连同报告的 `compilation` 字段解释。桌面前台采样同时校验首绘标记中的 UI 进程持续存活。最终发行产物和两小时结果待本轮完成后记录。
+
+修复后的中间轮次 `6daaded`，同为 Release 40888029593：Linux x64 前台峰值 PSS 54,584,320 B（52.06 MiB）、ARM64 76,052,480 B（72.53 MiB），分别启动 P95 0.151 / 0.114 秒，两个架构短测均通过。该轮 Android 在采样时发生 Play 商店自更新和 dex2oat 争抢，P95 3510ms 未通过；不把失败排除出记录。后续 CI 改用同为 API 37 的 Google APIs 镜像，不含商店自更新任务，仍保留双核、2 GiB、1080×2400、软件 GPU 与原启动门槛，并在失败时保存 Perfetto 系统轨迹。该环境与原 Play 镜像需分别解释。
+
+同一轮 macOS 27 ARM64 的 ad-hoc 包复验通过：后台 physical footprint 峰值 17,518,208 B（16.71 MiB）、前台 44,390,400 B（42.33 MiB）、RSS 分别 92,520,448 / 196,771,840 B，后台单核 CPU 0.0726%，启动 P95 0.497 秒。physical footprint 与 RSS 的区别如实保留，不互换口径。
+
+Google APIs 专项 40891222278 仍失败，P95 4152ms；Perfetto 显示首帧约 1.96 秒，其中约 1.44 秒在 Ganesh 命令执行。当前 MainActivity 软件 Canvas 改动仅完成源码检查，需远程验证，不能列为已达标。
+
+桌面关闭窗口释放 UI；Android 退到 Home 后仍存活的缓存 UI 进程全部计入后台 PSS。Windows 使用 Private Bytes/Working Set，macOS 使用 physical footprint/RSS，Linux 使用 PSS/RSS，不跨口径求和或比较百分比。Android `Graphics` 单列，已纳入 Android 统计的分配不重复相加；桌面 GPU 驱动/合成器分配尚未独立采集。
+
+## 历史本机基线
+
+以下是界面还原前的历史构建，仅作优化过程的参考。旧基线包含实施前未提交功能修复，不与新 CI 不同硬件的测量作严格百分比对比。本轮发布不在本机执行构建、UI、模拟器、E2E 或性能采样。
 
 ## 机器与方法
 
@@ -26,8 +55,8 @@ Linux 原始 JSON 均报告 SwapPss 为 0。GPU 分配尚未独立采集。Andro
 
 本地原始记录位于被 Git 忽略的 `dist-native/`：`linux-final-background.json`、`linux-baseline-background.json`、`linux-baseline-foreground.json`、`linux-foreground.json`、`linux-startup.json`、`android-startup.json`。这些记录按历史构建 SHA 解释，不与当前源码混用。约 0.02 秒的 `agent-socket` 就绪时间仅表示 IPC 可用，不代表 UI 首次可交互。
 
-## 当前验收状态
+## 测量边界
 
-本轮没有重新构建或重测。界面还原后的四平台数据、两小时稳定性、100 次 UI 生命周期、真实网卡/校园门户、安装更新、自启和权限撤回均待 CI 或专用设备验证。两小时稳定增长目标仍为不超过 5 MiB，不延长心跳或减少统计进程来达标。
+CI 使用 `measure.py`、`measure_desktop.py`、`measure_android.py` 收集完整相关进程，`startup.py` / `startup_android.py` 收集配置加载与首绘完成分布，`check_budget.py` 执行预算门禁。Release 的两小时阶段下载同一轮安装包，运行安装后的程序，不重新构建。原始 JSON、逐进程样本、截图和 stderr/logcat 保存在对应 Actions artifacts。
 
-CI 使用 `measure.py`、`measure_desktop.py`、`measure_android.py` 收集完整相关进程，`startup.py` / `startup_android.py` 收集配置加载与首绘完成分布，`check_budget.py` 执行预算门禁。验收报告必须附系统、硬件、签名/构建版本、二进制摘要、采样场景、测量口径、进程明细和 GPU 单列数据。当前工作区不运行这些构建及 UI 测量步骤。
+这些数字来自空配置与 CI 系统网络环境，不能代替真实校园门户、无线关联、权限撤回、设备睡眠与重启、反复恢复压力、实际 GPU 和耗电验收。Linux 安装包体积不包括系统 GTK、NetworkManager 等依赖下载量，该下载量尚未独立测量。

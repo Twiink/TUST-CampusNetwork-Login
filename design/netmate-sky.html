@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NetMate 天空主题原型</title>
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="toggle.css" />
+  </head>
+  <body>
+    <div class="proto-bar" aria-label="原型控制">
+      <span>首页状态：</span>
+      <button data-net="online">已联网</button>
+      <button data-net="recover">重连中</button>
+      <button data-net="offline">未连接</button>
+      <span style="width: 16px"></span>
+      <button data-phone>Android 视图</button>
+    </div>
+    <div class="window">
+      <aside class="rail">
+        <div class="rail-sky" aria-hidden="true"></div>
+        <div class="brand">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+          >
+            <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+            <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <circle cx="12" cy="20" r="1" /></svg
+          >NetMate
+        </div>
+        <nav class="nav" aria-label="页面"></nav>
+        <div class="rail-foot">
+          <div class="toggle-slot"></div>
+          <small>白天 / 黑夜</small>
+        </div>
+      </aside>
+      <main class="main"></main>
+      <nav class="tabbar" aria-label="页面"></nav>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>

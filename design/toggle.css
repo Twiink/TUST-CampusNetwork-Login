@@ -1,0 +1,295 @@
+/* Day/night toggle, after Elsht666/Button 「按钮-全月」. Sized by --ts (1 = 200x90). */
+.toggle {
+  --ts: 0.52;
+  position: relative;
+  width: calc(200px * var(--ts));
+  height: calc(90px * var(--ts));
+  border-radius: 999px;
+  border: calc(2px * var(--ts)) solid rgba(255, 255, 255, 0.25);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4a90d9 0%, #6fb0ee 55%, #9bcbf5 100%);
+  box-shadow:
+    0 0 40px rgba(59, 130, 246, 0.15),
+    0 10px 28px rgba(74, 144, 217, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition:
+    background 0.7s ease,
+    box-shadow 0.5s ease,
+    border-color 0.5s ease,
+    transform 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.night .toggle {
+  background: linear-gradient(135deg, #070d1c 0%, #111a30 55%, #1c2a48 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 0 40px rgba(96, 165, 250, 0.07),
+    0 10px 28px rgba(7, 13, 28, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.toggle:hover {
+  transform: scale(1.07);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 0 60px rgba(59, 130, 246, 0.25),
+    0 12px 40px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.night .toggle:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    0 0 70px rgba(96, 165, 250, 0.12),
+    0 12px 40px rgba(0, 0, 0, 0.35);
+}
+.toggle:active {
+  transform: scale(1.03);
+  transition: transform 0.15s;
+}
+.toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.toggle span {
+  position: absolute;
+  pointer-events: none;
+}
+
+.t-sun {
+  top: calc(14px * var(--ts));
+  right: calc(26px * var(--ts));
+  width: calc(28px * var(--ts));
+  height: calc(28px * var(--ts));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff5c0, #ffd84d 70%, #ffc107);
+  box-shadow:
+    0 0 calc(14px * var(--ts)) rgba(255, 216, 77, 0.85),
+    0 0 calc(30px * var(--ts)) rgba(255, 193, 7, 0.55);
+  animation: sunGlow 3s ease-in-out infinite;
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s ease;
+}
+@keyframes sunGlow {
+  50% {
+    transform: scale(1.07);
+  }
+}
+.night .t-sun {
+  opacity: 0;
+  transform: scale(0.5);
+  animation: none;
+}
+
+.t-cloud {
+  left: 0;
+  background: #fff;
+  border-radius: 999px;
+  z-index: 1;
+  transition: opacity 0.55s ease;
+}
+.t-cloud::before,
+.t-cloud::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  border-radius: 50%;
+}
+.c1 {
+  width: calc(40px * var(--ts));
+  height: calc(18px * var(--ts));
+  top: 12%;
+  animation: drift 20s linear infinite;
+}
+.c1::before {
+  width: calc(22px * var(--ts));
+  height: calc(22px * var(--ts));
+  top: calc(-11px * var(--ts));
+  left: calc(4px * var(--ts));
+}
+.c1::after {
+  width: calc(28px * var(--ts));
+  height: calc(28px * var(--ts));
+  top: calc(-14px * var(--ts));
+  right: calc(4px * var(--ts));
+}
+.c2 {
+  width: calc(32px * var(--ts));
+  height: calc(14px * var(--ts));
+  top: 52%;
+  animation: drift 28s linear -10s infinite;
+}
+.c2::before {
+  width: calc(18px * var(--ts));
+  height: calc(18px * var(--ts));
+  top: calc(-9px * var(--ts));
+  left: calc(3px * var(--ts));
+}
+.c2::after {
+  width: calc(22px * var(--ts));
+  height: calc(22px * var(--ts));
+  top: calc(-11px * var(--ts));
+  right: calc(3px * var(--ts));
+}
+.c3 {
+  width: calc(46px * var(--ts));
+  height: calc(20px * var(--ts));
+  top: 32%;
+  animation: drift 24s linear -16s infinite;
+}
+.c3::before {
+  width: calc(26px * var(--ts));
+  height: calc(26px * var(--ts));
+  top: calc(-13px * var(--ts));
+  left: calc(5px * var(--ts));
+}
+.c3::after {
+  width: calc(32px * var(--ts));
+  height: calc(32px * var(--ts));
+  top: calc(-16px * var(--ts));
+  right: calc(5px * var(--ts));
+}
+.c4 {
+  width: calc(28px * var(--ts));
+  height: calc(12px * var(--ts));
+  top: 64%;
+  animation: drift 16s linear -6s infinite;
+}
+.c4::before {
+  width: calc(16px * var(--ts));
+  height: calc(16px * var(--ts));
+  top: calc(-8px * var(--ts));
+  left: calc(3px * var(--ts));
+}
+.c4::after {
+  width: calc(20px * var(--ts));
+  height: calc(20px * var(--ts));
+  top: calc(-10px * var(--ts));
+  right: calc(3px * var(--ts));
+}
+@keyframes drift {
+  from {
+    transform: translateX(calc(270px * var(--ts)));
+  }
+  to {
+    transform: translateX(calc(-90px * var(--ts)));
+  }
+}
+.night .t-cloud {
+  opacity: 0;
+}
+
+.t-moon {
+  top: calc(12px * var(--ts));
+  left: calc(22px * var(--ts));
+  width: calc(30px * var(--ts));
+  height: calc(30px * var(--ts));
+  border-radius: 50%;
+  z-index: 2;
+  background: radial-gradient(circle at 34% 32%, #fff 0%, #fff6d9 55%, #f2e3a8 100%);
+  box-shadow:
+    0 0 calc(12px * var(--ts)) rgba(255, 235, 170, 0.95),
+    0 0 calc(26px * var(--ts)) rgba(255, 225, 140, 0.6);
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity 0.55s ease,
+    transform 0.55s ease;
+}
+.night .t-moon {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.t-star {
+  width: max(1.5px, calc(3px * var(--ts)));
+  height: max(1.5px, calc(3px * var(--ts)));
+  background: #fff;
+  border-radius: 50%;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.night .t-star {
+  opacity: 1;
+  animation: twinkle 2.2s ease-in-out infinite;
+}
+@keyframes twinkle {
+  50% {
+    transform: scale(1.7);
+    opacity: 0.35;
+  }
+}
+.s1 {
+  top: 22%;
+  left: 32%;
+}
+.s2 {
+  top: 42%;
+  left: 52%;
+  animation-delay: 0.4s !important;
+}
+.s3 {
+  top: 18%;
+  left: 67%;
+  animation-delay: 0.8s !important;
+}
+.s4 {
+  top: 51%;
+  left: 26%;
+  animation-delay: 1.2s !important;
+}
+.s5 {
+  top: 31%;
+  left: 81%;
+  animation-delay: 0.6s !important;
+}
+.s6 {
+  top: 60%;
+  left: 62%;
+  animation-delay: 1.6s !important;
+}
+.s7 {
+  top: 24%;
+  left: 45%;
+  animation-delay: 1s !important;
+}
+.s8 {
+  top: 56%;
+  left: 79%;
+  animation-delay: 0.3s !important;
+}
+
+.t-knob {
+  top: 0;
+  left: 0;
+  z-index: 10;
+  width: calc(86px * var(--ts));
+  height: calc(86px * var(--ts));
+  border-radius: 50%;
+  background: linear-gradient(160deg, #ffe7a0, #f0d080 60%, #e2bf6a);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.26),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.09),
+    inset 0 2px 4px rgba(255, 255, 255, 0.5);
+  transition:
+    transform 0.55s cubic-bezier(0.68, -0.1, 0.265, 1.2),
+    background 0.55s ease,
+    box-shadow 0.55s ease;
+}
+.night .t-knob {
+  transform: translateX(calc(110px * var(--ts)));
+  background: linear-gradient(160deg, #e4e4e4, #c8c8c8 60%, #b3b3b3);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.42),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.12),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle *,
+  .toggle {
+    animation: none !important;
+    transition-duration: 0.01s !important;
+  }
+}
