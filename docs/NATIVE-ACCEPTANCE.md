@@ -32,6 +32,8 @@
 
 2026-10-31：Linux 日夜开关改按 `design/toggle-pen.html`（CodePen linxiang-webcraft/pvbvLBN 原版）还原为 90×40，Windows、macOS、Android 待跟进；同样仅源码检查，待验证。
 
+2026-10-31：Linux 界面按 `design/netmate-card.html` 改为校园一卡通样式（日夜开关不变，可访问名称不变）；仅 rustfmt 与 CSS 括号/变量核对，编译、clippy、截图、UI 冒烟与性能待验证。
+
 ## 远程验证证据
 
 [CI 40882814262](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40882814262)，源码 `91ebc07913dc9e66b710b525871cbcdd6d9dc43c`，已实际执行全部原生构建、单元测试、双主题截图和 100 次 UI 生命周期。该轮 Windows 两架构、Linux x64 和 Android 短测全部通过；macOS 打包后启动、Linux ARM64 前台内存失败，不能把整轮 CI 标为通过。

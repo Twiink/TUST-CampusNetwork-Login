@@ -13,8 +13,6 @@ struct Ui {
     body: gtk::Box,
     home: gtk::Box,
     home_signature: String,
-    /// Weather illustration of the home sky panel; redrawn when the theme changes.
-    sky_art: Option<gtk::DrawingArea>,
     /// Countdown labels on the home page; `true` reads the heartbeat deadline, `false` the retry deadline.
     countdowns: Vec<(gtk::Label, bool)>,
     ticking: bool,
@@ -81,29 +79,33 @@ pub fn run() {
             settings.set_gtk_application_prefer_dark_theme(dark);
         }
         let root = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-        let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        sidebar.add_css_class("rail-items");
-        sidebar.set_width_request(196);
-        let brand = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+        let sidebar = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        sidebar.add_css_class("rail");
+        sidebar.set_width_request(200);
+        // Brand: a small card with its chip, the same object as the home page's account card.
+        let brand = gtk::Box::new(gtk::Orientation::Horizontal, 12);
         brand.add_css_class("brand");
-        let brand_icon = gtk::Image::from_icon_name("network-wireless-symbolic");
-        brand_icon.set_pixel_size(26);
-        brand.append(&brand_icon);
-        brand.append(&gtk::Label::new(Some("NetMate")));
+        let brand_card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        brand_card.add_css_class("brand-card");
+        brand_card.set_size_request(30, 21);
+        brand_card.set_valign(gtk::Align::Center);
+        let brand_chip = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        brand_chip.add_css_class("brand-chip");
+        brand_chip.set_size_request(9, 7);
+        brand_chip.set_halign(gtk::Align::Start);
+        brand_chip.set_valign(gtk::Align::Start);
+        brand_card.append(&brand_chip);
+        brand.append(&brand_card);
+        let brand_text = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        brand_text.set_valign(gtk::Align::Center);
+        text(&brand_text, "NetMate", &["brand-name"]);
+        text(&brand_text, "天津科技大学校园网", &["brand-sub"]);
+        brand.append(&brand_text);
         sidebar.append(&brand);
-        // The rail gradient comes from CSS; a static drawing behind the items adds day clouds or night stars.
-        let rail = gtk::Overlay::new();
-        rail.add_css_class("rail");
-        rail.set_overflow(gtk::Overflow::Hidden);
-        let rail_sky = gtk::DrawingArea::builder()
-            .accessible_role(gtk::AccessibleRole::Presentation)
-            .can_target(false)
-            .build();
-        rail_sky.set_draw_func(draw_rail_sky);
-        rail.set_child(Some(&rail_sky));
-        rail.add_overlay(&sidebar);
-        rail.set_measure_overlay(&sidebar, true);
-        root.append(&rail);
+        let navs = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        navs.add_css_class("navs");
+        sidebar.append(&navs);
+        root.append(&sidebar);
         let main = gtk::Box::new(gtk::Orientation::Vertical, 12);
         main.set_hexpand(true);
         main.set_vexpand(true);
@@ -125,7 +127,6 @@ pub fn run() {
             body,
             home: gtk::Box::new(gtk::Orientation::Vertical, 0),
             home_signature: String::new(),
-            sky_art: None,
             countdowns: vec![],
             ticking: false,
             scan: Value::Null,
@@ -163,8 +164,10 @@ pub fn run() {
         ] {
             let item = gtk::ToggleButton::new();
             item.add_css_class("navigation");
-            let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-            row.append(&gtk::Image::from_icon_name(icon));
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+            let image = gtk::Image::from_icon_name(icon);
+            image.set_pixel_size(18);
+            row.append(&image);
             row.append(&gtk::Label::new(Some(title)));
             item.set_child(Some(&row));
             item.update_property(&[gtk::accessible::Property::Label(title)]);
@@ -173,7 +176,7 @@ pub fn run() {
                 ui.borrow_mut().page = page.into();
                 render(&ui);
             });
-            sidebar.append(&item);
+            navs.append(&item);
             state.borrow_mut().navigation.push((page.into(), item));
         }
         let space = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -218,7 +221,6 @@ pub fn run() {
         theme_accessibility(&appearance, dark);
         let weak = Rc::downgrade(&state);
         let area = drawing.downgrade();
-        let sky = rail_sky.downgrade();
         appearance.connect_toggled(move |toggle| {
             let Some(ui) = weak.upgrade() else { return };
             let dark = toggle.is_active();
@@ -236,22 +238,16 @@ pub fn run() {
                 anim.borrow_mut().night = dark;
                 animate_toggle(&anim, &area);
             }
-            if let Some(sky) = sky.upgrade() {
-                sky.queue_draw();
-            }
-            if let Some(art) = ui.sky_art.as_ref() {
-                art.queue_draw();
-            }
             if let Err(error) = crate::theme::save(dark) {
                 ui.feedback.set_text(&error.to_string());
             }
         });
-        let foot = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         foot.add_css_class("rail-foot");
-        foot.set_halign(gtk::Align::Center);
         foot.append(&appearance);
         let caption = gtk::Label::new(Some("白天 / 黑夜"));
         caption.add_css_class("rail-caption");
+        caption.set_halign(gtk::Align::Center);
         foot.append(&caption);
         sidebar.append(&foot);
         glib::spawn_future_local({
@@ -453,9 +449,6 @@ fn mix(a: u32, b: u32, k: f64) -> (f64, f64, f64) {
         a.2 + (b.2 - a.2) * k,
     )
 }
-fn stop(g: &cairo::Gradient, offset: f64, color: (f64, f64, f64), alpha: f64) {
-    g.add_color_stop_rgba(offset, color.0, color.1, color.2, alpha);
-}
 fn pill(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64) {
     let r = h.min(w) / 2.0;
     cr.new_sub_path();
@@ -478,26 +471,6 @@ fn pill(cr: &cairo::Context, x: f64, y: f64, w: f64, h: f64) {
 fn disc(cr: &cairo::Context, x: f64, y: f64, r: f64) {
     cr.new_sub_path();
     cr.arc(x, y, r, 0.0, std::f64::consts::TAU);
-}
-/// A glossy sphere: radial gradient whose centre sits up and left, as in the prototype's suns and moons.
-fn sphere(
-    cr: &cairo::Context,
-    x: f64,
-    y: f64,
-    r: f64,
-    focus: (f64, f64),
-    stops: &[(f64, u32)],
-    alpha: f64,
-) {
-    let (fx, fy) = (x - r + focus.0 * 2.0 * r, y - r + focus.1 * 2.0 * r);
-    let reach = ((1.0 - focus.0).hypot(1.0 - focus.1)) * 2.0 * r;
-    let g = cairo::RadialGradient::new(fx, fy, 0.0, fx, fy, reach);
-    for (offset, color) in stops {
-        stop(&g, *offset, rgb(*color), alpha);
-    }
-    let _ = cr.set_source(g);
-    disc(cr, x, y, r);
-    let _ = cr.fill();
 }
 type Rect = (f64, f64, f64, f64);
 /// CSS `box-shadow` on a pill (a circle when square). `shape` is the shadow's own box, already
@@ -694,241 +667,6 @@ fn draw_toggle(cr: &cairo::Context, width: i32, height: i32, t: &Toggle) {
     let _ = cr.restore();
     let _ = cr.restore();
 }
-/// The prototype's `CLOUD` path (viewBox 120×64), with its SVG arcs converted to Cairo arcs.
-fn cloud_path(cr: &cairo::Context) {
-    cr.move_to(28.0, 60.0);
-    cr.arc(27.892, 42.0, 18.0, 1.5648, 4.6071);
-    cr.arc(51.756, 27.651, 26.0, -3.0046, -0.4646);
-    cr.arc(77.219, 35.876, 20.0, -1.682, -0.351);
-    cr.arc(91.167, 44.253, 16.0, -1.264, 1.3928);
-    cr.close_path();
-}
-/// Fills a `CLOUD` at `(x, y)` scaled by `s`, with a vertical gradient over the cloud's height.
-fn cloud(
-    cr: &cairo::Context,
-    x: f64,
-    y: f64,
-    s: f64,
-    top: (f64, f64, f64, f64),
-    bottom: (f64, f64, f64, f64),
-) {
-    let _ = cr.save();
-    cr.translate(x, y);
-    cr.scale(s, s);
-    let g = cairo::LinearGradient::new(0.0, 1.65, 0.0, 60.0);
-    g.add_color_stop_rgba(0.0, top.0, top.1, top.2, top.3);
-    g.add_color_stop_rgba(1.0, bottom.0, bottom.1, bottom.2, bottom.3);
-    let _ = cr.set_source(g);
-    cloud_path(cr);
-    let _ = cr.fill();
-    let _ = cr.restore();
-}
-fn is_dark(widget: &impl IsA<gtk::Widget>) -> bool {
-    widget.root().is_some_and(|root| root.has_css_class("dark"))
-}
-/// Static sidebar decoration: two translucent clouds by day, sparse stars by night.
-fn draw_rail_sky(area: &gtk::DrawingArea, cr: &cairo::Context, width: i32, height: i32) {
-    let (w, h) = (width as f64, height as f64);
-    if is_dark(area) {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
-        for i in 0..14 {
-            disc(
-                cr,
-                w * ((i * 41) % 95) as f64 / 100.0 + 1.0,
-                h * ((i * 29) % 70) as f64 / 100.0 + 1.0,
-                1.0,
-            );
-        }
-        let _ = cr.fill();
-        return;
-    }
-    for (x, bottom, size, alpha) in [
-        (-22.0, 112.0, 138.0, 0.3),
-        (w + 16.0 - 86.0, 196.0, 86.0, 0.22),
-    ] {
-        let s = size / 120.0;
-        cloud(
-            cr,
-            x,
-            h - bottom - 64.0 * s,
-            s,
-            (1.0, 1.0, 1.0, alpha),
-            (1.0, 1.0, 1.0, alpha * 0.55),
-        );
-    }
-}
-#[derive(Clone, Copy, PartialEq)]
-enum Weather {
-    Clear,
-    Cloud,
-    Storm,
-}
-impl Weather {
-    fn class(self) -> &'static str {
-        match self {
-            Weather::Clear => "clear",
-            Weather::Cloud => "cloudy",
-            Weather::Storm => "storm",
-        }
-    }
-}
-/// Sky panel art: night stars across the panel and the 176×120 weather illustration at the top right.
-/// Static; a state change rebuilds the home page, a theme change only redraws.
-fn draw_weather(
-    area: &gtk::DrawingArea,
-    cr: &cairo::Context,
-    width: i32,
-    height: i32,
-    weather: Weather,
-) {
-    let night = is_dark(area);
-    let (w, h) = (width as f64, height as f64);
-    if night && weather != Weather::Storm {
-        cr.set_source_rgba(
-            1.0,
-            1.0,
-            1.0,
-            if weather == Weather::Clear {
-                0.85
-            } else {
-                0.35
-            },
-        );
-        for i in 0..18 {
-            disc(
-                cr,
-                w * ((i * 37 + 39) % 97) as f64 / 100.0 + 1.0,
-                h * ((i * 53 + 21) % 89) as f64 / 100.0 + 1.0,
-                1.0,
-            );
-        }
-        let _ = cr.fill();
-    }
-    let _ = cr.save();
-    cr.translate(w - 30.0 - 176.0, 6.0);
-    cr.scale(0.8, 0.8);
-    let glow = match weather {
-        Weather::Clear => 1.0,
-        Weather::Cloud => 0.35,
-        Weather::Storm => 0.0,
-    };
-    let body = match weather {
-        Weather::Clear => 1.0,
-        Weather::Cloud => 0.6,
-        Weather::Storm => 0.0,
-    };
-    if glow > 0.0 {
-        let g = cairo::RadialGradient::new(138.0, 50.0, 0.0, 138.0, 50.0, 58.0);
-        let (color, alpha) = if night {
-            (0xffecb0, 0.35)
-        } else {
-            (0xffe680, 0.55)
-        };
-        let inner = if night { 0.4 } else { 0.45 };
-        stop(&g, 0.0, rgb(color), alpha * glow);
-        stop(&g, inner, rgb(color), alpha * glow);
-        stop(&g, 1.0, rgb(color), 0.0);
-        let _ = cr.set_source(g);
-        disc(cr, 138.0, 50.0, 58.0);
-        let _ = cr.fill();
-    }
-    if body > 0.0 {
-        if night {
-            sphere(
-                cr,
-                138.0,
-                50.0,
-                28.0,
-                (0.34, 0.32),
-                &[(0.0, 0xffffff), (0.55, 0xfff6d9), (1.0, 0xf2e3a8)],
-                body,
-            );
-            let crater = rgb(0xecdca6);
-            for (x, y, r, alpha) in [
-                (128.0, 44.0, 5.0, 0.55),
-                (147.0, 60.0, 3.5, 0.5),
-                (146.0, 39.0, 2.5, 0.45),
-            ] {
-                cr.set_source_rgba(crater.0, crater.1, crater.2, alpha * body);
-                disc(cr, x, y, r);
-                let _ = cr.fill();
-            }
-        } else {
-            sphere(
-                cr,
-                138.0,
-                50.0,
-                30.0,
-                (0.36, 0.34),
-                &[(0.0, 0xfff5c0), (0.7, 0xffd84d), (1.0, 0xffc107)],
-                body,
-            );
-        }
-    }
-    let (top, bottom, mid) = match (night, weather) {
-        (false, Weather::Storm) => (0xe3e7ec, 0xa9b2bd, None),
-        (false, _) => (0xffffff, 0xd6e6f7, Some(0xf3f8fe)),
-        (true, Weather::Storm) => (0x5a5258, 0x352d33, None),
-        (true, _) => (0x5d6c8c, 0x36425c, None),
-    };
-    let fill = |cr: &cairo::Context, x: f64, y: f64, s: f64, alpha: f64| {
-        let _ = cr.save();
-        cr.translate(x, y);
-        cr.scale(s, s);
-        let g = cairo::LinearGradient::new(0.0, 1.65, 0.0, 60.0);
-        stop(&g, 0.0, rgb(top), alpha);
-        if let Some(mid) = mid {
-            stop(&g, 0.7, rgb(mid), alpha);
-        }
-        stop(&g, 1.0, rgb(bottom), alpha);
-        let _ = cr.set_source(g);
-        cloud_path(cr);
-        let _ = cr.fill();
-        let _ = cr.restore();
-    };
-    if weather != Weather::Clear {
-        fill(cr, 6.0, 24.0, 0.82, 0.75);
-    }
-    // Main cloud with the prototype's drop shadow (dy 6, blur 6, #1b4f86 at 0.22).
-    let shade = rgb(0x1b4f86);
-    for (i, spread) in [6.0, 4.0, 2.0].into_iter().enumerate() {
-        let _ = cr.save();
-        cr.translate(62.0 - spread, 56.0 - spread * 0.6);
-        let s = 1.3 * (1.0 + spread / 60.0);
-        cr.scale(s, s);
-        cloud_path(cr);
-        cr.set_source_rgba(
-            shade.0,
-            shade.1,
-            shade.2,
-            0.22 / 3.0 * (i as f64 + 1.0) / 2.0,
-        );
-        let _ = cr.fill();
-        let _ = cr.restore();
-    }
-    fill(
-        cr,
-        62.0,
-        50.0,
-        1.3,
-        if night && weather == Weather::Clear {
-            0.5
-        } else {
-            1.0
-        },
-    );
-    if weather == Weather::Storm {
-        let rain = rgb(if night { 0x8ea3c7 } else { 0xd7ebff });
-        cr.set_source_rgba(rain.0, rain.1, rain.2, 0.9);
-        cr.set_line_width(3.0);
-        for x in [112.0, 134.0, 156.0, 178.0] {
-            cr.move_to(x, 136.0);
-            cr.rel_line_to(-6.0, 12.0);
-        }
-        let _ = cr.stroke();
-    }
-    let _ = cr.restore();
-}
 fn send(s: &Rc<RefCell<Ui>>, command: Command) -> bool {
     let sent = s.borrow().tx.try_send(command).is_ok();
     if !sent {
@@ -1009,14 +747,14 @@ fn spacer(parent: &gtk::Box) {
     s.set_hexpand(true);
     parent.append(&s);
 }
-/// `.card` with an `h3`-style heading separated by a bottom rule, as in App.css.
+/// A plain section: an optional heading over an ink rule, then its rows. No card container.
 fn card(parent: &gtk::Box, title: &str) -> gtk::Box {
-    let card = gtk::Box::new(gtk::Orientation::Vertical, 14);
-    card.add_css_class("card");
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    card.add_css_class("sec");
     if !title.is_empty() {
         let heading = gtk::Label::new(Some(title));
         heading.set_xalign(0.0);
-        heading.add_css_class("card-title");
+        heading.add_css_class("sec-title");
         card.append(&heading);
     }
     parent.append(&card);
@@ -1060,15 +798,6 @@ fn page_title(body: &gtk::Box, title: &str) -> gtk::Box {
     row.append(&l);
     body.append(&row);
     row
-}
-fn priority_class(priority: u64) -> &'static str {
-    match priority {
-        0..=3 => "prio-highest",
-        4..=6 => "prio-high",
-        7..=10 => "prio-normal",
-        11..=20 => "prio-low",
-        _ => "prio-lowest",
-    }
 }
 fn isp_label(isp: &str) -> &str {
     match isp {
@@ -1229,7 +958,6 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
         let mut ui = state.borrow_mut();
         ui.home_signature = signature;
         ui.countdowns.clear();
-        ui.sky_art = None;
         ui.home.clone()
     };
     clear(&home);
@@ -1259,29 +987,64 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
         None
     };
     let ssid = n.ssid.clone().unwrap_or_default();
-    let place = format!("当前 WiFi · {ssid}");
+    let accounts = if wifi {
+        login_accounts(&config, &n, rule.as_ref())
+    } else {
+        vec![]
+    };
+    let number = accounts
+        .first()
+        .and_then(|a| a["username"].as_str())
+        .map(card_number);
+    // Each extra account in the login order shows as one more card behind the front one.
+    let backs = accounts.len().saturating_sub(1).min(2);
     let view = if !wifi {
-        let mut chips = vec![("连接到 WiFi 后才能使用网络认证功能".to_string(), "")];
+        let mut notes = vec![("连接到 WiFi 后才能使用网络认证功能".to_string(), "")];
         if heartbeat_on {
-            chips.push(("心跳检测已暂停".into(), "alert"));
+            notes.push(("心跳检测已暂停".into(), "bad"));
         }
-        Sky {
-            weather: Weather::Storm,
-            place: "网络连接状态".into(),
-            title: "未连接 WiFi".into(),
+        Face {
+            tone: "bad",
+            void: true,
+            backs: 0,
+            issuer: "TUST · 校园网认证",
+            place: "无 WiFi".into(),
+            status: "未连接 WiFi".into(),
+            headline: "先连上 WiFi".into(),
             body: "当前设备未连接到任何 WiFi 网络，请先连接 WiFi。".into(),
-            chips,
+            meta: vec![
+                ("WiFi", "无".into()),
+                (
+                    "心跳检测",
+                    if heartbeat_on {
+                        "已暂停"
+                    } else {
+                        "已关闭"
+                    }
+                    .into(),
+                ),
+            ],
+            notes,
             action: None,
         }
     } else if rule.is_none() && snapshot["requiresAuth"] != true {
         let same_name = rules(&config).iter().any(|w| w.ssid == ssid);
-        Sky {
-            weather: Weather::Cloud,
-            place,
-            title: if same_name {
+        Face {
+            tone: "idle",
+            void: true,
+            backs: 0,
+            issuer: "TUST · 未配置",
+            place: ssid.clone(),
+            status: if same_name {
                 "请选择当前 WiFi 规则"
             } else {
                 "该 WiFi 未配置"
+            }
+            .into(),
+            headline: if same_name {
+                "选择 WiFi 规则"
+            } else {
+                "添加这个 WiFi"
             }
             .into(),
             body: if same_name {
@@ -1292,7 +1055,14 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
                     "当前连接的 WiFi \"{ssid}\" 尚未配置，请前往\"配置设置\"添加此 WiFi 的配置。"
                 )
             },
-            chips: vec![("点击左侧菜单的\"配置设置\"添加 WiFi 配置".into(), "")],
+            meta: vec![
+                ("WiFi", ssid.clone()),
+                (
+                    "WiFi 规则",
+                    if same_name { "未匹配" } else { "未配置" }.into(),
+                ),
+            ],
+            notes: vec![("点击左侧菜单的\"配置设置\"添加 WiFi 配置".into(), "")],
             action: None,
         }
     } else if !rule
@@ -1300,35 +1070,50 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
         .map(|w| w.requires_auth)
         .unwrap_or(snapshot["requiresAuth"] == true)
     {
-        Sky {
-            weather: if online {
-                Weather::Clear
+        Face {
+            tone: if online { "ok" } else { "warn" },
+            void: false,
+            backs: 0,
+            issuer: "TUST · 无需认证",
+            place: ssid.clone(),
+            status: "无需认证".into(),
+            headline: if online {
+                "互联网可达"
             } else {
-                Weather::Cloud
-            },
-            place,
-            title: "无需认证".into(),
+                "互联网暂不可达"
+            }
+            .into(),
             body: if online {
                 "当前 WiFi 无需校园网认证，互联网可达。"
             } else {
                 "当前 WiFi 无需校园网认证，互联网暂不可达。"
             }
             .into(),
-            chips: vec![
-                ("此 WiFi 已配置为「无需认证」".into(), "strong"),
+            meta: vec![
+                ("WiFi", ssid.clone()),
+                ("WiFi 规则", "无需认证".into()),
+                ("互联网", if online { "可达" } else { "不可达" }.into()),
+            ],
+            notes: vec![
+                ("此 WiFi 已配置为「无需认证」".into(), "gold"),
                 ("如家庭 WiFi、手机热点等网络".into(), ""),
             ],
             action: None,
         }
-    } else if login_accounts(&config, &n, rule.as_ref()).is_empty() {
+    } else if accounts.is_empty() {
         let s = state.clone();
-        Sky {
-            weather: Weather::Cloud,
-            place,
-            title: "未配置账户".into(),
+        Face {
+            tone: "idle",
+            void: true,
+            backs: 0,
+            issuer: "TUST · 校园网认证",
+            place: ssid.clone(),
+            status: "未配置账户".into(),
+            headline: "还差一个账号".into(),
             body: "该 WiFi 需要校园网认证，但尚未关联账户。请前往\"配置设置\"添加账户并关联到此 WiFi。"
                 .into(),
-            chips: vec![("点击左侧菜单的\"配置设置\"添加账户并关联".into(), "")],
+            meta: vec![("WiFi 规则", "需要认证".into()), ("关联账户", "无".into())],
+            notes: vec![("点击左侧菜单的\"配置设置\"添加账户并关联".into(), "")],
             action: Some(Box::new(move |footer: &gtk::Box| {
                 let s = s.clone();
                 button(footer, "添加认证账号", move || go(&s, "配置设置"));
@@ -1358,14 +1143,18 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
                 });
             }
         });
-        Sky {
-            weather: if authenticated && online {
-                Weather::Clear
+        let isp = accounts[0]["isp"].as_str().unwrap_or("");
+        Face {
+            tone: if authenticated && online {
+                "ok"
             } else {
-                Weather::Cloud
+                "warn"
             },
-            place,
-            title: if authenticated {
+            void: false,
+            backs,
+            issuer: "TUST · 校园网认证",
+            place: ssid.clone(),
+            status: if authenticated {
                 if online {
                     "已认证并联网"
                 } else {
@@ -1373,6 +1162,18 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
                 }
             } else {
                 "需要认证"
+            }
+            .into(),
+            headline: if authenticated {
+                if online {
+                    "一切正常"
+                } else {
+                    "正在检查互联网"
+                }
+            } else if connecting {
+                "正在认证"
+            } else {
+                "等待认证"
             }
             .into(),
             body: if authenticated {
@@ -1385,7 +1186,20 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
                 "当前 WiFi 需要校园网认证，请点击下方按钮进行认证。"
             }
             .into(),
-            chips: vec![
+            meta: vec![
+                ("运营商", isp_label(isp).to_string()),
+                ("关联账户", format!("{} 个", accounts.len())),
+                (
+                    "WiFi 规则",
+                    if rule.is_some() {
+                        "需要认证"
+                    } else {
+                        "自动识别"
+                    }
+                    .into(),
+                ),
+            ],
+            notes: vec![
                 (
                     if rule.is_some() {
                         "此 WiFi 已配置为「需要认证」"
@@ -1393,25 +1207,29 @@ fn refresh_home(state: &Rc<RefCell<Ui>>) {
                         "根据当前网络信息识别为校园网"
                     }
                     .into(),
-                    "strong",
+                    "gold",
                 ),
                 ("如校园网 CMCC/CUCC/CTCC".into(), ""),
             ],
             action: Some(action),
         }
     };
-    sky_panel(state, &home, view, &snapshot, &config);
-    recovery_failures(&home, &snapshot);
+    account_card(state, &home, view, number.as_deref(), &snapshot, &config);
     if wifi {
         metric_strip(state, &home, &snapshot, &config);
     }
-    let cols = gtk::Box::new(gtk::Orientation::Horizontal, 16);
+    let cols = gtk::Box::new(gtk::Orientation::Horizontal, 32);
     cols.set_homogeneous(true);
     cols.add_css_class("home-cols");
+    let left = column(&cols, 24, &[]);
+    recovery_failures(&left, &snapshot);
     if wifi {
-        wifi_details(state, &cols, &snapshot, &config);
+        wifi_details(state, &left, &snapshot, &config);
     } else if heartbeat_on {
-        heartbeat_paused(&cols);
+        heartbeat_paused(&left);
+    }
+    if left.first_child().is_none() {
+        cols.remove(&left);
     }
     switcher(state, &cols, &snapshot, &config, rule.as_ref());
     if cols.first_child().is_some() {
@@ -1423,30 +1241,59 @@ fn pause_banner(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, config: &Value) {
     if config["settings"]["autoAuthPaused"] != true {
         return;
     }
-    let banner = card(parent, "");
-    text(&banner, "自动认证已暂停", &[]);
-    let actions = row(&banner, 0);
+    let banner = row(parent, 12);
+    banner.add_css_class("banner");
+    let message = text(&banner, "自动认证已暂停", &["banner-text"]);
+    message.set_hexpand(true);
+    message.set_valign(gtk::Align::Center);
     let s = state.clone();
-    button(&actions, "恢复自动认证", move || {
+    button(&banner, "恢复自动认证", move || {
         mutate(&s, |c| c["settings"]["autoAuthPaused"] = json!(false))
     });
 }
-/// Copy for the sky panel; the recovery phase, when active, replaces it in `sky_panel`.
-struct Sky {
-    weather: Weather,
+/// "2023101234" → "2023 1012 34", printed like the number on a campus card.
+fn card_number(username: &str) -> String {
+    let chars: Vec<char> = username.chars().collect();
+    chars
+        .chunks(4)
+        .map(|c| c.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+/// Copy for the home account card and the column beside it; the recovery phase, when active,
+/// replaces the status, copy, meta and actions in `account_card`.
+struct Face {
+    /// Lamp colour class: `ok`, `warn`, `bad` or `idle`.
+    tone: &'static str,
+    /// An empty dashed outline instead of a card face: no WiFi, no rule or no account.
+    void: bool,
+    /// Cards stacked behind the front one (0–2).
+    backs: usize,
+    issuer: &'static str,
     place: String,
-    title: String,
+    status: String,
+    headline: String,
     body: String,
-    /// Chip text and an extra style class (`strong`, `alert` or none).
-    chips: Vec<(String, &'static str)>,
+    meta: Vec<(&'static str, String)>,
+    /// Note text and an extra style class (`gold`, `bad` or none).
+    notes: Vec<(String, &'static str)>,
     action: Option<Box<dyn Fn(&gtk::Box)>>,
 }
-/// The weather panel at the top of the home page: copy on the left, actions at the bottom right and
-/// a static Cairo illustration behind them.
-fn sky_panel(
+/// Pins an overlay child at `(x, y)` with a fixed size, so the deck needs no CSS transforms.
+fn place(widget: &impl IsA<gtk::Widget>, x: i32, y: i32, width: i32, height: i32) {
+    widget.set_halign(gtk::Align::Start);
+    widget.set_valign(gtk::Align::Start);
+    widget.set_margin_start(x);
+    widget.set_margin_top(y);
+    widget.set_size_request(width, height);
+}
+/// The top of the home page: the account card deck on the left, headline, copy, notes and
+/// actions beside it. The magnetic stripe at the card's foot is the retry progress.
+fn account_card(
     state: &Rc<RefCell<Ui>>,
     parent: &gtk::Box,
-    mut view: Sky,
+    mut view: Face,
+    number: Option<&str>,
     snapshot: &Value,
     config: &Value,
 ) {
@@ -1460,26 +1307,30 @@ fn sky_panel(
         "cancelled" => Some(("已取消", true)),
         _ => None,
     };
-    let panel = gtk::Overlay::new();
-    panel.add_css_class("sky");
-    panel.set_overflow(gtk::Overflow::Hidden);
-    let content = gtk::Box::new(gtk::Orientation::Horizontal, 18);
-    content.add_css_class("sky-content");
-    let copy = column(&content, 0, &["sky-copy"]);
-    copy.set_hexpand(true);
-    copy.set_valign(gtk::Align::End);
+    let hero = row(parent, 40);
+    hero.add_css_class("hero");
+    let deck = gtk::Overlay::new();
+    deck.add_css_class("deck");
+    deck.set_valign(gtk::Align::Center);
+    let frame = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    frame.set_size_request(456, 298);
+    deck.set_child(Some(&frame));
+    hero.append(&deck);
+    let side = column(&hero, 12, &["side"]);
+    side.set_hexpand(true);
+    side.set_valign(gtk::Align::Center);
+    // Notes wrap onto new lines in the narrow column beside the card.
+    let notes = gtk::FlowBox::new();
+    notes.add_css_class("notes");
+    notes.set_selection_mode(gtk::SelectionMode::None);
+    notes.set_column_spacing(6);
+    notes.set_row_spacing(6);
+    notes.set_max_children_per_line(4);
+    notes.set_halign(gtk::Align::Start);
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    actions.add_css_class("sky-actions");
-    actions.set_valign(gtk::Align::End);
-    content.append(&actions);
-    let chips = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-    chips.add_css_class("sky-chips");
+    actions.add_css_class("acts");
+    let mut progress = None;
     if let Some((status, failed)) = recovering {
-        view.weather = if failed {
-            Weather::Storm
-        } else {
-            Weather::Cloud
-        };
         let target = snapshot["targetId"].as_str().and_then(|id| {
             config["wifiRules"]
                 .as_array()?
@@ -1490,8 +1341,19 @@ fn sky_panel(
         let ssid = target
             .or_else(|| snapshot["network"]["ssid"].as_str().map(str::to_owned))
             .unwrap_or_default();
-        text(&copy, "WiFi 自动重连", &["sky-where"]);
-        text(&copy, status, &["sky-title"]);
+        let all_failed = failed
+            && snapshot["failures"]
+                .as_array()
+                .is_some_and(|f| !f.is_empty());
+        view.void = false;
+        view.tone = if failed { "bad" } else { "warn" };
+        view.status = status.into();
+        view.headline = if all_failed {
+            "所有 WiFi 连接失败"
+        } else {
+            "WiFi 自动重连"
+        }
+        .into();
         let mut body = vec![];
         if !ssid.is_empty() {
             body.push(format!("目标 WiFi：{ssid}"));
@@ -1499,38 +1361,31 @@ fn sky_panel(
         if let Some(message) = snapshot["message"].as_str().filter(|m| !m.is_empty()) {
             body.push(message.to_string());
         }
-        if !body.is_empty() {
-            text(&copy, &body.join("\n"), &["sky-body"]);
+        view.body = body.join("\n");
+        view.meta.clear();
+        if !ssid.is_empty() {
+            view.place = ssid.clone();
+            view.meta.push(("目标 WiFi", ssid));
         }
-        copy.append(&chips);
-        let countdown = gtk::Label::new(None);
-        countdown.add_css_class("sky-chip");
-        countdown.set_visible(false);
-        chips.append(&countdown);
-        state.borrow_mut().countdowns.push((countdown, false));
         let attempt = snapshot["attempt"].as_u64().unwrap_or(0);
         let max = snapshot["maxAttempts"].as_u64().unwrap_or(0);
         if max > 0 {
-            let progress = row(&copy, 10);
-            progress.add_css_class("sky-progress");
-            let bar = gtk::ProgressBar::new();
-            bar.add_css_class("sky-bar");
-            bar.set_fraction((attempt as f64 / max as f64).clamp(0.0, 1.0));
-            bar.set_hexpand(true);
-            bar.set_valign(gtk::Align::Center);
-            bar.update_property(&[gtk::accessible::Property::Label("尝试进度")]);
-            progress.append(&bar);
-            text(
-                &progress,
-                &format!("第 {attempt} / {max} 次"),
-                &["sky-chip"],
-            );
+            view.meta.push(("尝试", format!("第 {attempt} / {max} 次")));
+            progress = Some((attempt as f64 / max as f64).clamp(0.0, 1.0));
         }
+        view.notes.clear();
+        let countdown = gtk::Label::new(None);
+        countdown.add_css_class("note");
+        countdown.set_visible(false);
+        countdown.set_halign(gtk::Align::Start);
+        notes.insert(&countdown, -1);
+        state.borrow_mut().countdowns.push((countdown, false));
         if failed {
             let s = state.clone();
             button(&actions, "立即重试", move || {
                 send(&s, Command::Retry);
-            });
+            })
+            .add_css_class("primary");
         }
         if phase != "failed" && phase != "cancelled" {
             let s = state.clone();
@@ -1542,37 +1397,120 @@ fn sky_panel(
         if failed && let Some(action) = view.action.as_ref() {
             action(&actions);
         }
-    } else {
-        text(&copy, &view.place, &["sky-where"]);
-        text(&copy, &view.title, &["sky-title"]);
-        text(&copy, &view.body, &["sky-body"]);
-        copy.append(&chips);
-        for (chip, class) in &view.chips {
-            let l = gtk::Label::new(Some(chip.as_str()));
-            l.add_css_class("sky-chip");
-            if !class.is_empty() {
-                l.add_css_class(class);
-            }
-            chips.append(&l);
-        }
-        if let Some(action) = view.action.as_ref() {
-            action(&actions);
-        }
+    } else if let Some(action) = view.action.as_ref() {
+        action(&actions);
     }
-    panel.add_css_class(view.weather.class());
-    let art = gtk::DrawingArea::builder()
-        .accessible_role(gtk::AccessibleRole::Presentation)
-        .can_target(false)
-        .build();
-    let weather = view.weather;
-    art.set_draw_func(move |area, cr, width, height| {
-        draw_weather(area, cr, width, height, weather)
-    });
-    panel.set_child(Some(&art));
-    panel.add_overlay(&content);
-    panel.set_measure_overlay(&content, true);
-    parent.append(&panel);
-    state.borrow_mut().sky_art = Some(art);
+    let backs = if view.void { 0 } else { view.backs };
+    for (class, x, y, w, h) in [("back-2", 45, 11, 409, 257), ("back-1", 24, 16, 424, 266)]
+        .into_iter()
+        .skip(2 - backs)
+    {
+        let back = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        back.set_css_classes(&["card-back", class]);
+        place(&back, x, y, w, h);
+        deck.add_overlay(&back);
+    }
+    let face = gtk::Overlay::new();
+    face.add_css_class("id-card");
+    if view.void {
+        face.add_css_class("void");
+    }
+    face.set_overflow(gtk::Overflow::Hidden);
+    place(&face, 0, 22, 440, 276);
+    let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    body.add_css_class("id-body");
+    face.set_child(Some(&body));
+    let top = row(&body, 12);
+    top.add_css_class("id-top");
+    text(&top, view.issuer, &[]).set_wrap(false);
+    spacer(&top);
+    let place_label = text(&top, &view.place, &[]);
+    place_label.set_wrap(false);
+    place_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    chip(&body, "chip", (46, 34));
+    let status = row(&body, 13);
+    status.add_css_class("id-status");
+    let lamp = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    lamp.set_css_classes(&["lamp", view.tone]);
+    lamp.set_size_request(12, 12);
+    lamp.set_valign(gtk::Align::Center);
+    status.append(&lamp);
+    let title = text(&status, &view.status, &["id-title"]);
+    title.set_wrap(false);
+    title.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    let gap = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    gap.set_vexpand(true);
+    body.append(&gap);
+    let digits = text(
+        &body,
+        if view.void {
+            "•••• •••• ••"
+        } else {
+            number.unwrap_or("•••• •••• ••")
+        },
+        &["id-number"],
+    );
+    digits.set_wrap(false);
+    digits.set_selectable(!view.void && number.is_some());
+    let meta = row(&body, 26);
+    meta.add_css_class("id-meta");
+    for (key, value) in &view.meta {
+        let cell = column(&meta, 0, &[]);
+        text(&cell, key, &["id-meta-key"]).set_wrap(false);
+        let v = text(&cell, value, &["id-meta-value"]);
+        v.set_wrap(false);
+        v.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    }
+    if let Some(fraction) = progress {
+        let stripe = gtk::ProgressBar::new();
+        stripe.add_css_class("stripe");
+        stripe.set_fraction(fraction);
+        stripe.set_valign(gtk::Align::End);
+        stripe.update_property(&[gtk::accessible::Property::Label("尝试进度")]);
+        face.add_overlay(&stripe);
+    }
+    deck.add_overlay(&face);
+    text(&side, &view.headline, &["side-title"]);
+    if !view.body.is_empty() {
+        text(&side, &view.body, &["side-body"]);
+    }
+    for (note, class) in &view.notes {
+        let l = gtk::Label::new(Some(note.as_str()));
+        l.add_css_class("note");
+        if !class.is_empty() {
+            l.add_css_class(class);
+        }
+        l.set_halign(gtk::Align::Start);
+        notes.insert(&l, -1);
+    }
+    if notes.first_child().is_some() {
+        // Notes are text, not choices: keep the flow box's children out of the focus chain.
+        let mut child = notes.first_child();
+        while let Some(widget) = child {
+            widget.set_focusable(false);
+            child = widget.next_sibling();
+        }
+        side.append(&notes);
+    }
+    if actions.first_child().is_some() {
+        side.append(&actions);
+    }
+}
+/// The card's gold chip: a pad outline and a contact line drawn as child boxes, since GTK CSS
+/// has no `::before`/`::after`.
+fn chip(parent: &gtk::Box, class: &str, size: (i32, i32)) {
+    let chip = gtk::Overlay::new();
+    chip.add_css_class(class);
+    chip.set_halign(gtk::Align::Start);
+    chip.set_size_request(size.0, size.1);
+    let pad = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    pad.add_css_class("chip-pad");
+    chip.set_child(Some(&pad));
+    let line = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+    line.add_css_class("chip-line");
+    line.set_valign(gtk::Align::Start);
+    chip.add_overlay(&line);
+    parent.append(&chip);
 }
 /// WifiReconnectFailedCard: per-network reasons once every WiFi has failed.
 fn recovery_failures(parent: &gtk::Box, snapshot: &Value) {
@@ -1580,18 +1518,18 @@ fn recovery_failures(parent: &gtk::Box, snapshot: &Value) {
     if failures.is_empty() || !matches!(snapshot["phase"].as_str(), Some("failed" | "cooldown")) {
         return;
     }
-    let f = card(parent, "所有 WiFi 连接失败");
-    f.add_css_class("progress-card");
-    f.add_css_class("tone-danger");
+    let (c, _) = panel_card(parent, "本轮尝试");
     for failure in failures {
+        let item = column(&c, 2, &["fail-row"]);
         text(
-            &f,
-            &format!(
-                "{}：{}",
-                failure["ssid"].as_str().unwrap_or(""),
-                failure["reason"].as_str().unwrap_or("")
-            ),
-            &[],
+            &item,
+            failure["ssid"].as_str().unwrap_or(""),
+            &["fail-name"],
+        );
+        text(
+            &item,
+            failure["reason"].as_str().unwrap_or(""),
+            &["secondary", "small"],
         );
     }
 }
@@ -1630,23 +1568,21 @@ fn strip_value(cell: &gtk::Box, value: &str, grade: Option<(&str, &str)>) {
     v.add_css_class("metric-value");
     v.set_selectable(true);
     cell.append(&v);
+    // Only the grade word carries the colour; the number stays in ink.
     if let Some((label, class)) = grade {
-        if !class.is_empty() {
-            v.add_css_class(class);
-        }
         let g = gtk::Label::new(Some(label));
         g.set_css_classes(&["metric-grade", class]);
         g.set_valign(gtk::Align::Center);
         cell.append(&g);
     }
 }
-/// Signal, speed, band, internet and heartbeat in one card; the countdown label is the only
+/// Signal, speed, band, internet and heartbeat under one ink rule; the countdown label is the only
 /// widget the one-second tick touches.
 fn metric_strip(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, snapshot: &Value, config: &Value) {
     let n = network(snapshot);
     let strip = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     strip.set_homogeneous(true);
-    strip.set_css_classes(&["card", "strip"]);
+    strip.add_css_class("metrics");
     parent.append(&strip);
     let cell = strip_cell(&strip, "信号强度");
     match n.rssi {
@@ -1690,11 +1626,6 @@ fn metric_strip(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, snapshot: &Value, co
         .as_u64()
         .unwrap_or(30);
     let cell = strip_cell(&strip, &format!("心跳检测 · 每 {interval} 秒"));
-    let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    dot.set_size_request(8, 8);
-    dot.set_valign(gtk::Align::Center);
-    dot.set_css_classes(&["dot", if online { "dot-ok" } else { "dot-bad" }]);
-    cell.append(&dot);
     let state_label = gtk::Label::new(Some(if online { "正常" } else { "异常" }));
     state_label.set_css_classes(&[
         "metric-value",
@@ -1712,10 +1643,11 @@ fn metric_strip(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, snapshot: &Value, co
     cell.append(&countdown);
     state.borrow_mut().countdowns.push((countdown, true));
 }
-/// Card header: title, a flexible gap and an optional trailing widget.
+/// A section: title over an ink rule, a flexible gap and an optional trailing widget; rows
+/// below it are split by hairlines instead of sitting in a card.
 fn panel_card(parent: &gtk::Box, title: &str) -> (gtk::Box, gtk::Box) {
     let c = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    c.set_css_classes(&["card", "panel"]);
+    c.add_css_class("sec");
     let head = row(&c, 10);
     head.add_css_class("panel-head");
     text(&head, title, &["panel-title"]);
@@ -1737,44 +1669,35 @@ fn wifi_details(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, snapshot: &Value, co
         },
     );
     refresh.add_css_class("icon-btn");
-    let table = gtk::Grid::new();
-    table.add_css_class("kv");
-    table.set_column_spacing(24);
-    table.set_row_spacing(10);
-    c.append(&table);
+    refresh.add_css_class("quiet");
     let unknown = |v: &Option<String>| v.clone().unwrap_or_else(|| "未知".into());
     let channel = n
         .channel
         .map(|c| c.to_string())
         .unwrap_or_else(|| "未知".into());
-    for (i, (key, value, mono)) in [
+    for (key, value, mono) in [
         ("WiFi 名称", unknown(&n.ssid), false),
         ("IPv4 地址", unknown(&n.ipv4), true),
         ("IPv6 地址", unknown(&n.ipv6), true),
         ("BSSID", unknown(&n.bssid), true),
         ("WiFi 信道", channel, true),
         ("安全类型", unknown(&n.security), false),
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let k = gtk::Label::new(Some(key));
-        k.set_xalign(0.0);
-        k.set_valign(gtk::Align::Start);
-        k.add_css_class("kv-key");
-        table.attach(&k, 0, i as i32, 1, 1);
-        let v = gtk::Label::new(Some(value.as_str()));
+    ] {
+        let line = row(&c, 16);
+        line.add_css_class("kv");
+        let k = text(&line, key, &["kv-key"]);
+        k.set_wrap(false);
+        k.set_valign(gtk::Align::Center);
+        let v = text(&line, &value, &["kv-value"]);
         v.set_xalign(1.0);
         v.set_hexpand(true);
-        v.set_wrap(true);
+        v.set_valign(gtk::Align::Center);
         v.set_wrap_mode(gtk::pango::WrapMode::Char);
         v.set_justify(gtk::Justification::Right);
         v.set_selectable(true);
-        v.add_css_class("kv-value");
         if mono {
             v.add_css_class("mono");
         }
-        table.attach(&v, 1, i as i32, 1, 1);
     }
     if config["settings"]["enableHeartbeat"] != true {
         return;
@@ -1787,21 +1710,12 @@ fn wifi_details(state: &Rc<RefCell<Ui>>, parent: &gtk::Box, snapshot: &Value, co
         notes.push("系统网络事件监听不可用，已改为定时检测".into());
     }
     if !notes.is_empty() {
-        text(
-            &c,
-            &notes.join("\n"),
-            &["secondary", "small", "muted-box", "panel-note"],
-        );
+        text(&c, &notes.join("\n"), &["secondary", "small", "panel-note"]);
     }
 }
 /// Left column while no WiFi is connected and heartbeat is enabled.
 fn heartbeat_paused(parent: &gtk::Box) {
-    let (c, head) = panel_card(parent, "心跳检测 (已暂停)");
-    let dot = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-    dot.set_size_request(8, 8);
-    dot.set_valign(gtk::Align::Center);
-    dot.set_css_classes(&["dot", "dot-idle"]);
-    head.prepend(&dot);
+    let (c, _) = panel_card(parent, "心跳检测 (已暂停)");
     text(
         &c,
         "当前未连接 WiFi，心跳检测功能暂停。连接到 WiFi 后将自动恢复检测。",
@@ -1809,7 +1723,7 @@ fn heartbeat_paused(parent: &gtk::Box) {
     );
 }
 /// WifiSwitcherCard: configured networks ordered by priority, in fixed columns so badges and
-/// actions line up: icon | name and subtitle | badge (84) | action (68).
+/// actions line up: priority (44) | name and subtitle | badge (92) | action (70).
 fn switcher(
     state: &Rc<RefCell<Ui>>,
     parent: &gtk::Box,
@@ -1836,10 +1750,10 @@ fn switcher(
         if is_current {
             item.add_css_class("current");
         }
-        let icon = gtk::Image::from_icon_name("network-wireless-symbolic");
-        icon.set_pixel_size(18);
-        icon.add_css_class("wifi-icon");
-        item.append(&icon);
+        let number = text(&item, &format!("{:02}", wifi.priority), &["wifi-rank"]);
+        number.set_wrap(false);
+        number.set_size_request(44, -1);
+        number.set_valign(gtk::Align::Center);
         let info = column(&item, 1, &[]);
         info.set_hexpand(true);
         info.set_valign(gtk::Align::Center);
@@ -1852,32 +1766,34 @@ fn switcher(
         let sub = text(&info, &sub.join(" · "), &["secondary", "small"]);
         sub.set_wrap(false);
         sub.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        let slot = row(&item, 0);
+        slot.set_size_request(92, -1);
         let tag = if wifi.requires_auth {
-            badge(&item, "校园网认证", &["badge-auth", "wifi-tag"])
+            badge(&slot, "校园网认证", &["badge-auth", "wifi-tag"])
         } else {
-            badge(&item, "普通热点", &["badge-open", "wifi-tag"])
+            badge(&slot, "普通热点", &["badge-open", "wifi-tag"])
         };
-        tag.set_size_request(84, -1);
         tag.set_ellipsize(gtk::pango::EllipsizeMode::End);
+        let end = row(&item, 0);
+        end.set_size_request(70, -1);
+        end.set_halign(gtk::Align::End);
+        spacer(&end);
         if is_current {
             let cur = gtk::Box::new(gtk::Orientation::Horizontal, 4);
             cur.add_css_class("wifi-current");
-            cur.set_size_request(68, -1);
-            cur.set_halign(gtk::Align::End);
             cur.set_valign(gtk::Align::Center);
             let mark = gtk::Image::from_icon_name("object-select-symbolic");
             mark.set_pixel_size(14);
             cur.append(&mark);
             cur.append(&gtk::Label::new(Some("当前")));
-            item.append(&cur);
+            end.append(&cur);
         } else {
             let s = state.clone();
             let id = wifi.id.clone();
-            let b = button(&item, "切换", move || {
+            let b = button(&end, "切换", move || {
                 send(&s, Command::Connect { id: id.clone() });
             });
             b.add_css_class("wifi-switch");
-            b.set_size_request(68, -1);
             b.set_valign(gtk::Align::Center);
             b.update_property(&[gtk::accessible::Property::Label(&format!(
                 "切换到 {}",
@@ -1957,7 +1873,6 @@ fn render(state: &Rc<RefCell<Ui>>) {
         }
         ui.countdowns.clear();
         ui.home_signature.clear();
-        ui.sky_art = None;
         ui.scroll = None;
         ui.rendered_page = page.clone();
     }
@@ -1965,7 +1880,7 @@ fn render(state: &Rc<RefCell<Ui>>) {
         "运行状态" => {
             page_title(&body, "运行状态");
             let (scroll, content) = scrolled(&body);
-            let home = named(&content, "网络连接状态", 16);
+            let home = named(&content, "网络连接状态", 22);
             let mut ui = state.borrow_mut();
             ui.home = home;
             ui.scroll = Some(scroll);
@@ -1973,7 +1888,10 @@ fn render(state: &Rc<RefCell<Ui>>) {
             refresh_home(state);
         }
         "配置设置" => {
-            page_title(&body, "配置设置");
+            let heading = page_title(&body, "配置设置");
+            heading.set_spacing(14);
+            text(&heading, "修改后立即保存并生效", &["page-subtitle"])
+                .set_valign(gtk::Align::Center);
             let (scroll, content) = scrolled(&body);
             settings_page(state, &content);
             restore_scroll(&scroll, offset);
@@ -2026,6 +1944,7 @@ fn draft_entry(
     group.append(&e);
     e
 }
+/// A settings row: name with an optional description on the left, a switch on the right.
 fn toggle_row(
     state: &Rc<RefCell<Ui>>,
     parent: &gtk::Box,
@@ -2034,17 +1953,22 @@ fn toggle_row(
     checked: bool,
     edit: impl Fn(&mut Value, bool) + Clone + 'static,
 ) {
-    let group = row(parent, 8);
-    group.add_css_class("form-group");
-    let c = gtk::CheckButton::with_label(title);
-    c.set_active(checked);
-    group.append(&c);
+    let line = row(parent, 24);
+    line.add_css_class("set");
+    let copy = column(&line, 2, &[]);
+    copy.set_hexpand(true);
+    copy.set_valign(gtk::Align::Center);
+    text(&copy, title, &["set-label"]);
     if !desc.is_empty() {
-        let d = text(&group, &format!("({desc})"), &["secondary", "small"]);
-        d.set_hexpand(true);
+        text(&copy, desc, &["set-desc"]);
     }
+    let c = gtk::Switch::new();
+    c.set_active(checked);
+    c.set_valign(gtk::Align::Center);
+    c.update_property(&[gtk::accessible::Property::Label(title)]);
+    line.append(&c);
     let s = state.clone();
-    c.connect_toggled(move |c| {
+    c.connect_active_notify(move |c| {
         let value = c.is_active();
         let edit = edit.clone();
         mutate(&s, move |config| edit(config, value));
@@ -2059,12 +1983,18 @@ fn number_row(
     range: (f64, f64),
     value: f64,
 ) {
-    let group = form_group(parent, title);
+    let line = row(parent, 24);
+    line.add_css_class("set");
+    let name = text(&line, title, &["set-label"]);
+    name.set_hexpand(true);
+    name.set_valign(gtk::Align::Center);
     let n = gtk::SpinButton::with_range(range.0, range.1, 1.0);
     n.set_value(value);
+    n.set_valign(gtk::Align::Center);
+    n.set_width_chars(4);
     n.update_property(&[gtk::accessible::Property::Label(title)]);
-    n.add_css_class("form-control");
-    group.append(&n);
+    n.add_css_class("stepper");
+    line.append(&n);
     let pending: Rc<RefCell<Option<glib::SourceId>>> = Rc::default();
     let s = state.clone();
     n.connect_value_changed(move |n| {
@@ -2091,7 +2021,15 @@ fn settings_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
         return;
     }
     let settings = config["settings"].clone();
-    let general = card(content, "通用设置");
+    pause_banner(state, content, &config);
+    accounts(state, content, &config);
+    wifis(state, content, &config);
+    // Two columns as in the prototype: 通用设置 | 附近 WiFi and 通知设置.
+    let cols = row(content, 32);
+    cols.set_homogeneous(true);
+    let left = column(&cols, 24, &[]);
+    let right = column(&cols, 24, &[]);
+    let general = card(&left, "通用设置");
     for (key, title, desc) in [
         ("autoLaunch", "开机自动启动", ""),
         (
@@ -2125,7 +2063,7 @@ fn settings_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
             move |c, v| c["settings"][key] = json!(v),
         );
     }
-    let numbers = column(&general, 0, &["divider-top"]);
+    let numbers = column(&general, 0, &[]);
     let mut fields = vec![];
     if settings["enableHeartbeat"] == true {
         fields.push((
@@ -2153,7 +2091,8 @@ fn settings_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
         let value = settings[key].as_f64().unwrap_or(range.0);
         number_row(state, &numbers, key, title, range, value);
     }
-    let notices = card(content, "通知设置");
+    nearby(state, &right, &config);
+    let notices = card(&right, "通知设置");
     for (key, title) in [
         ("wifiDisconnected", "WiFi 断开"),
         ("reconnectSuccess", "自动重连成功"),
@@ -2169,19 +2108,14 @@ fn settings_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
             move |c, v| c["settings"]["notificationSettings"][key] = json!(v),
         );
     }
-    pause_banner(state, content, &config);
-    nearby(state, content, &config);
-    accounts(state, content, &config);
-    wifis(state, content, &config);
 }
 fn nearby(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
-    let c = card(content, "附近 WiFi");
+    let (c, actions) = panel_card(content, "附近 WiFi");
     text(
         &c,
         "扫描附近网络，选择后添加配置或编辑已保存的网络。",
-        &["secondary"],
+        &["secondary", "small", "sec-note"],
     );
-    let actions = row(&c, 0);
     let scanning = state.borrow().scanning;
     let s = state.clone();
     let b = button(
@@ -2201,6 +2135,7 @@ fn nearby(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
             }
         },
     );
+    b.add_css_class("quiet");
     b.set_sensitive(!scanning);
     state.borrow_mut().scan_button = Some(b);
     let scan = state.borrow().scan.clone();
@@ -2211,7 +2146,7 @@ fn nearby(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
         text(
             &c,
             "未发现网络，请确认 WiFi 已开启，或手动填写 WiFi 名称。",
-            &["secondary"],
+            &["secondary", "small", "sec-note"],
         );
         return;
     }
@@ -2269,9 +2204,13 @@ fn empty_box(parent: &gtk::Box, icon: &str, message: &str) {
     centered(&b, message, &["secondary"]);
 }
 fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
-    let c = named(content, "账号配置", 14);
-    c.add_css_class("card");
-    text(&c, "账号管理", &["card-title"]);
+    let c = named(content, "账号配置", 0);
+    c.add_css_class("sec");
+    let head = row(&c, 10);
+    head.add_css_class("panel-head");
+    text(&head, "账号管理", &["panel-title"]);
+    spacer(&head);
+    text(&head, "按顺序依次认证", &["secondary", "small"]);
     let list = config["accounts"].as_array().cloned().unwrap_or_default();
     if list.is_empty() {
         empty_box(
@@ -2282,45 +2221,48 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
     }
     let rows = column(&c, 0, &["list"]);
     for account in list {
-        let item = row(&rows, 12);
-        item.add_css_class("list-row");
-        let info = column(&item, 4, &[]);
-        info.set_hexpand(true);
-        let title = row(&info, 8);
-        let username = account["username"].as_str().unwrap_or("").to_string();
-        text(&title, &username, &["strong"]);
-        badge(
-            &title,
-            isp_label(account["isp"].as_str().unwrap_or("")),
-            &["badge-isp"],
-        );
-        text(
-            &info,
-            account["serverUrl"].as_str().unwrap_or(""),
-            &["secondary", "small"],
-        );
-        let actions = row(&item, 8);
-        actions.set_valign(gtk::Align::Center);
         let id = account["id"].clone();
         let current = config["currentAccountId"] == id;
-        let s = state.clone();
-        let use_id = id.clone();
-        let b = button(
-            &actions,
-            if current {
-                "使用中"
-            } else {
-                "使用此账号"
-            },
-            move || {
+        let item = row(&rows, 14);
+        item.add_css_class("acct");
+        // A small card face: gold chip for the account in use, greyed out for the others.
+        let mini = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        mini.set_css_classes(&["mini-card", if current { "on" } else { "off" }]);
+        mini.set_size_request(58, 38);
+        mini.set_valign(gtk::Align::Center);
+        let mini_chip = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        mini_chip.add_css_class("mini-chip");
+        mini_chip.set_size_request(14, 10);
+        mini_chip.set_halign(gtk::Align::Start);
+        mini_chip.set_valign(gtk::Align::Start);
+        mini.append(&mini_chip);
+        item.append(&mini);
+        let info = column(&item, 2, &[]);
+        info.set_hexpand(true);
+        info.set_valign(gtk::Align::Center);
+        let username = account["username"].as_str().unwrap_or("").to_string();
+        text(&info, &username, &["acct-name"]);
+        let mut sub = vec![isp_label(account["isp"].as_str().unwrap_or("")).to_string()];
+        sub.extend(
+            account["serverUrl"]
+                .as_str()
+                .filter(|u| !u.is_empty())
+                .map(str::to_owned),
+        );
+        text(&info, &sub.join(" · "), &["secondary", "small"]);
+        let actions = row(&item, 6);
+        actions.set_valign(gtk::Align::Center);
+        if current {
+            let inuse = text(&actions, "使用中", &["inuse"]);
+            inuse.set_wrap(false);
+            inuse.set_valign(gtk::Align::Center);
+        } else {
+            let s = state.clone();
+            let use_id = id.clone();
+            button(&actions, "使用此账号", move || {
                 let id = use_id.clone();
                 mutate(&s, move |c| c["currentAccountId"] = id.clone());
-            },
-        );
-        b.add_css_class("compact");
-        if current {
-            b.add_css_class("primary");
-            b.set_sensitive(false);
+            });
         }
         let s = state.clone();
         let edit = account.clone();
@@ -2337,9 +2279,13 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
         b.add_css_class("danger");
     }
     text(&c, "添加新账号", &["form-heading"]);
+    // Fields side by side as in the prototype: 用户名 | 密码 | 运营商, then server and the button.
+    let fields = row(&c, 10);
+    fields.add_css_class("form");
+    fields.set_homogeneous(true);
     let user = draft_entry(
         state,
-        &c,
+        &fields,
         "account.username",
         "用户名",
         "用户名",
@@ -2348,14 +2294,14 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
     );
     let password = draft_entry(
         state,
-        &c,
+        &fields,
         "account.password",
         "密码",
         "密码",
         "请输入密码",
         true,
     );
-    let isp = form_group(&c, "运营商");
+    let isp = form_group(&fields, "运营商");
     let values = ["campus", "cmcc", "cucc", "ctcc"];
     let selected = draft(state, "account.isp", "campus");
     let choice = dropdown(
@@ -2374,20 +2320,22 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
     if !state.borrow().drafts.contains_key("account.server") {
         set_draft(state, "account.server", "http://10.10.102.50:801");
     }
+    let submit = row(&c, 10);
+    submit.add_css_class("form");
     let server = draft_entry(
         state,
-        &c,
+        &submit,
         "account.server",
         "登录服务器地址",
         "登录服务器地址",
         "",
         false,
     );
-    if let Some(error) = state.borrow().drafts.get("account.error") {
-        text(&c, error, &["error-text"]);
+    if let Some(group) = server.parent() {
+        group.set_hexpand(true);
     }
     let s = state.clone();
-    let b = button(&c, "保存并添加账号", move || {
+    let b = button(&submit, "保存并添加账号", move || {
         let username = user.text().trim().to_string();
         let secret = password.text().to_string();
         let error = if username.is_empty() || secret.is_empty() {
@@ -2416,8 +2364,10 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
             }
         });
     });
-    b.add_css_class("primary");
-    b.set_hexpand(true);
+    b.set_valign(gtk::Align::End);
+    if let Some(error) = state.borrow().drafts.get("account.error") {
+        text(&c, error, &["error-text"]);
+    }
 }
 fn remove_account(state: &Rc<RefCell<Ui>>, id: Value) {
     mutate(state, move |c| {
@@ -2451,7 +2401,7 @@ fn wifis(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
     text(
         &c,
         "配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。点击刷新图标按钮可切换自动重连状态。",
-        &["secondary", "small"],
+        &["secondary", "small", "sec-note"],
     );
     let accounts = config["accounts"].as_array().cloned().unwrap_or_default();
     let list = config["wifiRules"].as_array().cloned().unwrap_or_default();
@@ -2461,30 +2411,21 @@ fn wifis(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
     let rows = column(&c, 0, &["list"]);
     for wifi in list {
         let item = row(&rows, 12);
-        item.add_css_class("list-row");
-        let info = column(&item, 4, &[]);
-        info.set_hexpand(true);
-        let title = row(&info, 6);
+        item.add_css_class("rule");
         let ssid = wifi["ssid"].as_str().unwrap_or("").to_string();
-        text(&title, &ssid, &["strong"]);
         let auth = wifi["requiresAuth"] == true;
         let auto = wifi["autoConnect"] == true;
         let priority = wifi["priority"].as_u64().unwrap_or(10);
-        if auth {
-            badge(&title, "需要认证", &["badge-auth"]);
-        } else {
-            badge(&title, "无需认证", &["badge-open"]);
-        }
-        badge(
-            &title,
-            &format!("★ 优先级 {priority}"),
-            &[priority_class(priority)],
-        );
-        if auto {
-            badge(&title, "自动重连", &["badge-auto"]);
-        } else {
-            badge(&title, "手动连接", &["badge-manual"]);
-        }
+        let number = text(&item, &format!("{priority:02}"), &["rule-rank"]);
+        number.set_wrap(false);
+        number.set_size_request(44, -1);
+        number.set_valign(gtk::Align::Center);
+        number.set_tooltip_text(Some(&format!("优先级 {priority}")));
+        let info = column(&item, 2, &[]);
+        info.set_hexpand(true);
+        info.set_valign(gtk::Align::Center);
+        text(&info, &ssid, &["rule-name"]);
+        let mut sub = vec![];
         if auth {
             let linked: Vec<String> = wifi["linkedAccountIds"]
                 .as_array()
@@ -2507,12 +2448,22 @@ fn wifis(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
                     &["error-text", "small"],
                 );
             } else {
-                text(
-                    &info,
-                    &format!("关联账号: {}", linked.join("，")),
-                    &["secondary", "small"],
-                );
+                sub.push(format!("关联账号: {}", linked.join("，")));
             }
+        }
+        sub.push(
+            if auto {
+                "断开后自动重连"
+            } else {
+                "手动连接"
+            }
+            .into(),
+        );
+        text(&info, &sub.join(" · "), &["secondary", "small"]);
+        if auth {
+            badge(&item, "需要认证", &["badge-auth"]);
+        } else {
+            badge(&item, "无需认证", &["badge-open"]);
         }
         let actions = row(&item, 8);
         actions.set_valign(gtk::Align::Center);
@@ -2796,7 +2747,7 @@ fn dialog(state: &Rc<RefCell<Ui>>, title: &str) -> (gtk::Window, gtk::Box) {
     box_.add_css_class("dialog-body");
     let heading = gtk::Label::new(Some(title));
     heading.set_xalign(0.0);
-    heading.add_css_class("card-title");
+    heading.add_css_class("dialog-title");
     box_.append(&heading);
     let scroll = gtk::ScrolledWindow::builder()
         .child(&box_)
@@ -2951,40 +2902,46 @@ fn wifi_editor(state: &Rc<RefCell<Ui>>, old: Value) {
     d.present();
 }
 fn about_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
-    // Prototype layout: a hero card across the top, then features | update and project cards.
-    let grid = gtk::Grid::new();
-    grid.add_css_class("about");
-    grid.set_column_spacing(16);
-    grid.set_row_spacing(16);
-    grid.set_column_homogeneous(true);
-    content.append(&grid);
-    let hero = gtk::Box::new(gtk::Orientation::Horizontal, 20);
-    hero.set_css_classes(&["card", "about-hero"]);
-    grid.attach(&hero, 0, 0, 2, 1);
-    let mark = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    mark.add_css_class("about-mark");
-    mark.set_size_request(64, 64);
-    mark.set_valign(gtk::Align::Center);
-    let icon = gtk::Image::from_icon_name("network-wireless-symbolic");
-    icon.set_pixel_size(34);
-    icon.set_vexpand(true);
-    mark.append(&icon);
-    hero.append(&mark);
-    let names = column(&hero, 2, &[]);
+    // Prototype layout: a version card beside the name, then features | update and project info.
+    let hero = row(content, 36);
+    hero.add_css_class("about-hero");
+    let face = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    face.set_css_classes(&["id-card", "id-body", "about-card"]);
+    face.set_size_request(320, 200);
+    face.set_valign(gtk::Align::Center);
+    hero.append(&face);
+    let top = row(&face, 12);
+    top.add_css_class("id-top");
+    text(&top, "NETMATE", &[]).set_wrap(false);
+    spacer(&top);
+    text(&top, concat!("v", env!("CARGO_PKG_VERSION")), &["mono"]).set_wrap(false);
+    chip(&face, "chip", (46, 34));
+    text(&face, "NetMate", &["id-title"]).set_wrap(false);
+    let gap = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    gap.set_vexpand(true);
+    face.append(&gap);
+    text(&face, "TUST CAMPUS NETWORK", &["id-number", "small-number"]).set_wrap(false);
+    let names = column(&hero, 8, &[]);
     names.set_hexpand(true);
     names.set_valign(gtk::Align::Center);
     text(&names, "NetMate", &["about-name"]);
-    text(&names, "智能 WiFi 管理工具", &["secondary"]);
+    text(&names, "智能 WiFi 管理工具", &["side-body"]);
     let version = badge(
-        &hero,
+        &names,
         concat!("版本 ", env!("CARGO_PKG_VERSION")),
         &["version-pill"],
     );
-    version.set_valign(gtk::Align::Center);
-    let features = gtk::Box::new(gtk::Orientation::Vertical, 9);
-    features.add_css_class("card");
-    grid.attach(&features, 0, 1, 1, 1);
-    text(&features, "核心功能", &["card-title"]);
+    version.set_halign(gtk::Align::Start);
+    let grid = gtk::Grid::new();
+    grid.add_css_class("about");
+    grid.set_column_spacing(32);
+    grid.set_row_spacing(24);
+    grid.set_column_homogeneous(true);
+    content.append(&grid);
+    let features = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    features.add_css_class("sec");
+    grid.attach(&features, 0, 0, 1, 1);
+    text(&features, "核心功能", &["sec-title"]);
     for item in [
         "WiFi 自动重连（三阶段优先级切换）",
         "校园网认证自动登录",
@@ -3000,13 +2957,18 @@ fn about_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
         line.append(&image);
         text(&line, item, &[]);
     }
-    let side = gtk::Box::new(gtk::Orientation::Vertical, 16);
-    grid.attach(&side, 1, 1, 1, 1);
+    let side = gtk::Box::new(gtk::Orientation::Vertical, 24);
+    grid.attach(&side, 1, 0, 1, 1);
     let update = card(&side, "更新检查");
-    let status = text(&update, "", &["secondary", "small"]);
+    let line = row(&update, 12);
+    line.add_css_class("kv");
+    let status = text(&line, "", &["secondary"]);
     status.set_selectable(true);
+    status.set_hexpand(true);
+    status.set_valign(gtk::Align::Center);
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    update.append(&actions);
+    actions.set_valign(gtk::Align::Center);
+    line.append(&actions);
     {
         let mut ui = state.borrow_mut();
         ui.update_label = status;
@@ -3014,7 +2976,8 @@ fn about_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
     }
     update_view(state);
     let links = card(&side, "项目信息");
-    links.set_spacing(8);
+    let link_row = row(&links, 24);
+    link_row.add_css_class("kv");
     for (title, url) in [
         (
             "GitHub 仓库",
@@ -3028,14 +2991,17 @@ fn about_page(state: &Rc<RefCell<Ui>>, content: &gtk::Box) {
         let link = gtk::LinkButton::with_label(url, title);
         link.set_halign(gtk::Align::Start);
         link.add_css_class("about-link");
-        links.append(&link);
+        link_row.append(&link);
     }
-    text(
-        &links,
+    let quit = row(&links, 12);
+    quit.add_css_class("kv");
+    let copyright = text(
+        &quit,
         "© 2026 NetMate. All rights reserved.",
         &["secondary", "small"],
     );
-    let quit = row(&links, 0);
+    copyright.set_hexpand(true);
+    copyright.set_valign(gtk::Align::Center);
     let s = state.clone();
     let b = button(&quit, "退出 NetMate", move || {
         send(&s, Command::Quit);
@@ -3141,22 +3107,20 @@ fn reload_logs(state: &Rc<RefCell<Ui>>) {
     send(state, Command::Logs(q));
 }
 fn logs_page(state: &Rc<RefCell<Ui>>, body: &gtk::Box) {
-    let heading = gtk::Box::new(gtk::Orientation::Horizontal, 16);
-    heading.add_css_class("logs-heading");
-    body.append(&heading);
-    let titles = column(&heading, 6, &[]);
-    titles.set_hexpand(true);
-    page_title(&titles, "运行日志");
-    text(
-        &titles,
+    let heading = page_title(body, "运行日志");
+    heading.set_spacing(14);
+    let subtitle = text(
+        &heading,
         "连接、认证与恢复记录，保留最近 7 天",
-        &["secondary", "small"],
+        &["page-subtitle"],
     );
+    subtitle.set_wrap(false);
+    subtitle.set_valign(gtk::Align::Center);
+    spacer(&heading);
     let s = state.clone();
     let refresh = button(&heading, "刷新", move || reload_logs(&s));
     refresh.set_valign(gtk::Align::Center);
     let panel = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    panel.add_css_class("card");
     panel.add_css_class("logs-card");
     panel.set_vexpand(true);
     body.append(&panel);
