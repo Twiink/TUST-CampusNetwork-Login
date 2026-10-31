@@ -7,17 +7,6 @@ ROOT_DIR="$(git rev-parse --show-toplevel)"
 
 MESSAGE_FILE="${1:?commit message file is required}"
 
-# 自动移除 commit message 中的 AI co-author 尾注
-# 防止 GitHub 贡献者列表出现 AI 账号（Claude、Anthropic、Copilot 等）
-sed -i.bak '/^[[:space:]]*Co-[Aa]uthored-[Bb]y:.*\(Claude\|Anthropic\|noreply@anthropic\.com\|Copilot\|copilot\|GitHub Copilot\|OpenAI\|GPT\|Gemini\|google\.com\)/d' "$MESSAGE_FILE"
-
-# 清理可能残留的末尾空行
-sed -i.bak -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$MESSAGE_FILE"
-
-# 删除 sed 备份文件
-rm -f "${MESSAGE_FILE}.bak"
-
-# 新提交优先使用 type(scope): 中文主题，与全局提交校验兼容。
-# 校验器也兼容历史 scope(+scope): 写法，按 Unicode 字符检测中文。
+# 项目提交消息遵循全局规范；只校验，不改写消息。
 ensure_command python3
 exec python3 "$ROOT_DIR/shell/git-hooks/validate_commit_message.py" "$MESSAGE_FILE"

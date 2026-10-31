@@ -1,51 +1,39 @@
 #!/usr/bin/env python3
-"""Validate NetMate commit subjects without depending on the active AI client."""
+"""Enforce the global commit-message convention in the project Git hook."""
 
 import re
 import sys
 import unicodedata
 from pathlib import Path
 
-SCOPES = frozenset(
-    "desktop mobile shared ci release docs chore build test deps repo".split()
+HEADER = re.compile(
+    r"(?:feat|fix|docs|style|refactor|perf|test|chore)\([A-Za-z0-9_-]+\): (\S.*)"
 )
-CONVENTIONAL = re.compile(
-    r"(?:feat|fix|docs|style|refactor|perf|test|chore)\(([a-z]+)\): (\S.*)"
-)
-LEGACY = re.compile(r"([a-z]+(?:\+[a-z]+)*): (\S.*)")
 SPECIAL = re.compile(r"(?:Merge|Revert|fixup!|squash!|amend!) .+")
-SCISSORS = "# ------------------------ >8 ------------------------"
 
 
-def validate_message(message: str) -> None:
-    """Keep legacy scopes while accepting the global type(scope) convention."""
-    lines = message.replace("\r\n", "\n").split("\n")
-    header = lines[0]
-    # Preserve the repository's existing Git-generated message exception.
-    if SPECIAL.fullmatch(header):
-        return
-    match = CONVENTIONAL.fullmatch(header) or LEGACY.fullmatch(header)
+def validate_message(message: str) -> str:
+    """Match the global policy, including its Unicode and special-header rules."""
+    text = message.rstrip("\r\n")
+    if not text or "\n" in text or "\r" in text:
+        raise ValueError("提交信息只能有一行，不能包含正文或尾签。")
+    if re.search(r"(?:co-authored-by|signed-off-by):", text, re.IGNORECASE):
+        raise ValueError("提交信息不能包含自动署名或尾签。")
+    if SPECIAL.fullmatch(text):
+        return text
+    match = HEADER.fullmatch(text)
     if not match:
         raise ValueError(
-            "提交信息格式不正确；推荐 <type>(<scope>): 中文主题，"
-            "例如 fix(shared): 修复自动重连。兼容旧式 scope(+scope): 中文主题。"
+            "格式须为 <type>(<scope>): 中文主题；scope 必填且只含英文字母、数字、_、-。"
         )
-    if not set(match[1].split("+")) <= SCOPES:
-        raise ValueError("提交范围不正确；scope 可取 " + " / ".join(sorted(SCOPES)))
     if not any(
         unicodedata.name(character, "").startswith(
             ("CJK UNIFIED IDEOGRAPH-", "CJK COMPATIBILITY IDEOGRAPH-")
         )
-        for character in match[2]
+        for character in match[1]
     ):
         raise ValueError("提交主题必须包含中文汉字；café、重音字母和 emoji 不算中文。")
-    if re.search(r"(?:co-authored-by|signed-off-by):", header, re.IGNORECASE):
-        raise ValueError("提交信息不能包含尾签。")
-    for line in lines[1:]:
-        if line == SCISSORS:
-            break
-        if line.strip() and not line.startswith("#"):
-            raise ValueError("提交信息只能有一行，不能包含正文或尾签。")
+    return text
 
 
 def main() -> int:
