@@ -30,6 +30,8 @@
 | 天空主题界面及日夜开关 | 2026-10-30 四端按 `design/` 原型移植天空主题，日夜开关按 `design/toggle-lab.html`（结合「按钮-全月」与 themeswitch）重画并缩小到约 88×40；仅源码检查，待验证 | 新界面编译、截图、UI 自动化、开关动效后台停止与 CPU 占用 及实际设备视觉检查 |
 | 生命周期               | 独立桌面 UI、Android Binder 订阅随可见性解除、UI 缓存释放                                                                                                    | 同批发行包两小时测试、设备重启                                              |
 
+2026-10-31：Linux 日夜开关改按 `design/toggle-pen.html`（CodePen linxiang-webcraft/pvbvLBN 原版）还原为 90×40，Windows、macOS、Android 待跟进；同样仅源码检查，待验证。
+
 ## 远程验证证据
 
 [CI 40882814262](https://github.com/Twiink/TUST-CampusNetwork-Login/actions/runs/40882814262)，源码 `91ebc07913dc9e66b710b525871cbcdd6d9dc43c`，已实际执行全部原生构建、单元测试、双主题截图和 100 次 UI 生命周期。该轮 Windows 两架构、Linux x64 和 Android 短测全部通过；macOS 打包后启动、Linux ARM64 前台内存失败，不能把整轮 CI 标为通过。

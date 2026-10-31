@@ -186,9 +186,8 @@ pub fn run() {
         appearance.set_active(dark);
         let anim = Rc::new(RefCell::new(Toggle {
             night: dark,
-            position: if dark { 1.0 } else { 0.0 },
-            progress: if dark { 1.0 } else { 0.0 },
-            target: if dark { 1.0 } else { 0.0 },
+            theme: Tween::at(if dark { 1.0 } else { 0.0 }),
+            knob: Tween::at(knob_x(dark, false)),
             ..Toggle::default()
         }));
         let drawing = gtk::DrawingArea::new();
@@ -216,23 +215,6 @@ pub fn run() {
             }
         }
         appearance.add_controller(motion);
-        // Ambient motion runs only while the window is shown and focused; closed to the tray,
-        // minimised or in the background, the toggle holds a still frame.
-        {
-            let anim = anim.clone();
-            let area = drawing.downgrade();
-            let lively = move |window: &gtk::ApplicationWindow| {
-                if let Some(area) = area.upgrade() {
-                    anim.borrow_mut().ambient = window.is_active() && window.is_mapped();
-                    animate_toggle(&anim, &area);
-                }
-            };
-            let on_active = lively.clone();
-            window.connect_is_active_notify(move |w| on_active(w));
-            let on_map = lively.clone();
-            window.connect_map(move |w| on_map(w));
-            window.connect_unmap(move |w| lively(w));
-        }
         theme_accessibility(&appearance, dark);
         let weak = Rc::downgrade(&state);
         let area = drawing.downgrade();
@@ -324,34 +306,81 @@ fn theme_accessibility(toggle: &gtk::ToggleButton, dark: bool) {
     toggle.set_tooltip_text(Some(name));
     toggle.update_property(&[gtk::accessible::Property::Label(name)]);
 }
-/// Size of the day/night toggle's drawing area: the 200×90 design at 0.44 (88×40), plus room for
-/// the 1.07 hover scale and the drop shadow.
-const TOGGLE_BOX: (i32, i32) = (100, 54);
-const TOGGLE_SCALE: f64 = 0.44;
-const SWITCH_US: f64 = 550_000.0;
-const LIFT_US: f64 = 200_000.0;
-/// Frame state of the toggle. The tick callback only runs while switching or hovered.
+/// Size of the day/night toggle's drawing area: the pen's 5.625em × 2.5em switch at 16px per em
+/// (90×40), plus 3px on each side for its outer highlight.
+const TOGGLE_BOX: (i32, i32) = (96, 46);
+const TOGGLE_EM: f64 = 16.0;
+const TOGGLE_W: f64 = 5.625;
+const TOGGLE_H: f64 = 2.5;
+const SUN_D: f64 = 2.125;
+const SUN_OFFSET: f64 = (TOGGLE_H - SUN_D) / 2.0;
+/// While hovered the sun leans 0.187em towards the middle.
+const SUN_LEAN: f64 = 0.187;
+/// Every transition in the pen is `0.3s ease`.
+const SWITCH_US: f64 = 300_000.0;
+/// A CSS transition: retargeting starts a fresh 0.3 s run from the current value, as a browser
+/// does when a transition is interrupted.
+#[derive(Default)]
+struct Tween {
+    from: f64,
+    to: f64,
+    value: f64,
+    started: Option<i64>,
+}
+impl Tween {
+    fn at(value: f64) -> Self {
+        Self {
+            from: value,
+            to: value,
+            value,
+            started: None,
+        }
+    }
+    fn set(&mut self, to: f64) {
+        if self.to != to {
+            self.from = self.value;
+            self.to = to;
+            self.started = None;
+        }
+    }
+    fn snap(&mut self) {
+        self.value = self.to;
+        self.from = self.to;
+        self.started = None;
+    }
+    fn moving(&self) -> bool {
+        self.value != self.to
+    }
+    fn step(&mut self, now: i64) {
+        if !self.moving() {
+            return;
+        }
+        let start = *self.started.get_or_insert(now);
+        let k = ((now - start) as f64 / SWITCH_US).clamp(0.0, 1.0);
+        self.value = self.from + (self.to - self.from) * ease(k);
+        if k >= 1.0 {
+            self.snap();
+        }
+    }
+}
+/// Frame state of the toggle. The tick callback only runs while a transition is in progress.
 #[derive(Default)]
 struct Toggle {
     night: bool,
-    /// Knob position, 0 = day (left) .. 1 = night (right); overshoots during the switch.
-    position: f64,
-    /// Colour and opacity blend between the day and night scenes.
-    progress: f64,
-    from: (f64, f64),
-    target: f64,
-    started: Option<i64>,
     hover: bool,
-    /// The window is shown and focused: clouds drift, the sun glows and stars twinkle.
-    ambient: bool,
-    /// Strength of the ambient motion 0..1; eases in and out so pausing never jumps.
-    motion: f64,
-    /// Hover emphasis 0..1 (scale 1.07, brighter border).
-    lift: f64,
-    /// Seconds of drift and twinkle accumulated while hovered.
-    clock: f64,
-    last: Option<i64>,
+    /// Day 0 .. night 1: background colour, clouds, stars and the moon mask.
+    theme: Tween,
+    /// The sun's left edge in em, hover lean included.
+    knob: Tween,
     ticking: bool,
+}
+fn knob_x(night: bool, hover: bool) -> f64 {
+    let lean = if hover { SUN_LEAN } else { 0.0 };
+    if night {
+        TOGGLE_W - SUN_D - SUN_OFFSET - lean
+    } else {
+        SUN_OFFSET + lean
+    }
 }
 fn animations_enabled() -> bool {
     gtk::Settings::default().is_none_or(|s| s.is_gtk_enable_animations())
@@ -360,71 +389,29 @@ fn animations_enabled() -> bool {
 fn animate_toggle(anim: &Rc<RefCell<Toggle>>, area: &gtk::DrawingArea) {
     {
         let mut t = anim.borrow_mut();
-        let target = if t.night { 1.0 } else { 0.0 };
+        let (night, hover) = (t.night, t.hover);
+        t.theme.set(if night { 1.0 } else { 0.0 });
+        t.knob.set(knob_x(night, hover));
         if !animations_enabled() {
-            t.position = target;
-            t.progress = target;
-            t.target = target;
-            t.started = None;
-            t.lift = if t.hover { 1.0 } else { 0.0 };
-            t.motion = 0.0;
+            t.theme.snap();
+            t.knob.snap();
             drop(t);
             area.queue_draw();
             return;
-        }
-        if t.target != target || (t.started.is_none() && t.progress != target) {
-            t.from = (t.position, t.progress);
-            t.target = target;
-            t.started = None;
         }
         if t.ticking {
             return;
         }
         t.ticking = true;
-        t.last = None;
     }
     let anim = anim.clone();
     area.add_tick_callback(move |area, clock| {
         let now = clock.frame_time();
         let mut t = anim.borrow_mut();
-        let dt = t.last.map_or(0.0, |last| (now - last).max(0) as f64);
-        t.last = Some(now);
-        let switching = t.progress != t.target || t.position != t.target;
-        if switching {
-            let start = *t.started.get_or_insert(now);
-            let k = ((now - start) as f64 / SWITCH_US).clamp(0.0, 1.0);
-            let (target, (from_position, from_progress)) = (t.target, t.from);
-            t.position = from_position + (target - from_position) * overshoot(k);
-            t.progress = from_progress + (target - from_progress) * ease(k);
-            if k >= 1.0 {
-                t.position = target;
-                t.progress = target;
-                t.started = None;
-            }
-        }
-        let lift_target = if t.hover { 1.0 } else { 0.0 };
-        let step = dt / LIFT_US;
-        t.lift = if t.lift < lift_target {
-            (t.lift + step).min(lift_target)
-        } else {
-            (t.lift - step).max(lift_target)
-        };
-        let lively = t.hover || t.ambient;
-        let motion_target = if lively { 1.0 } else { 0.0 };
-        t.motion = if t.motion < motion_target {
-            (t.motion + step).min(motion_target)
-        } else {
-            (t.motion - step).max(motion_target)
-        };
-        if t.motion > 0.0 {
-            t.clock += dt / 1_000_000.0;
-        }
-        let moving = t.progress != t.target
-            || t.position != t.target
-            || t.lift != lift_target
-            || t.motion != motion_target;
+        t.theme.step(now);
+        t.knob.step(now);
         area.queue_draw();
-        if moving || lively {
+        if t.theme.moving() || t.knob.moving() {
             glib::ControlFlow::Continue
         } else {
             t.ticking = false;
@@ -435,10 +422,6 @@ fn animate_toggle(anim: &Rc<RefCell<Toggle>>, area: &gtk::DrawingArea) {
 /// CSS `ease` (cubic-bezier(0.25, 0.1, 0.25, 1)).
 fn ease(t: f64) -> f64 {
     bezier(0.25, 0.1, 0.25, 1.0, t)
-}
-/// The knob's cubic-bezier(0.68, -0.1, 0.265, 1.2), which overshoots slightly.
-fn overshoot(t: f64) -> f64 {
-    bezier(0.68, -0.1, 0.265, 1.2, t)
 }
 fn bezier(x1: f64, y1: f64, x2: f64, y2: f64, t: f64) -> f64 {
     let curve = |a: f64, b: f64, s: f64| {
@@ -516,183 +499,199 @@ fn sphere(
     disc(cr, x, y, r);
     let _ = cr.fill();
 }
-/// themeswitch's cloud cell: nine 17px circles in a 60×30 grid (left, top of each circle).
-const PUFFS: [(f64, f64); 9] = [
-    (26.0, 1.0),
-    (38.0, 1.0),
-    (10.0, 12.0),
-    (23.0, 12.0),
-    (32.0, 13.0),
-    (43.0, 8.0),
-    (16.0, 3.0),
-    (5.0, 2.0),
-    (0.0, 8.0),
-];
-/// Cloud cells along the bottom: (x, y) in themeswitch's 120×50 space, opacity, and how far x
-/// moves at night (the clouds part to both sides).
-const CLOUDS: [(f64, f64, f64, f64); 4] = [
-    (-10.0, 20.0, 0.55, -60.0),
-    (65.0, 20.0, 0.55, 70.0),
-    (0.0, 30.0, 1.0, -60.0),
-    (55.0, 30.0, 1.0, 70.0),
-];
-/// themeswitch's galaxy cell (80×50); bright stars twinkle, faint ones hold still.
-const STARS: [(f64, f64, bool); 18] = [
-    (40.0, 21.0, true),
-    (48.0, 6.0, false),
-    (68.0, 30.0, true),
-    (4.0, 24.0, false),
-    (8.0, 28.0, false),
-    (21.0, 6.0, true),
-    (51.0, 27.0, false),
-    (28.0, 39.0, false),
-    (67.0, 8.0, false),
-    (26.0, 14.0, false),
-    (63.0, 20.0, false),
-    (16.0, 35.0, false),
-    (60.0, 35.0, false),
-    (36.0, 6.0, true),
-    (56.0, 12.0, true),
-    (43.0, 37.0, true),
-    (23.0, 27.0, true),
-    (12.0, 12.0, true),
-];
-/// Scale of a cloud puff relative to themeswitch's 17px circle.
-const PUFF_SCALE: f64 = 1.3;
-/// CubicEase EaseInOut, which themeswitch uses for every move.
-fn ease_in_out(t: f64) -> f64 {
-    if t < 0.5 {
-        4.0 * t.powi(3)
-    } else {
-        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+type Rect = (f64, f64, f64, f64);
+/// CSS `box-shadow` on a pill (a circle when square). `shape` is the shadow's own box, already
+/// offset and spread; the blur fades its edge over ±`blur`. An inset shadow fills outside `shape`.
+fn soft_shadow(
+    cr: &cairo::Context,
+    (x, y, w, h): Rect,
+    blur: f64,
+    color: (f64, f64, f64),
+    alpha: f64,
+    inset: bool,
+) {
+    const LAYERS: usize = 6;
+    let each = 1.0 - (1.0 - alpha).powf(1.0 / LAYERS as f64);
+    let _ = cr.save();
+    cr.set_fill_rule(cairo::FillRule::EvenOdd);
+    cr.set_source_rgba(color.0, color.1, color.2, each);
+    for i in 0..LAYERS {
+        let e = blur * ((i as f64 + 0.5) / LAYERS as f64 * 2.0 - 1.0);
+        if inset {
+            cr.rectangle(x - 10.0, y - 10.0, w + 20.0, h + 20.0);
+        }
+        pill(cr, x - e, y - e, w + 2.0 * e, h + 2.0 * e);
+        let _ = cr.fill();
     }
+    let _ = cr.restore();
 }
-/// Day/night toggle after Elsht666 「按钮-全月」 and JamesnetGroup/themeswitch, drawn in a 200×90
-/// design space: the knob is the sun by day and the full moon by night, ringed by halos; clouds
-/// part to both sides as stars rise. Mirrored by `design/toggle-lab.html`.
-fn draw_toggle(cr: &cairo::Context, width: i32, height: i32, t: &Toggle) {
-    use std::f64::consts::TAU;
+/// `box-shadow: inset ox oy blur color` on the pill `b`.
+fn inset_shadow(
+    cr: &cairo::Context,
+    b: Rect,
+    (ox, oy): (f64, f64),
+    blur: f64,
+    color: (f64, f64, f64),
+    alpha: f64,
+) {
     let _ = cr.save();
-    let scale = TOGGLE_SCALE * (1.0 + 0.07 * t.lift);
-    cr.translate(width as f64 / 2.0, height as f64 / 2.0 - 2.0);
-    cr.scale(scale, scale);
-    cr.translate(-100.0, -45.0);
-    let k = t.progress.clamp(0.0, 1.0);
-    let day = 1.0 - k;
-    let slide = ease_in_out(k);
-    // Soft drop shadow from stacked translucent pills.
-    let shadow = mix(0x2a68ad, 0x000000, k);
-    for i in 0..5 {
-        let grow = i as f64 * 4.0;
-        pill(
-            cr,
-            10.0 - grow / 2.0,
-            12.0 - grow / 2.0,
-            180.0 + grow,
-            82.0 + grow,
-        );
-        cr.set_source_rgba(shadow.0, shadow.1, shadow.2, (0.2 + 0.05 * k) / 6.0);
-        let _ = cr.fill();
-    }
-    let _ = cr.save();
-    pill(cr, 0.0, 0.0, 200.0, 90.0);
+    pill(cr, b.0, b.1, b.2, b.3);
     cr.clip();
-    let g = cairo::LinearGradient::new(27.5, -27.5, 172.5, 117.5);
-    stop(&g, 0.0, mix(0x4a90d9, 0x070d1c, k), 1.0);
-    stop(&g, 0.55, mix(0x6fb0ee, 0x111a30, k), 1.0);
-    stop(&g, 1.0, mix(0x9bcbf5, 0x1c2a48, k), 1.0);
-    let _ = cr.set_source(g);
+    soft_shadow(cr, (b.0 + ox, b.1 + oy, b.2, b.3), blur, color, alpha, true);
+    let _ = cr.restore();
+}
+/// The pen's cloud: a 1.25em circle plus its box-shadow copies, (x, y, spread) in em from the
+/// circle's centre. Back puffs are listed after the front ones in CSS, so they paint beneath.
+const CLOUD_FRONT: [(f64, f64, f64); 8] = [
+    (0.0, 0.0, 0.0),
+    (0.937, 0.312, 0.0),
+    (1.437, 0.375, 0.0),
+    (2.187, 0.0, 0.0),
+    (2.937, 0.312, 0.0),
+    (3.625, -0.062, 0.0),
+    (4.5, -0.312, 0.0),
+    (4.625, -1.75, 0.437),
+];
+const CLOUD_BACK: [(f64, f64, f64); 8] = [
+    (-0.312, -0.312, 0.0),
+    (0.5, -0.125, 0.0),
+    (1.25, -0.062, 0.0),
+    (2.0, -0.312, 0.0),
+    (2.625, 0.0, 0.0),
+    (3.375, -0.437, 0.0),
+    (4.0, -0.625, 0.0),
+    (4.125, -2.125, 0.437),
+];
+/// Centres of the seven sparkles in the pen's star SVG (viewBox 144×55).
+const SPARKLES: [(f64, f64); 7] = [
+    (136.996, 4.3545),
+    (34.9956, 23.3545),
+    (3.9956, 36.3545),
+    (57.9956, 25.3545),
+    (84.9956, 25.3545),
+    (139.996, 36.3545),
+    (102.996, 50.3545),
+];
+/// One sparkle as cubic segments around its centre, starting from the left tip (-3.9956, 0).
+const SPARKLE: [[f64; 6]; 9] = [
+    [-2.8842, -0.055, -1.9405, -0.5042, -1.1643, -1.3476],
+    [-0.3881, -2.191, 0.0, -3.1903, 0.0, -4.3545],
+    [0.0, -3.1903, 0.3881, -2.191, 1.1643, -1.3476],
+    [1.9405, -0.5042, 2.8842, -0.0642, 4.0044, 0.0],
+    [3.2723, 0.0366, 2.602, 0.2475, 1.9846, 0.6508],
+    [1.376, 1.045, 0.8908, 1.5767, 0.5292, 2.2368],
+    [0.1764, 2.8968, 0.0, 3.6027, 0.0, 4.3728],
+    [0.0, 3.2085, -0.3881, 2.2001, -1.1643, 1.3567],
+    [-1.9405, 0.5042, -2.8842, 0.055, -3.9956, 0.0],
+];
+/// Moon craters: (left, top, size) in em inside the moon mask.
+const CRATERS: [(f64, f64, f64); 3] = [(0.3, 0.75, 0.75), (1.375, 0.9, 0.375), (0.8, 0.3, 0.25)];
+/// Day/night switch ported from CodePen linxiang-webcraft/pvbvLBN ("Animated Day/Night Theme
+/// Toggle", kept as `design/toggle-pen.html`), drawn in its em units: the sun knob slides right
+/// while a moon mask slides over it, the clouds sink away and the stars drop in.
+fn draw_toggle(cr: &cairo::Context, width: i32, height: i32, t: &Toggle) {
+    let _ = cr.save();
+    cr.translate(
+        (width as f64 - TOGGLE_W * TOGGLE_EM) / 2.0,
+        (height as f64 - TOGGLE_H * TOGGLE_EM) / 2.0,
+    );
+    cr.scale(TOGGLE_EM, TOGGLE_EM);
+    let k = t.theme.value.clamp(0.0, 1.0);
+    let frame = (0.0, 0.0, TOGGLE_W, TOGGLE_H);
+    let black = (0.0, 0.0, 0.0);
+    // Outer highlight: 0.06em 0.06em 0.125em rgba(255, 255, 255, 0.94).
+    soft_shadow(
+        cr,
+        (0.06, 0.06, TOGGLE_W, TOGGLE_H),
+        0.125,
+        (1.0, 1.0, 1.0),
+        0.94,
+        false,
+    );
+    let _ = cr.save();
+    pill(cr, frame.0, frame.1, frame.2, frame.3);
+    cr.clip();
+    let bg = mix(0x3d7eae, 0x1d1f2c, k);
+    cr.set_source_rgb(bg.0, bg.1, bg.2);
     let _ = cr.paint();
-    // Stars rise into place as night falls; bright ones twinkle while the window is active.
-    if k > 0.0 {
-        for (i, (x, y, bright)) in STARS.iter().enumerate() {
-            let twinkle = if *bright {
-                t.motion * (1.0 - (TAU * (t.clock - i as f64 * 0.37) / 2.2).cos()) / 2.0
-            } else {
-                0.0
-            };
-            let alpha = if *bright {
-                k * (1.0 - 0.6 * twinkle)
-            } else {
-                k * 0.45
-            };
-            let r = if *bright { 1.9 } else { 1.3 } * (1.0 + 0.5 * twinkle);
-            cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
-            disc(cr, 14.0 + x * 1.7, 8.0 + y * 1.5 + 10.0 * day, r);
-            let _ = cr.fill();
-        }
-    }
-    let (cx, cy) = (45.0 + 110.0 * t.position, 45.0);
-    // Halo rings around the knob, breathing gently while the window is active.
-    let breathe = 1.0 + t.motion * 0.04 * (1.0 - (TAU * t.clock / 3.0).cos()) / 2.0;
-    for (grow, alpha) in [(44.0, 0.07), (29.0, 0.1), (15.0, 0.14)] {
-        cr.set_source_rgba(1.0, 1.0, 1.0, alpha * (day + 0.45 * k));
-        disc(cr, cx, cy, (37.0 + grow) * breathe);
-        let _ = cr.fill();
-    }
-    // Two cloud layers along the bottom; at night they part to both sides and fade.
-    for (j, (x, y, alpha, away)) in CLOUDS.iter().enumerate() {
-        let sway = t.motion * 3.0 * (TAU * (t.clock / 7.0 + j as f64 * 0.25)).sin();
-        let (ox, oy) = ((x + 22.0 + away * slide) * 1.6 + sway, y * 1.6 + 4.0);
-        for (px, py) in PUFFS {
-            disc(
-                cr,
-                ox + (px + 8.5) * PUFF_SCALE,
-                oy + (py + 8.5) * PUFF_SCALE,
-                8.5 * PUFF_SCALE,
-            );
-        }
-        cr.set_source_rgba(1.0, 1.0, 1.0, alpha * (1.0 - 0.85 * k));
-        let _ = cr.fill();
-    }
-    // Knob: the sun by day, the full moon by night; craters surface in the second half.
-    let r = 37.0;
-    cr.set_source_rgba(0.0, 0.0, 0.0, 0.16 + 0.12 * k);
-    disc(cr, cx, cy + 3.0, r + 2.0);
-    let _ = cr.fill();
-    let glow_color = mix(0xffc94d, 0xffebaa, k);
-    let glow = cairo::RadialGradient::new(cx, cy, r * 0.8, cx, cy, r + 14.0);
-    stop(&glow, 0.0, glow_color, 0.75 * breathe - 0.2 * k);
-    stop(&glow, 1.0, glow_color, 0.0);
-    let _ = cr.set_source(glow);
-    disc(cr, cx, cy, r + 14.0);
-    let _ = cr.fill();
-    let (fx, fy) = (cx - r * 0.3, cy - r * 0.32);
-    let ball = cairo::RadialGradient::new(fx, fy, 0.0, fx, fy, r * 1.75);
-    stop(&ball, 0.0, mix(0xfff1b8, 0xffffff, k), 1.0);
-    stop(&ball, 0.55, mix(0xffc23d, 0xfff6d9, k), 1.0);
-    stop(&ball, 1.0, mix(0xf59e0b, 0xe9d79a, k), 1.0);
-    let _ = cr.set_source(ball);
-    disc(cr, cx, cy, r);
-    let _ = cr.fill();
-    let crater = ((k - 0.4) / 0.6).clamp(0.0, 1.0);
-    if crater > 0.0 {
-        cr.set_source_rgba(214.0 / 255.0, 196.0 / 255.0, 140.0 / 255.0, 0.5 * crater);
-        for (dx, dy, cr0) in [
-            (-11.0, -10.0, 8.0),
-            (12.0, 4.0, 6.0),
-            (-5.0, 15.0, 4.5),
-            (14.0, -15.0, 3.5),
-        ] {
-            disc(cr, cx + dx, cy + dy, cr0);
+    // Clouds hang from (0.3em, 2em) and sink 3em at night.
+    let (cx, cy) = (0.3 + 0.625, 2.0 + 0.625 + 3.0 * k);
+    for (puffs, color) in [(CLOUD_BACK, 0xaacadf), (CLOUD_FRONT, 0xf3fdff)] {
+        let c = rgb(color);
+        cr.set_source_rgb(c.0, c.1, c.2);
+        for (dx, dy, spread) in puffs {
+            disc(cr, cx + dx, cy + dy, 0.625 + spread);
         }
         let _ = cr.fill();
     }
-    let shine = cairo::LinearGradient::new(0.0, cy - r, 0.0, cy + r);
-    shine.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.45);
-    shine.add_color_stop_rgba(0.12, 1.0, 1.0, 1.0, 0.0);
-    shine.add_color_stop_rgba(0.85, 0.0, 0.0, 0.0, 0.0);
-    shine.add_color_stop_rgba(1.0, 0.0, 0.0, 0.0, 0.1);
-    let _ = cr.set_source(shine);
-    disc(cr, cx, cy, r);
+    // Stars: 2.75em wide at 0.3em; 2em above the frame by day, 0.5em down at night.
+    let _ = cr.save();
+    cr.translate(0.3, -2.0 + 2.5 * k);
+    cr.scale(2.75 / 144.0, 2.75 / 144.0);
+    for (x, y) in SPARKLES {
+        cr.move_to(x - 3.9956, y);
+        for [a, b, c, d, e, f] in SPARKLE {
+            cr.curve_to(x + a, y + b, x + c, y + d, x + e, y + f);
+        }
+        cr.close_path();
+    }
+    cr.set_source_rgb(1.0, 1.0, 1.0);
     let _ = cr.fill();
     let _ = cr.restore();
-    // 2px border, brighter while hovered.
-    let alpha = (0.25 + 0.2 * t.lift) * day + (0.08 + 0.1 * t.lift) * k;
-    pill(cr, 1.0, 1.0, 198.0, 88.0);
-    cr.set_line_width(2.0);
-    cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
-    let _ = cr.stroke();
+    // Sun: box-shadows paint last-listed first, so the halo rings go under the drop shadows.
+    let sun = (t.knob.value, SUN_OFFSET, SUN_D, SUN_D);
+    let r = SUN_D / 2.0;
+    let (sx, sy) = (sun.0 + r, sun.1 + r);
+    for spread in [1.875, 1.25, 0.625] {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.1);
+        disc(cr, sx, sy, r + spread);
+        let _ = cr.fill();
+    }
+    soft_shadow(
+        cr,
+        (sun.0, sun.1 + 0.05, SUN_D, SUN_D),
+        0.125,
+        black,
+        0.25,
+        false,
+    );
+    soft_shadow(
+        cr,
+        (sun.0 + 0.05, sun.1 + 0.125, SUN_D, SUN_D),
+        0.125,
+        black,
+        0.25,
+        false,
+    );
+    let gold = rgb(0xecca2f);
+    cr.set_source_rgb(gold.0, gold.1, gold.2);
+    disc(cr, sx, sy, r);
+    let _ = cr.fill();
+    inset_shadow(cr, sun, (0.0, -0.05), 0.05, rgb(0xa1872a), 1.0);
+    inset_shadow(cr, sun, (0.05, 0.05), 0.05, rgb(0xfeffef), 0.61);
+    // Moon mask: slides in from the right, clipped to the sun's circle.
+    let _ = cr.save();
+    disc(cr, sx, sy, r);
+    cr.clip();
+    let moon = (sun.0 + SUN_D * (1.0 - k), sun.1, SUN_D, SUN_D);
+    let grey = rgb(0xc4c9d1);
+    cr.set_source_rgb(grey.0, grey.1, grey.2);
+    disc(cr, moon.0 + r, moon.1 + r, r);
+    let _ = cr.fill();
+    inset_shadow(cr, moon, (0.0, -0.062), 0.062, rgb(0x969696), 1.0);
+    inset_shadow(cr, moon, (0.062, 0.062), 0.062, rgb(0xfeffef), 0.61);
+    let pit = rgb(0x959db1);
+    for (left, top, size) in CRATERS {
+        let crater = (moon.0 + left, moon.1 + top, size, size);
+        cr.set_source_rgb(pit.0, pit.1, pit.2);
+        disc(cr, crater.0 + size / 2.0, crater.1 + size / 2.0, size / 2.0);
+        let _ = cr.fill();
+        inset_shadow(cr, crater, (0.0, 0.03), 0.06, black, 0.25);
+    }
+    let _ = cr.restore();
+    // The container's ::after: inset 0 0.05em 0.187em rgba(0, 0, 0, 0.5).
+    inset_shadow(cr, frame, (0.0, 0.05), 0.187, black, 0.5);
+    let _ = cr.restore();
     let _ = cr.restore();
 }
 /// The prototype's `CLOUD` path (viewBox 120×64), with its SVG arcs converted to Cairo arcs.

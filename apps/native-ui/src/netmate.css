@@ -88,7 +88,7 @@ window.netmate.dark {
 }
 .netmate button.theme-switch:focus-visible {
   outline: 2px solid #ffffff;
-  outline-offset: -6px;
+  outline-offset: -1px;
 }
 .netmate.dark button.theme-switch:focus-visible {
   outline-color: #f0d98a;
