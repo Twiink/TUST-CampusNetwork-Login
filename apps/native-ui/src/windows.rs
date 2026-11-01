@@ -1101,6 +1101,9 @@ unsafe fn anchor(h: HWND, y: i32, name: &str) {
 }
 /// CI diagnostics: GUI-subsystem processes have no console, so panics and startup
 /// checkpoints go to a trace file when NETMATE_UI_TRACE is set.
+static TRACE_MSGS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+static TRACE_LOCK: Mutex<()> = Mutex::new(());
+
 fn trace_file() -> Option<std::path::PathBuf> {
     std::env::var_os("NETMATE_UI_TRACE")?;
     Some(std::env::temp_dir().join("netmate-ui-trace.log"))
@@ -1114,6 +1117,11 @@ fn trace(stage: &str) {
             .append(true)
             .open(path)
         {
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0);
+            let _guard = TRACE_LOCK.lock();
             let _ = writeln!(file, "{stage}");
         }
     }
@@ -1135,6 +1143,7 @@ pub fn run() {
         let (tx, rx) = client::start();
         trace("run: client started");
         let dark = crate::theme::saved_dark().unwrap_or_else(|| appearance::system_dark());
+        trace("run: theme resolved");
         UI.set(Mutex::new(Ui {
             tx,
             config: Value::Null,
@@ -1182,7 +1191,9 @@ pub fn run() {
             combo_focus: 0,
         }))
         .ok();
+        trace("run: ui state built");
         refresh_brushes();
+        trace("run: brushes refreshed");
         let instance = GetModuleHandleW(None).unwrap();
         let class = WNDCLASSW {
             lpfnWndProc: Some(proc),
@@ -1192,6 +1203,7 @@ pub fn run() {
             ..Default::default()
         };
         RegisterClassW(&class);
+        trace("run: class registered");
         let system_dpi = GetDpiForSystem().max(96);
         let h = CreateWindowExW(
             WINDOW_EX_STYLE::default(),
@@ -1212,6 +1224,7 @@ pub fn run() {
             None,
         )
         .unwrap();
+        TRACE_MSGS.store(false, std::sync::atomic::Ordering::Relaxed);
         trace("run: window created");
         delete_fonts(refresh_fonts(h));
         appearance::titlebar(h, dark);
@@ -4781,6 +4794,9 @@ unsafe fn list_notify(h: HWND, l: LPARAM) -> LRESULT {
     LRESULT(0)
 }
 unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    if TRACE_MSGS.load(std::sync::atomic::Ordering::Relaxed) {
+        trace(&format!("msg {message:#x}"));
+    }
     match message {
         WM_PAINT => {
             let mut paint = PAINTSTRUCT::default();
