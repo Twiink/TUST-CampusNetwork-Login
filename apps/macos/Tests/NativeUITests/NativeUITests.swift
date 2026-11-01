@@ -3,7 +3,10 @@ import NetMateIPC
 final class NativeUITests: XCTestCase {
     func testOneHundredWindowLifecycles() throws {
         let app=XCUIApplication()
-        let profile=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        // The sandboxed runner's container temp path is already long; a short profile keeps
+        // the agent socket under the 104-char sun_path limit.
+        let profile=FileManager.default.temporaryDirectory.appendingPathComponent("nm")
+        try? FileManager.default.removeItem(at:profile)
         try FileManager.default.createDirectory(at:profile,withIntermediateDirectories:true)
         defer {
             app.terminate()
