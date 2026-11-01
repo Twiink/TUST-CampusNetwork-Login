@@ -1,7 +1,7 @@
 import AppKit
 
-// Visual source of truth: design/netmate-sky.html with design/app.css (tokens, layout) and
-// design/toggle.css (day/night toggle); porting rules in design/PORT-SPEC.md.
+// Visual source of truth: design/netmate-card.html (「校园一卡通」), ported to GTK in
+// apps/native-ui/src/linux.rs and netmate.css; the day/night toggle is design/toggle-pen.html.
 enum NetMateColors {
     static func hex(_ value: UInt32) -> NSColor {
         NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255,
@@ -11,7 +11,7 @@ enum NetMateColors {
     static func adaptive(_ light: UInt32, _ dark: UInt32) -> NSColor {
         NSColor(name: nil) { appearance in hex(isDark(appearance) ? dark : light) }
     }
-    /// A light/dark pair with separate opacities, e.g. `#e1eefb` / `rgba(240,217,138,.13)`.
+    /// A light/dark pair with separate opacities, e.g. `rgba(201,162,74,.18)` / `rgba(217,184,94,.16)`.
     static func adaptive(_ light: UInt32, _ lightAlpha: CGFloat, _ dark: UInt32, _ darkAlpha: CGFloat) -> NSColor {
         NSColor(name: nil) { appearance in
             isDark(appearance) ? hex(dark).withAlphaComponent(darkAlpha) : hex(light).withAlphaComponent(lightAlpha)
@@ -30,157 +30,85 @@ enum NetMateColors {
         return NSColor(srgbRed: channel(16), green: channel(8), blue: channel(0), alpha: alpha)
     }
 
-    // Tokens (app.css :root and .night).
-    static let ground = adaptive(0xeaf3fc, 0x0a1222)
-    static let surface = adaptive(0xffffff, 0x111c31)
-    static let surface2 = adaptive(0xf2f7fc, 0x16233b)
-    static let line = adaptive(0xd9e6f2, 0x22324d)
-    static let text = adaptive(0x0f2a44, 0xe4ebf5)
-    static let secondary = adaptive(0x4f6a84, 0x94a6bf)
-    static let accent = adaptive(0x2370c0, 0xf0d98a)
-    static let accentSoft = adaptive(0xe1eefb, 1, 0xf0d98a, 0.13)
-    static let onAccent = adaptive(0xffffff, 0x1a1606)
-    static let ok = adaptive(0x17865c, 0x5fd39f)
-    static let okSoft = adaptive(0xe0f4ea, 1, 0x5fd39f, 0.12)
-    static let warn = adaptive(0xa8650a, 0xf2b45a)
-    static let warnSoft = adaptive(0xfbf0dc, 1, 0xf2b45a, 0.12)
-    static let bad = adaptive(0xc93838, 0xff7b7b)
-    static let badSoft = adaptive(0xfbe5e5, 1, 0xff7b7b, 0.12)
-    static let railText = adaptive(0xffffff, 0xe4ebf5)
-    static let railText2 = adaptive(0xffffff, 0.78, 0x94a6bf, 1)
-    static let railActive = adaptive(0xffffff, 0.2, 0xf0d98a, 0.12)
-    static let railHover = adaptive(0xffffff, 0.1, 0xffffff, 0.1)
-    static let railActiveText = adaptive(0xffffff, 0xf0d98a)
-    static let skyText = NSColor.white
+    // Tokens (netmate.css `window.netmate` and `.dark`).
+    static let ground = adaptive(0xecebe6, 0x14181c)
+    static let field = adaptive(0xf6f5f1, 0x1b2026)
+    static let line = adaptive(0xd6d4cd, 0x2a3138)
+    static let ink = adaptive(0x1d2329, 0xe8e6df)
+    static let text = ink
+    static let secondary = adaptive(0x5c636a, 0x9aa1a7)
+    static let faint = adaptive(0xb5b2aa, 0x3a434c)
+    static let gold = adaptive(0xc9a24a, 0xd9b85e)
+    static let goldText = adaptive(0x87661c, 0xd9b85e)
+    static let goldSoft = adaptive(0xc9a24a, 0.18, 0xd9b85e, 0.16)
+    static let ok = adaptive(0x2f7d5b, 0x5cc795)
+    static let warn = adaptive(0x9a5f0c, 0xe8a94e)
+    static let bad = adaptive(0xb8372b, 0xf07b6e)
+    static let rail = adaptive(0x1d2329, 0x0d1013)
+    static let rail2 = adaptive(0x2b333b, 0x1d2329)
+    static let railText = hex(0xe8e6df)
+    static let railText2 = hex(0x9aa1a7)
+    static let railLine = NSColor.white.withAlphaComponent(0.08)
+    static let railHover = NSColor.white.withAlphaComponent(0.05)
+    static let faceText = hex(0xf1efe8)
+    static let faceText2 = hex(0xa9afb5)
+    static let deck1 = adaptive(0xcfcdc6, 0x262c33)
+    static let deck2 = adaptive(0xdddbd5, 0x1f252b)
+    static let primary = adaptive(0x1d2329, 0xd9b85e)
+    static let onPrimary = adaptive(0xffffff, 0x1a1606)
 
-    // Names the pages already use, mapped onto the tokens.
+    // Names the pages use, mapped onto the tokens.
     static let caption = secondary
     static let label = secondary
-    static let primary = accent
     static let heading = text
-    static let success = ok
-    static let danger = bad
     static let errorText = bad
-    static let warningText = warn
-    static let warningFill = warnSoft
-    static let warningStroke = adaptive(0xa8650a, 0.3, 0xf2b45a, 0.3)
     static let rule = line
-    static let cardFill = surface
-    static let cardStroke = line
-    static let rowFill = surface
-    static let rowStroke = line
-    static let fieldFill = surface
-    static let fieldStroke = line
-    static let metricFill = surface2
-    static let mutedFill = surface2
-    static let mutedTitle = secondary
-    static let emptyStroke = line
-    static let pillText = accent
-    static let pillFill = accentSoft
-    static let badgeText = secondary
-    static let badgeFill = surface2
-    static let authFill = accentSoft
-    static let openText = ok
-    static let openFill = okSoft
-    static let currentText = onAccent
-    static let selectedFill = accentSoft
     static let excellent = ok
-    static let good = accent
+    static let good = ok
     static let fair = warn
     static let poor = warn
     static let idle = secondary
 
-    /// `.badge.ok` for the top priorities, the plain grey badge otherwise.
-    static func priority(_ value: Int) -> (NSColor, NSColor) {
-        value <= 3 ? (ok, okSoft) : (secondary, surface2)
+    /// Card face gradient stops (`--face-a`, `--face-b`) for the resolved theme.
+    static func face(dark: Bool) -> [NSColor] {
+        dark ? [hex(0x323d47), hex(0x232a32)] : [hex(0x26313b), hex(0x1a2128)]
     }
-    /// Log level text colour (`.lvl.*`); the level is plain coloured text, so the fill is clear.
-    static func level(_ level: String) -> (NSColor, NSColor) {
+    /// The gold chip gradient (`#ecd48c` → `#b88f35`), the same in both themes.
+    static let chip = [hex(0xecd48c), hex(0xb88f35)]
+    /// Log level text colour (`.level-*`).
+    static func level(_ level: String) -> NSColor {
         switch level {
-        case "info": return (accent, .clear)
-        case "success": return (ok, .clear)
-        case "warn": return (warn, .clear)
-        case "error": return (bad, .clear)
-        default: return (secondary, .clear)
+        case "success": return ok
+        case "warn": return warn
+        case "error": return bad
+        default: return secondary
         }
     }
-    /// Sky panel gradient stops (160°) per weather and theme.
-    static func sky(_ weather: String, dark: Bool) -> [UInt32] {
-        switch (weather, dark) {
-        case ("cloud", false): return [0x6b8fb6, 0x9db8d4, 0xc9d8e6]
-        case ("storm", false): return [0x56606f, 0x7d8795, 0xa5adb8]
-        case ("cloud", true): return [0x141b2c, 0x253149, 0x34415a]
-        case ("storm", true): return [0x1d1416, 0x3a2427, 0x4b3033]
-        case (_, true): return [0x070d1c, 0x111a30, 0x1f3156]
-        default: return [0x3d84d0, 0x6fb0ee, 0xa9d3f7]
+    /// `.lamp.<tone>`: the dot colour and the opacity of its 5 px ring; the same in both themes.
+    static func lamp(_ tone: String) -> (UInt32, CGFloat) {
+        switch tone {
+        case "ok": return (0x5cc795, 0.2)
+        case "warn": return (0xe8a94e, 0.22)
+        case "bad": return (0xf07b6e, 0.22)
+        default: return (0x9aa1a7, 0.2)
         }
     }
 }
 
-/// `CLOUD` from design/app.js (viewBox units, y down), drawn through `transform`.
-func netMateCloud(_ transform: CGAffineTransform) -> NSBezierPath {
-    let p = CGMutablePath()
-    func deg(_ d: CGFloat) -> CGFloat { d * .pi / 180 }
-    p.move(to: CGPoint(x: 28, y: 60))
-    // The SVG arcs converted to centre form; the sweep flag 1 means increasing angles.
-    p.addArc(center: CGPoint(x: 27.892, y: 42), radius: 18, startAngle: deg(89.655), endAngle: deg(263.968), clockwise: false)
-    p.addArc(center: CGPoint(x: 51.756, y: 27.651), radius: 26, startAngle: deg(-172.151), endAngle: deg(-26.622), clockwise: false)
-    p.addArc(center: CGPoint(x: 77.219, y: 35.876), radius: 20, startAngle: deg(-96.371), endAngle: deg(-20.11), clockwise: false)
-    p.addArc(center: CGPoint(x: 91.167, y: 44.253), radius: 16, startAngle: deg(-72.42), endAngle: deg(79.803), clockwise: false)
-    p.closeSubpath()
-    var t = transform
-    guard let moved = p.copy(using: &t) else { return NSBezierPath() }
-    return NSBezierPath(cgPath: moved)
+/// Fills `rect` with a CSS `linear-gradient(<angle>deg, …)` in a y-down context.
+func cssLinearGradient(_ ctx: CGContext, _ rect: CGRect, angle: CGFloat, _ colors: [NSColor], _ locations: [CGFloat]) {
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    guard let gradient = CGGradient(colorsSpace: space, colors: colors.map { $0.cgColor } as CFArray, locations: locations) else { return }
+    let a = angle * .pi / 180
+    let dir = CGPoint(x: sin(a), y: -cos(a))
+    let half = (abs(rect.width * sin(a)) + abs(rect.height * cos(a))) / 2
+    let c = CGPoint(x: rect.midX, y: rect.midY)
+    ctx.drawLinearGradient(gradient, start: CGPoint(x: c.x - dir.x * half, y: c.y - dir.y * half),
+                           end: CGPoint(x: c.x + dir.x * half, y: c.y + dir.y * half),
+                           options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
 }
 
-/// Fills `path` top to bottom with a gradient spanning its bounds (SVG `objectBoundingBox`).
-/// The current context must be y-down (a flipped view).
-func fillVertical(_ path: NSBezierPath, _ colors: [NSColor], _ locations: [CGFloat]) {
-    guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-    ctx.saveGState()
-    ctx.addPath(path.cgPath); ctx.clip()
-    cssLinearGradient(ctx, path.bounds, angle: 180, colors, locations)
-    ctx.restoreGState()
-}
-
-final class NetMateBackground: NSView {
-    var onAppearanceChange: ((Bool) -> Void)?
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance(); needsDisplay = true
-        onAppearanceChange?(NetMateColors.isDark(effectiveAppearance))
-    }
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) { NetMateColors.ground.setFill(); dirtyRect.fill() }
-}
-
-/// `.rail`: vertical gradient with static day clouds or night stars (no animation).
-final class NetMateSidebar: NSView {
-    override var isFlipped: Bool { true }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-    override func draw(_ dirtyRect: NSRect) {
-        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let dark = NetMateColors.isDark(effectiveAppearance)
-        let hex = NetMateColors.hex
-        cssLinearGradient(ctx, bounds, angle: 180, [hex(dark ? 0x070d1c : 0x2a68ad), hex(dark ? 0x15213b : 0x4a90d9)], [0, 1])
-        if dark {
-            NSColor.white.withAlphaComponent(0.8).setFill()
-            for i in 0..<14 {
-                let x = bounds.width * CGFloat((i * 41) % 95) / 100, y = bounds.height * CGFloat((i * 29) % 70) / 100
-                NSBezierPath(ovalIn: NSRect(x: x, y: y, width: 2, height: 2)).fill()
-            }
-            return
-        }
-        // .rc1: 138 wide, left -22, bottom 112; .rc2: 86 wide, right -16, bottom 196.
-        for (width, x, bottom, alpha) in [(138.0, -22.0, 112.0, 0.3), (86.0, Double(bounds.width) - 86 + 16, 196.0, 0.22)] {
-            let w = CGFloat(width), s = w / 120, h = 64 * s
-            let origin = CGPoint(x: CGFloat(x), y: bounds.height - CGFloat(bottom) - h)
-            let cloud = netMateCloud(CGAffineTransform(translationX: origin.x, y: origin.y).scaledBy(x: s, y: s))
-            fillVertical(cloud, [NSColor.white.withAlphaComponent(CGFloat(alpha)), NSColor.white.withAlphaComponent(CGFloat(alpha) * 0.55)], [0, 1])
-        }
-    }
-}
-
-/// CSS `cubic-bezier(x1, y1, x2, y2)` evaluated at progress `x`; y may overshoot [0, 1].
+/// CSS `cubic-bezier(x1, y1, x2, y2)` evaluated at progress `x`.
 func cubicBezier(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat, _ x: CGFloat) -> CGFloat {
     if x <= 0 { return 0 }
     if x >= 1 { return 1 }
@@ -193,7 +121,54 @@ func cubicBezier(_ x1: CGFloat, _ y1: CGFloat, _ x2: CGFloat, _ y2: CGFloat, _ x
     return curve((lo + hi) / 2, y1, y2)
 }
 
-/// A rounded, optionally filled and stroked container around a padded stack.
+final class NetMateBackground: NSView {
+    var onAppearanceChange: ((Bool) -> Void)?
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance(); needsDisplay = true
+        onAppearanceChange?(NetMateColors.isDark(effectiveAppearance))
+    }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) { NetMateColors.ground.setFill(); dirtyRect.fill() }
+}
+
+/// `.rail`: the flat graphite column.
+final class NetMateSidebar: NSView {
+    override var isFlipped: Bool { true }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func draw(_ dirtyRect: NSRect) { NetMateColors.rail.setFill(); dirtyRect.fill() }
+}
+
+/// `.brand-card`: a 30×21 card with its 9×7 gold chip, the rail's brand mark.
+final class NetMateBrandCard: NSView {
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { NSSize(width: 30, height: 21) }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        setContentHuggingPriority(.required, for: .horizontal); setContentHuggingPriority(.required, for: .vertical)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let hex = NetMateColors.hex
+        ctx.saveGState()
+        ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 4, cornerHeight: 4, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, bounds, angle: 135, [hex(0x3a4651), hex(0x2a333c)], [0, 1])
+        ctx.restoreGState()
+        // inset 0 0 0 1px rgba(255, 255, 255, .08)
+        ctx.addPath(CGPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), cornerWidth: 3.5, cornerHeight: 3.5, transform: nil))
+        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.08).cgColor); ctx.setLineWidth(1); ctx.strokePath()
+        let chip = CGRect(x: 5, y: 6, width: 9, height: 7)
+        ctx.saveGState()
+        ctx.addPath(CGPath(roundedRect: chip, cornerWidth: 2, cornerHeight: 2, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, chip, angle: 135, NetMateColors.chip, [0, 1])
+        ctx.restoreGState()
+    }
+}
+
+/// A rounded, optionally filled and stroked container around a padded stack. `topRule`,
+/// `bottomRule` and `leftRule` draw the section rules and hairlines of the card design.
 class NetMateBox: NSView {
     let content = NSStackView()
     var fill: NSColor? { didSet { needsDisplay = true } }
@@ -201,7 +176,12 @@ class NetMateBox: NSView {
     var lineWidth: CGFloat = 1 { didSet { needsDisplay = true } }
     var dashed = false { didSet { needsDisplay = true } }
     /// Clamped to half the height, so a large value draws a pill.
-    var radius: CGFloat = 14 { didSet { needsDisplay = true } }
+    var radius: CGFloat = 8 { didSet { needsDisplay = true } }
+    var topRule: NSColor? { didSet { needsDisplay = true } }
+    var topRuleWidth: CGFloat = 1 { didSet { needsDisplay = true } }
+    var bottomRule: NSColor? { didSet { needsDisplay = true } }
+    var bottomRuleWidth: CGFloat = 1 { didSet { needsDisplay = true } }
+    var leftRule: NSColor? { didSet { needsDisplay = true } }
     /// `topAligned` lets the box grow taller than its content (equal-height columns).
     init(_ orientation: NSUserInterfaceLayoutOrientation = .vertical,
          padding: NSEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0),
@@ -234,129 +214,96 @@ class NetMateBox: NSView {
         super.viewDidChangeEffectiveAppearance(); needsDisplay = true
     }
     override func draw(_ dirtyRect: NSRect) {
-        guard fill != nil || stroke != nil else { return }
-        let inset = stroke == nil ? 0 : lineWidth / 2
-        let rect = bounds.insetBy(dx: inset, dy: inset)
-        let r = max(0, min(radius, rect.height / 2, rect.width / 2))
-        let shape = NSBezierPath(roundedRect: rect, xRadius: r, yRadius: r)
-        if let fill { fill.setFill(); shape.fill() }
-        if let stroke {
-            stroke.setStroke(); shape.lineWidth = lineWidth
-            if dashed { shape.setLineDash([6, 4], count: 2, phase: 0) }
-            shape.stroke()
+        if fill != nil || stroke != nil {
+            let inset = stroke == nil ? 0 : lineWidth / 2
+            let rect = bounds.insetBy(dx: inset, dy: inset)
+            let r = max(0, min(radius, rect.height / 2, rect.width / 2))
+            let shape = NSBezierPath(roundedRect: rect, xRadius: r, yRadius: r)
+            if let fill { fill.setFill(); shape.fill() }
+            if let stroke {
+                stroke.setStroke(); shape.lineWidth = lineWidth
+                if dashed { shape.setLineDash([6, 4], count: 2, phase: 0) }
+                shape.stroke()
+            }
+        }
+        if let topRule {
+            topRule.setFill()
+            NSBezierPath(rect: NSRect(x: 0, y: isFlipped ? 0 : bounds.height - topRuleWidth, width: bounds.width, height: topRuleWidth)).fill()
+        }
+        if let bottomRule {
+            bottomRule.setFill()
+            NSBezierPath(rect: NSRect(x: 0, y: isFlipped ? bounds.height - bottomRuleWidth : 0, width: bounds.width, height: bottomRuleWidth)).fill()
+        }
+        if let leftRule {
+            leftRule.setFill()
+            NSBezierPath(rect: NSRect(x: 0, y: 0, width: 1, height: bounds.height)).fill()
         }
     }
 }
 
-/// `.panel`: surface fill, 1 px line border, 14 px radius. The CSS shadow is not drawn.
-final class NetMateCard: NetMateBox {
-    init(padding: NSEdgeInsets = NSEdgeInsets(top: 18, left: 20, bottom: 18, right: 20), topAligned: Bool = false) {
-        super.init(.vertical, padding: padding, spacing: 12, topAligned: topAligned)
-        fill = NetMateColors.cardFill; stroke = NetMateColors.cardStroke; radius = 14
-    }
-    required init?(coder: NSCoder) { fatalError("Programmatic view") }
-    /// Tinted border used by the recovery failure card.
-    var tint: NSColor? { didSet { stroke = tint ?? NetMateColors.cardStroke } }
-}
-
-/// `.badge` (22 px high, 6 px radius) and the sky panel chips.
+/// `.badge` (20 px high, 4 px radius, outline only) and the outlined `.note` beside the card.
 final class NetMateBadge: NetMateBox {
     let label = NSTextField(labelWithString: "")
-    init(_ text: String, _ color: NSColor, _ background: NSColor, size: CGFloat = 12,
-         padding: NSEdgeInsets = NSEdgeInsets(top: 3, left: 8, bottom: 3, right: 8), radius: CGFloat = 6) {
+    init(_ text: String, _ color: NSColor = NetMateColors.secondary, border: NSColor = NetMateColors.line, size: CGFloat = 11.5,
+         padding: NSEdgeInsets = NSEdgeInsets(top: 3, left: 7, bottom: 3, right: 7), radius: CGFloat = 4) {
         super.init(.horizontal, padding: padding, spacing: 0)
         self.radius = radius
-        label.font = .systemFont(ofSize: size, weight: .semibold)
+        label.font = .systemFont(ofSize: size, weight: .medium)
         label.lineBreakMode = .byTruncatingTail
         label.setContentHuggingPriority(.required, for: .horizontal)
         label.setContentCompressionResistancePriority(.required, for: .horizontal)
         content.addArrangedSubview(label)
-        set(text, color, background)
+        set(text, color, border: border)
     }
     required init?(coder: NSCoder) { fatalError("Programmatic view") }
-    func set(_ text: String, _ color: NSColor, _ background: NSColor) {
-        label.stringValue = text; label.textColor = color; fill = background
-    }
-    /// A fixed-width column badge with centred text (WiFi rows).
-    func fixWidth(_ width: CGFloat) {
-        label.alignment = .center
-        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        widthAnchor.constraint(equalToConstant: width).isActive = true
+    func set(_ text: String, _ color: NSColor, border: NSColor) {
+        label.stringValue = text; label.textColor = color; stroke = border
     }
 }
 
-/// A 1 px divider in the line colour.
+/// A divider: the 1 px hairline, or the 1.5 px ink rule under section headings.
 final class NetMateRule: NSView {
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 1) }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-    override func draw(_ dirtyRect: NSRect) { NetMateColors.rule.setFill(); bounds.fill() }
-}
-
-/// A rounded progress trough (the sky panel's `.sky-bar` uses white on translucent white).
-final class NetMateProgress: NSView {
-    var fraction: CGFloat = 0 { didSet { needsDisplay = true } }
-    var color: NSColor = NetMateColors.accent { didSet { needsDisplay = true } }
-    var trough: NSColor = NetMateColors.surface2 { didSet { needsDisplay = true } }
-    var barHeight: CGFloat = 6 { didSet { invalidateIntrinsicContentSize() } }
-    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: barHeight) }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-    override func draw(_ dirtyRect: NSRect) {
-        trough.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
-        let width = bounds.width * max(0, min(1, fraction))
-        guard width > 0 else { return }
-        color.setFill()
-        NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: width, height: bounds.height), xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
+    var color: NSColor { didSet { needsDisplay = true } }
+    var thickness: CGFloat { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    init(_ color: NSColor = NetMateColors.line, thickness: CGFloat = 1) {
+        self.color = color; self.thickness = thickness
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        setAccessibilityElement(false)
     }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: thickness) }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func draw(_ dirtyRect: NSRect) { color.setFill(); NSBezierPath(rect: bounds).fill() }
 }
 
-/// The metric strip: one card whose arranged cells are separated by vertical lines.
+/// `.metrics`: five equal cells under a 1.5 px ink rule; the cells draw their own left hairline.
 final class NetMateStrip: NetMateBox {
     init() {
-        super.init(.horizontal, spacing: 0)
-        fill = NetMateColors.cardFill; stroke = NetMateColors.cardStroke; radius = 14
+        // The cells start below the rule, so their left hairlines do not cross it.
+        super.init(.horizontal, padding: NSEdgeInsets(top: 1.5, left: 0, bottom: 0, right: 0), spacing: 0)
+        topRule = NetMateColors.ink; topRuleWidth = 1.5
         content.distribution = .fillEqually; content.alignment = .top
     }
     required init?(coder: NSCoder) { fatalError("Programmatic view") }
-    override func layout() { super.layout(); needsDisplay = true }
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        NetMateColors.line.setFill()
-        for cell in content.arrangedSubviews.dropFirst() where !cell.isHidden {
-            let x = convert(cell.frame.origin, from: content).x
-            NSRect(x: round(x), y: 1, width: 1, height: bounds.height - 2).fill()
-        }
-    }
 }
 
-/// A list row with a top divider; the current row gets `accent-soft` and a 3 px accent bar.
-final class NetMateListRow: NetMateBox {
-    var divider = false { didSet { needsDisplay = true } }
-    var current = false { didSet { fill = current ? NetMateColors.accentSoft : nil } }
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        if divider { NetMateColors.line.setFill(); NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill() }
-        if current { NetMateColors.accent.setFill(); NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill() }
-    }
-}
-
-/// A clickable box (account choice in the WiFi form) exposed to accessibility as a button.
+/// A clickable account choice in the WiFi form (`button.choice`), exposed as a button.
 final class NetMateTile: NetMateBox {
     var onPress: (() -> Void)?
     var enabled = true { didSet { updateLook() } }
     var selected = false { didSet { updateLook() } }
     init() {
-        super.init(.vertical, padding: NSEdgeInsets(top: 12, left: 14, bottom: 12, right: 14), spacing: 6)
-        radius = 9; lineWidth = 1
+        super.init(.vertical, padding: NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12), spacing: 2)
+        radius = 8; lineWidth = 1
         setAccessibilityElement(true); setAccessibilityRole(.button)
         updateLook()
     }
     required init?(coder: NSCoder) { fatalError("Programmatic view") }
     private func updateLook() {
-        fill = selected ? NetMateColors.selectedFill : NetMateColors.rowFill
-        stroke = selected ? NetMateColors.accent : NetMateColors.rowStroke
+        fill = NetMateColors.field
+        stroke = selected ? NetMateColors.gold : NetMateColors.line
+        lineWidth = selected ? 1.5 : 1
         alphaValue = enabled || selected ? 1 : 0.6
         setAccessibilityEnabled(enabled)
     }
@@ -372,102 +319,74 @@ final class NetMateTile: NetMateBox {
     }
 }
 
-/// One row of the log list: time, level, source and the message on a second line.
+/// One log row in four columns: time 160 | level 46 | source 84 | message, on a single line.
 final class NetMateLogCell: NSTableCellView {
     static let reuse = NSUserInterfaceItemIdentifier("log-row")
     let time = NSTextField(labelWithString: "")
-    let level = NetMateBadge("", NetMateColors.badgeText, .clear, padding: NSEdgeInsets(top: 1, left: 0, bottom: 1, right: 0))
+    let level = NSTextField(labelWithString: "")
     let source = NSTextField(labelWithString: "")
     let message = NSTextField(labelWithString: "")
     init() {
         super.init(frame: .zero)
         identifier = Self.reuse
         for field in [time, source] {
-            field.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular); field.textColor = NetMateColors.caption
+            field.font = .monospacedSystemFont(ofSize: 12.5, weight: .regular); field.textColor = NetMateColors.secondary
+            field.lineBreakMode = .byTruncatingTail
         }
-        level.label.font = .systemFont(ofSize: 12, weight: .bold)
+        level.font = .systemFont(ofSize: 12, weight: .bold)
+        level.lineBreakMode = .byTruncatingTail
         message.font = .systemFont(ofSize: 13.5); message.textColor = NetMateColors.text
         message.lineBreakMode = .byTruncatingTail
+        message.maximumNumberOfLines = 1
         message.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-        source.lineBreakMode = .byTruncatingTail
-        source.setContentCompressionResistancePriority(.init(2), for: .horizontal)
-        let meta = NSStackView(views: [time, level, source]); meta.orientation = .horizontal; meta.spacing = 12; meta.alignment = .centerY
-        let stack = NSStackView(views: [meta, message]); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 4
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        message.setContentHuggingPriority(.init(1), for: .horizontal)
+        let row = NSStackView(views: [time, level, source, message])
+        row.orientation = .horizontal; row.spacing = 12; row.alignment = .centerY
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            message.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16)
+            time.widthAnchor.constraint(equalToConstant: 160),
+            level.widthAnchor.constraint(equalToConstant: 46),
+            source.widthAnchor.constraint(equalToConstant: 84),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
     required init?(coder: NSCoder) { fatalError("Programmatic view") }
 }
 
-/// Fills `rect` with a CSS `linear-gradient(<angle>deg, …)` in a y-down context.
-func cssLinearGradient(_ ctx: CGContext, _ rect: CGRect, angle: CGFloat, _ colors: [NSColor], _ locations: [CGFloat]) {
-    let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    guard let gradient = CGGradient(colorsSpace: space, colors: colors.map { $0.cgColor } as CFArray, locations: locations) else { return }
-    let a = angle * .pi / 180
-    let dir = CGPoint(x: sin(a), y: -cos(a))
-    let half = (abs(rect.width * sin(a)) + abs(rect.height * cos(a))) / 2
-    let c = CGPoint(x: rect.midX, y: rect.midY)
-    ctx.drawLinearGradient(gradient, start: CGPoint(x: c.x - dir.x * half, y: c.y - dir.y * half),
-                           end: CGPoint(x: c.x + dir.x * half, y: c.y + dir.y * half),
-                           options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-}
-/// A radial gradient disc, `focus` given as a fraction of the disc's box (CSS `circle at x% y%`).
-func radialDisc(_ ctx: CGContext, center: CGPoint, radius: CGFloat, focus: CGPoint = CGPoint(x: 0.5, y: 0.5),
-                _ colors: [NSColor], _ locations: [CGFloat]) {
-    let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    guard let gradient = CGGradient(colorsSpace: space, colors: colors.map { $0.cgColor } as CFArray, locations: locations) else { return }
-    let start = CGPoint(x: center.x - radius + 2 * radius * focus.x, y: center.y - radius + 2 * radius * focus.y)
-    // CSS `circle at x% y%` defaults to `farthest-corner` of the disc's box.
-    let reach = radius * 2 * hypot(max(focus.x, 1 - focus.x), max(focus.y, 1 - focus.y))
-    ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)); ctx.clip()
-    ctx.drawRadialGradient(gradient, startCenter: start, startRadius: 0, endCenter: start, endRadius: reach, options: [.drawsAfterEndLocation])
-    ctx.restoreGState()
-}
-/// A soft glow (CSS box-shadow with blur) around a disc.
-func glow(_ ctx: CGContext, center: CGPoint, radius: CGFloat, blur: CGFloat, _ color: NSColor) {
-    let space = CGColorSpace(name: CGColorSpace.sRGB)!
-    let clear = color.withAlphaComponent(0)
-    guard let gradient = CGGradient(colorsSpace: space, colors: [color.cgColor, color.cgColor, clear.cgColor] as CFArray,
-                                    locations: [0, radius / (radius + blur), 1]) else { return }
-    ctx.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius + blur, options: [])
-}
-
-enum NetMateButtonStyle { case normal, onSky, ghostSky }
-
-/// Remains an NSButton for keyboard control, focus and accessibility.
+/// Remains an NSButton for keyboard control, focus and accessibility; the face follows
+/// netmate.css: 34 px, radius 8, field fill with a line border.
 final class NetMateButton: NSButton {
     var navigation = false
-    /// Selected navigation item, or the checked state of a choice/chip button.
+    /// Selected navigation item, or the checked state of a choice/segment button.
     var selectedPage = false { didSet { needsDisplay = true } }
     var symbol: String?
     var primary = false
     var destructive = false
-    /// `button.choice` and the log level segment (`.seg button`).
+    /// `button.choice`.
     var choice = false
+    /// A log level segment (`button.log-filter` inside `.seg`).
     var chip = false
-    var compact = false
-    var look = NetMateButtonStyle.normal { didSet { needsDisplay = true } }
-    /// Icon colour override (`auto-on` / `auto-off`).
+    /// `button.wifi-switch`: 28 px high.
+    var compact = false { didSet { invalidateIntrinsicContentSize() } }
+    /// `button.quiet`: 28 px, borderless, secondary text.
+    var quiet = false { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    /// Icon and text colour override (`auto-on` / `auto-off`).
     var tint: NSColor?
     private var hovered = false
-    private var small: Bool { compact || chip }
     private var drawFont: NSFont {
-        if navigation { return .systemFont(ofSize: 14, weight: .semibold) }
-        return .systemFont(ofSize: chip ? 12.5 : 13.5, weight: .semibold)
+        if navigation { return .systemFont(ofSize: 15, weight: selectedPage ? .semibold : .medium) }
+        return .systemFont(ofSize: chip ? 12.5 : 13.5, weight: .medium)
     }
     override var intrinsicContentSize: NSSize {
         if navigation { return NSSize(width: 172, height: 42) }
-        if title.isEmpty { return NSSize(width: 36, height: 36) }
+        let height: CGFloat = chip ? 24 : (quiet || compact ? 28 : 34)
+        if title.isEmpty { return NSSize(width: height, height: height) }
         let text = (title as NSString).size(withAttributes: [.font: drawFont])
-        let padding: CGFloat = chip ? 22 : (small ? 24 : 32)
-        return NSSize(width: ceil(text.width) + padding + (symbol == nil ? 0 : 23), height: chip ? 28 : (small ? 32 : 36))
+        let padding: CGFloat = chip ? 22 : (quiet ? 16 : (compact ? 24 : 30))
+        return NSSize(width: ceil(text.width) + padding + (symbol == nil ? 0 : 22), height: height)
     }
     private var hoverArea: NSTrackingArea?
     override func updateTrackingAreas() {
@@ -480,53 +399,47 @@ final class NetMateButton: NSButton {
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
-        let dark = NetMateColors.isDark(effectiveAppearance)
         let c = NetMateColors.self
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current?.cgContext.setAlpha(isEnabled ? 1 : 0.55)
-        let r: CGFloat = navigation ? 10 : (chip ? 7 : 9)
+        let r: CGFloat = chip ? 5 : 8
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: r, yRadius: r)
         var fill: NSColor?
         var stroke: NSColor?
         var color: NSColor
+        var iconColor: NSColor?
         let active = hovered && isEnabled
         if navigation {
-            color = selectedPage ? c.railActiveText : (active ? c.railText : c.railText2)
-            if selectedPage { fill = c.railActive } else if active || isHighlighted { fill = c.railHover }
-        } else if look == .onSky {
-            fill = dark ? c.hex(0xf0d98a) : NSColor.white.withAlphaComponent(0.95)
-            color = dark ? c.hex(0x1a1606) : c.hex(0x12406f)
-        } else if look == .ghostSky {
-            stroke = NSColor.white.withAlphaComponent(active ? 0.8 : 0.55); color = .white
-            if active { fill = NSColor.white.withAlphaComponent(0.1) }
-        } else if primary {
-            fill = c.accent; stroke = c.accent; color = c.onAccent
+            color = selectedPage ? NSColor.white : (active ? c.railText : c.railText2)
+            if selectedPage { fill = c.rail2; iconColor = c.gold } else if active || isHighlighted { fill = c.railHover }
         } else if chip {
-            // `.seg button`: the selected segment is a raised surface, others are bare text.
-            if selectedPage { fill = dark ? c.line : c.surface } else if active { fill = c.surface.withAlphaComponent(0.5) }
-            color = selectedPage ? c.text : c.secondary
-        } else if choice && selectedPage {
-            fill = c.accentSoft; stroke = c.accent; color = c.accent
+            if selectedPage { fill = c.ink; color = c.ground } else { color = active ? c.text : c.secondary }
+        } else if quiet {
+            color = active ? c.text : (destructive ? c.bad : c.secondary)
+            if active { fill = c.field }
+        } else if primary {
+            fill = c.primary; stroke = c.primary; color = c.onPrimary
         } else {
-            fill = active ? c.surface2 : c.surface; stroke = c.line
+            fill = c.field; stroke = active ? c.secondary : c.line
             color = destructive ? c.bad : c.text
+            if choice { if selectedPage { stroke = c.gold } else { color = c.secondary } }
         }
         if let tint { color = tint }
         if let fill { fill.setFill(); path.fill() }
         if let stroke { stroke.setStroke(); path.lineWidth = 1; path.stroke() }
-        if primary && active { NSColor.white.withAlphaComponent(0.06).setFill(); path.fill() }
+        if primary && active { NSColor.white.withAlphaComponent(0.08).setFill(); path.fill() }
         if isHighlighted && !navigation { NSColor.black.withAlphaComponent(0.06).setFill(); path.fill() }
         var textRect = bounds.insetBy(dx: navigation ? 12 : 10, dy: 0)
         if let symbol, let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: navigation ? 15 : 14, weight: .semibold)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [color]))) {
-            let side: CGFloat = navigation ? 19 : 17
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: navigation ? 15 : 13, weight: .medium)
+                .applying(NSImage.SymbolConfiguration(paletteColors: [iconColor ?? color]))) {
+            let side: CGFloat = navigation ? 18 : 16
             let fitted = image.size.width > 0 ? NSSize(width: side, height: side * image.size.height / image.size.width) : NSSize(width: side, height: side)
             if title.isEmpty {
                 image.draw(in: NSRect(x: (bounds.width - fitted.width) / 2, y: (bounds.height - fitted.height) / 2, width: fitted.width, height: fitted.height))
             } else {
-                let x: CGFloat = navigation ? 12 : 14
+                let x: CGFloat = navigation ? 12 : 13
                 image.draw(in: NSRect(x: x, y: (bounds.height - fitted.height) / 2, width: fitted.width, height: fitted.height))
                 let start = x + side + (navigation ? 12 : 6)
                 textRect.origin.x = start; textRect.size.width = bounds.width - start - 10
@@ -539,73 +452,123 @@ final class NetMateButton: NSButton {
             (title as NSString).draw(in: textRect, withAttributes: [.font: drawFont, .foregroundColor: color, .paragraphStyle: paragraph])
         }
         if window?.firstResponder === self {
-            (navigation ? NSColor.white : NSColor.keyboardFocusIndicatorColor).setStroke(); path.lineWidth = 2; path.stroke()
+            // `:focus-visible`: a 2 px gold outline.
+            c.gold.setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: r, yRadius: r)
+            ring.lineWidth = 2; ring.stroke()
         }
     }
 }
 
-/// The day/night toggle after Elsht666「按钮-全月」and JamesnetGroup/themeswitch, mirrored from
-/// `draw_toggle` in apps/native-ui/src/linux.rs and design/toggle-lab.html. Drawn in a 200×90 design
-/// space at 0.44 scale: the knob is the sun by day and a full moon by night, ringed by halos; clouds
-/// part to both sides as stars rise. It stays an NSButton whose title is the accessible name.
-/// The frame timer runs only while switching, easing hover, or while the window is key, visible
-/// and unoccluded (ambient halo breathing, cloud sway and star twinkle); otherwise it stops.
+/// The day/night switch from the CodePen "Animated Day/Night Theme Toggle"
+/// (design/toggle-pen.html), ported from `draw_toggle` in apps/native-ui/src/linux.rs. It is drawn
+/// in the pen's em units at 16 pt per em: a 5.625×2.5 em pill on a 96×46 view (3 pt for the outer
+/// highlight). The sun knob slides right and the moon mask covers it, two cloud layers sink 3 em
+/// and seven sparkles drop in. Every move is a 0.3 s CSS `ease`; a retarget restarts from the
+/// current value. Hover leans the sun 0.187 em toward the middle. The frame timer runs only while
+/// something moves; with Reduce Motion the switch jumps to its end state. It stays an NSButton
+/// whose title is the accessible name.
 final class DayNightButton: NSButton {
-    static let scale: CGFloat = 0.44
-    static let switchDuration: TimeInterval = 0.55
-    static let liftDuration: TimeInterval = 0.2
-    /// themeswitch's cloud cell: nine 17 px circles in a 60×30 grid (left, top of each circle).
-    static let puffs: [(CGFloat, CGFloat)] = [(26, 1), (38, 1), (10, 12), (23, 12), (32, 13), (43, 8), (16, 3), (5, 2), (0, 8)]
-    /// Cloud cells along the bottom: (x, y) in themeswitch's 120×50 space, opacity, and how far x
-    /// moves at night (the clouds part to both sides).
-    static let clouds: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [(-10, 20, 0.55, -60), (65, 20, 0.55, 70), (0, 30, 1, -60), (55, 30, 1, 70)]
-    /// themeswitch's galaxy cell (80×50); bright stars twinkle, faint ones hold still.
-    static let stars: [(CGFloat, CGFloat, Bool)] = [
-        (40, 21, true), (48, 6, false), (68, 30, true), (4, 24, false), (8, 28, false), (21, 6, true),
-        (51, 27, false), (28, 39, false), (67, 8, false), (26, 14, false), (63, 20, false), (16, 35, false),
-        (60, 35, false), (36, 6, true), (56, 12, true), (43, 37, true), (23, 27, true), (12, 12, true)
+    static let em: CGFloat = 16
+    static let width: CGFloat = 5.625
+    static let height: CGFloat = 2.5
+    static let sunD: CGFloat = 2.125
+    static let sunOffset: CGFloat = (height - sunD) / 2
+    static let sunLean: CGFloat = 0.187
+    static let duration: TimeInterval = 0.3
+    /// The pen's cloud: a 1.25 em circle plus its box-shadow copies, (x, y, spread) in em from the
+    /// circle's centre. The back layer paints first.
+    static let cloudFront: [(CGFloat, CGFloat, CGFloat)] = [
+        (0, 0, 0), (0.937, 0.312, 0), (1.437, 0.375, 0), (2.187, 0, 0),
+        (2.937, 0.312, 0), (3.625, -0.062, 0), (4.5, -0.312, 0), (4.625, -1.75, 0.437)
     ]
-    /// Scale of a cloud puff relative to themeswitch's 17 px circle.
-    static let puffScale: CGFloat = 1.3
+    static let cloudBack: [(CGFloat, CGFloat, CGFloat)] = [
+        (-0.312, -0.312, 0), (0.5, -0.125, 0), (1.25, -0.062, 0), (2.0, -0.312, 0),
+        (2.625, 0, 0), (3.375, -0.437, 0), (4.0, -0.625, 0), (4.125, -2.125, 0.437)
+    ]
+    /// Centres of the seven sparkles in the pen's star SVG (viewBox 144×55).
+    static let sparkles: [(CGFloat, CGFloat)] = [
+        (136.996, 4.3545), (34.9956, 23.3545), (3.9956, 36.3545), (57.9956, 25.3545),
+        (84.9956, 25.3545), (139.996, 36.3545), (102.996, 50.3545)
+    ]
+    /// One sparkle as cubic segments (c1x, c1y, c2x, c2y, x, y) around its centre, starting from
+    /// the left tip (-3.9956, 0).
+    static let sparkle: [[CGFloat]] = [
+        [-2.8842, -0.055, -1.9405, -0.5042, -1.1643, -1.3476],
+        [-0.3881, -2.191, 0.0, -3.1903, 0.0, -4.3545],
+        [0.0, -3.1903, 0.3881, -2.191, 1.1643, -1.3476],
+        [1.9405, -0.5042, 2.8842, -0.0642, 4.0044, 0.0],
+        [3.2723, 0.0366, 2.602, 0.2475, 1.9846, 0.6508],
+        [1.376, 1.045, 0.8908, 1.5767, 0.5292, 2.2368],
+        [0.1764, 2.8968, 0.0, 3.6027, 0.0, 4.3728],
+        [0.0, 3.2085, -0.3881, 2.2001, -1.1643, 1.3567],
+        [-1.9405, 0.5042, -2.8842, 0.055, -3.9956, 0.0]
+    ]
+    /// Moon craters: (left, top, size) in em inside the moon mask.
+    static let craters: [(CGFloat, CGFloat, CGFloat)] = [(0.3, 0.75, 0.75), (1.375, 0.9, 0.375), (0.8, 0.3, 0.25)]
+
+    /// One animated value: a retarget restarts the 0.3 s `ease` from wherever the value is now,
+    /// as a CSS transition does when it is interrupted.
+    struct Tween {
+        var from: CGFloat
+        var to: CGFloat
+        var value: CGFloat
+        var started: TimeInterval?
+        init(_ value: CGFloat) { from = value; to = value; self.value = value; started = nil }
+        mutating func set(_ target: CGFloat) {
+            if to != target { from = value; to = target; started = nil }
+        }
+        mutating func snap() { value = to; from = to; started = nil }
+        var moving: Bool { value != to }
+        mutating func step(_ now: TimeInterval) {
+            guard moving else { return }
+            let start = started ?? now
+            started = start
+            let k = CGFloat(max(0, min(1, (now - start) / DayNightButton.duration)))
+            value = from + (to - from) * cubicBezier(0.25, 0.1, 0.25, 1, k)
+            if k >= 1 { snap() }
+        }
+    }
 
     var dark = false {
         didSet {
             title = dark ? "切换至白天模式" : "切换至黑夜模式"
             setAccessibilityLabel(title); toolTip = title
-            guard dark != oldValue else { return }
-            let next: CGFloat = dark ? 1 : 0
-            if window?.isVisible != true || reduceMotion {
-                position = next; progress = next; goal = next; transitionStart = nil
-                needsDisplay = true; updateClock(); return
-            }
-            from = (position, progress); goal = next; transitionStart = now
-            updateClock()
+            animate()
         }
     }
-    /// Knob position, 0 = day (left) … 1 = night (right); overshoots during the switch.
-    private var position: CGFloat = 0
-    /// Colour and opacity blend between the day and night scenes.
-    private var progress: CGFloat = 0
-    private var from: (CGFloat, CGFloat) = (0, 0)
-    /// Scene the switch is heading to (0 day, 1 night). Not `target`, which NSControl owns.
-    private var goal: CGFloat = 0
-    private var transitionStart: TimeInterval?
     private var hovered = false
-    /// Hover emphasis 0…1 (scale 1.07, brighter border).
-    private var lift: CGFloat = 0
-    /// The window is key, shown and unoccluded: clouds sway, the halo breathes and stars twinkle.
-    private var ambient = false
-    /// Strength of the ambient motion 0…1; eases in and out so pausing never jumps.
-    private var motion: CGFloat = 0
-    /// Seconds of drift and twinkle accumulated while `motion` > 0.
-    private var clock: TimeInterval = 0
-    private var lastFrame: TimeInterval = 0
+    /// Day 0 … night 1: background colour, clouds, stars and the moon mask.
+    private var theme = Tween(0)
+    /// The sun's left edge in em, hover lean included.
+    private var knob = Tween(DayNightButton.knobX(night: false, hover: false))
     private var timer: Timer?
-    private var observers: [NSObjectProtocol] = []
     private var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
     private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
-    override var intrinsicContentSize: NSSize { NSSize(width: 100, height: 54) }
+    static func knobX(night: Bool, hover: Bool) -> CGFloat {
+        let lean = hover ? sunLean : 0
+        return night ? width - sunD - sunOffset - lean : sunOffset + lean
+    }
+    /// A pill (a circle when square) built from two half circles, as in the Cairo port.
+    static func pill(_ r: CGRect) -> CGPath {
+        let p = CGMutablePath()
+        let rad = min(r.width, r.height) / 2
+        p.addArc(center: CGPoint(x: r.maxX - rad, y: r.minY + rad), radius: rad, startAngle: -.pi / 2, endAngle: .pi / 2, clockwise: false)
+        p.addArc(center: CGPoint(x: r.minX + rad, y: r.minY + rad), radius: rad, startAngle: .pi / 2, endAngle: .pi * 1.5, clockwise: false)
+        p.closeSubpath()
+        return p
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isBordered = false
+        title = "切换至黑夜模式"; setAccessibilityLabel(title); toolTip = title
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
+
+    override var intrinsicContentSize: NSSize { NSSize(width: 96, height: 46) }
+    // The pen's y-down em space maps directly onto a flipped view.
     override var isFlipped: Bool { true }
 
     private var hoverArea: NSTrackingArea?
@@ -615,199 +578,135 @@ final class DayNightButton: NSButton {
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
         addTrackingArea(area); hoverArea = area
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true; updateClock() }
-    override func mouseExited(with event: NSEvent) { hovered = false; updateClock() }
-    override func viewWillMove(toWindow newWindow: NSWindow?) {
-        super.viewWillMove(toWindow: newWindow)
-        removeObservers()
-    }
+    override func mouseEntered(with event: NSEvent) { hovered = true; animate() }
+    override func mouseExited(with event: NSEvent) { hovered = false; animate() }
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        guard let window else { ambient = false; timer?.invalidate(); timer = nil; return }
-        let center = NotificationCenter.default
-        let names: [Notification.Name] = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
-                                          NSWindow.didBecomeMainNotification, NSWindow.didResignMainNotification,
-                                          NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
-                                          NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification]
-        for name in names {
-            observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] note in
-                self?.refreshAmbient(closing: note.name == NSWindow.willCloseNotification)
-            })
-        }
-        for name in [NSApplication.didHideNotification, NSApplication.didUnhideNotification] {
-            observers.append(center.addObserver(forName: name, object: NSApp, queue: .main) { [weak self] _ in self?.refreshAmbient() })
-        }
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.refreshAmbient() })
-        refreshAmbient()
-    }
-    private func removeObservers() {
-        observers.forEach { NotificationCenter.default.removeObserver($0); NSWorkspace.shared.notificationCenter.removeObserver($0) }
-        observers = []
+        if window == nil { timer?.invalidate(); timer = nil; theme.snap(); knob.snap() }
     }
     override func becomeFirstResponder() -> Bool { needsDisplay = true; return super.becomeFirstResponder() }
     override func resignFirstResponder() -> Bool { needsDisplay = true; return super.resignFirstResponder() }
 
-    /// Ambient motion only while the window is key (or main), shown, not minimised and not occluded.
-    private func refreshAmbient(closing: Bool = false) {
-        guard let window else { ambient = false; updateClock(); return }
-        ambient = !closing && (window.isKeyWindow || window.isMainWindow) && window.isVisible && !window.isMiniaturized
-            && window.occlusionState.contains(.visible) && !NSApp.isHidden
-        // The hover tracking area only reports while key, so drop a hover left over from before.
-        if !ambient { hovered = false }
-        updateClock()
-    }
-
-    /// Starts the frame timer when something moves and stops it as soon as nothing does.
-    private func updateClock() {
-        if reduceMotion {
-            position = goal; progress = goal; transitionStart = nil
-            lift = hovered ? 1 : 0; motion = 0
-            timer?.invalidate(); timer = nil; needsDisplay = true; return
-        }
-        if timer == nil && isMoving {
-            lastFrame = now
-            let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.advance() }
-            RunLoop.main.add(t, forMode: .common)
-            timer = t
-        }
+    /// Retargets both tweens and starts the frame timer; it stops itself once nothing moves.
+    private func animate() {
+        theme.set(dark ? 1 : 0)
+        knob.set(DayNightButton.knobX(night: dark, hover: hovered))
         needsDisplay = true
-    }
-    private var lively: Bool { (hovered || ambient) && window != nil }
-    private var isMoving: Bool {
-        transitionStart != nil || progress != goal || position != goal
-            || lift != (hovered ? 1 : 0) || motion != (lively ? 1 : 0) || lively
+        if reduceMotion || window?.isVisible != true {
+            theme.snap(); knob.snap()
+            timer?.invalidate(); timer = nil
+            return
+        }
+        guard timer == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.advance() }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
     private func advance() {
-        let t = now, dt = max(0, min(0.1, t - lastFrame))
-        lastFrame = t
-        if transitionStart != nil || progress != goal || position != goal {
-            let start = transitionStart ?? t
-            transitionStart = start
-            let k = CGFloat(min(1, max(0, (t - start) / Self.switchDuration)))
-            position = from.0 + (goal - from.0) * cubicBezier(0.68, -0.1, 0.265, 1.2, k)
-            progress = from.1 + (goal - from.1) * cubicBezier(0.25, 0.1, 0.25, 1, k)
-            if k >= 1 { position = goal; progress = goal; transitionStart = nil }
-        }
-        let step = CGFloat(dt / Self.liftDuration)
-        let liftTarget: CGFloat = hovered ? 1 : 0
-        lift = lift < liftTarget ? min(liftTarget, lift + step) : max(liftTarget, lift - step)
-        let motionTarget: CGFloat = lively ? 1 : 0
-        motion = motion < motionTarget ? min(motionTarget, motion + step) : max(motionTarget, motion - step)
-        if motion > 0 { clock += dt }
+        let t = now
+        theme.step(t); knob.step(t)
         needsDisplay = true
-        if !isMoving { timer?.invalidate(); timer = nil }
-    }
-
-    /// CubicEase EaseInOut, which themeswitch uses for every move.
-    private static func easeInOut(_ t: CGFloat) -> CGFloat {
-        t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2
+        if !theme.moving && !knob.moving { timer?.invalidate(); timer = nil }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let space = CGColorSpace(name: CGColorSpace.sRGB)!
-        func mix(_ a: UInt32, _ b: UInt32, _ t: CGFloat, _ alpha: CGFloat = 1) -> CGColor { NetMateColors.mix(a, b, t, alpha: alpha).cgColor }
-        func white(_ alpha: CGFloat) -> CGColor { NSColor(white: 1, alpha: max(0, min(1, alpha))).cgColor }
-        func gradient(_ stops: [(CGFloat, CGColor)]) -> CGGradient? {
-            CGGradient(colorsSpace: space, colors: stops.map { $0.1 } as CFArray, locations: stops.map { $0.0 })
-        }
+        let em = DayNightButton.em, w = DayNightButton.width, h = DayNightButton.height, d = DayNightButton.sunD
+        let k = max(0, min(1, theme.value))
+        func rgb(_ value: UInt32, _ alpha: CGFloat = 1) -> CGColor { NetMateColors.hex(value).withAlphaComponent(alpha).cgColor }
         func disc(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) { ctx.addEllipse(in: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)) }
-        func pill(_ rect: CGRect) -> CGPath {
-            let r = min(rect.width, rect.height) / 2
-            return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
-        }
-        let tau = CGFloat.pi * 2
-        let k = max(0, min(1, progress)), day = 1 - k, slide = Self.easeInOut(k)
-        let clock = CGFloat(self.clock)
-        let scale = Self.scale * (1 + 0.07 * lift)
-        ctx.saveGState()
-        // The view is flipped, so the y-down design space maps directly.
-        ctx.translateBy(x: bounds.midX, y: bounds.midY - 2)
-        ctx.scaleBy(x: scale, y: scale)
-        ctx.translateBy(x: -100, y: -45)
-
-        // Soft drop shadow from stacked translucent pills.
-        for i in 0..<5 {
-            let grow = CGFloat(i) * 4
-            ctx.addPath(pill(CGRect(x: 10 - grow / 2, y: 12 - grow / 2, width: 180 + grow, height: 82 + grow)))
-            ctx.setFillColor(mix(0x2a68ad, 0x000000, k, (0.2 + 0.05 * k) / 6)); ctx.fillPath()
-        }
-        ctx.saveGState()
-        ctx.addPath(pill(CGRect(x: 0, y: 0, width: 200, height: 90))); ctx.clip()
-        if let g = gradient([(0, mix(0x4a90d9, 0x070d1c, k)), (0.55, mix(0x6fb0ee, 0x111a30, k)), (1, mix(0x9bcbf5, 0x1c2a48, k))]) {
-            ctx.drawLinearGradient(g, start: CGPoint(x: 27.5, y: -27.5), end: CGPoint(x: 172.5, y: 117.5),
-                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        }
-        // Stars rise into place as night falls; bright ones twinkle while the window is active.
-        if k > 0 {
-            for (i, star) in Self.stars.enumerated() {
-                let (x, y, bright) = star
-                let twinkle = bright ? motion * (1 - cos(tau * (clock - CGFloat(i) * 0.37) / 2.2)) / 2 : 0
-                let alpha = bright ? k * (1 - 0.6 * twinkle) : k * 0.45
-                let r = (bright ? 1.9 : 1.3) * (1 + 0.5 * twinkle)
-                ctx.setFillColor(white(alpha)); disc(14 + x * 1.7, 8 + y * 1.5 + 10 * day, r); ctx.fillPath()
+        /// CSS `box-shadow` on a pill: six even-odd layers spread across ±`blur`. An inset shadow
+        /// fills outside `shape` (the caller clips to the element).
+        func softShadow(_ shape: CGRect, _ blur: CGFloat, _ color: UInt32, _ alpha: CGFloat, inset: Bool) {
+            let layers = 6
+            let each = 1 - pow(1 - alpha, 1 / CGFloat(layers))
+            ctx.setFillColor(rgb(color, each))
+            for i in 0..<layers {
+                let e = blur * ((CGFloat(i) + 0.5) / CGFloat(layers) * 2 - 1)
+                if inset { ctx.addRect(shape.insetBy(dx: -10, dy: -10)) }
+                ctx.addPath(DayNightButton.pill(shape.insetBy(dx: -e, dy: -e)))
+                ctx.fillPath(using: .evenOdd)
             }
         }
-        let cx = 45 + 110 * position, cy: CGFloat = 45
-        // Halo rings around the knob, breathing gently while the window is active.
-        let breathe = 1 + motion * 0.04 * (1 - cos(tau * clock / 3)) / 2
-        for (grow, alpha) in [(CGFloat(44), CGFloat(0.07)), (29, 0.1), (15, 0.14)] {
-            ctx.setFillColor(white(alpha * (day + 0.45 * k))); disc(cx, cy, (37 + grow) * breathe); ctx.fillPath()
-        }
-        // Two cloud layers along the bottom; at night they part to both sides and fade.
-        let p = Self.puffScale
-        for (j, cloud) in Self.clouds.enumerated() {
-            let (x, y, alpha, away) = cloud
-            let sway = motion * 3 * sin(tau * (clock / 7 + CGFloat(j) * 0.25))
-            let ox = (x + 22 + away * slide) * 1.6 + sway, oy = y * 1.6 + 4
-            for (px, py) in Self.puffs { disc(ox + (px + 8.5) * p, oy + (py + 8.5) * p, 8.5 * p) }
-            ctx.setFillColor(white(alpha * (1 - 0.85 * k))); ctx.fillPath()
-        }
-        // Knob: the sun by day, the full moon by night; craters surface after 40 %.
-        let r: CGFloat = 37
-        ctx.setFillColor(NSColor(white: 0, alpha: 0.16 + 0.12 * k).cgColor); disc(cx, cy + 3, r + 2); ctx.fillPath()
-        let glowAlpha = max(0, 0.75 * breathe - 0.2 * k)
-        if let g = gradient([(0, mix(0xffc94d, 0xffebaa, k, glowAlpha)), (1, mix(0xffc94d, 0xffebaa, k, 0))]) {
-            ctx.saveGState(); disc(cx, cy, r + 14); ctx.clip()
-            ctx.drawRadialGradient(g, startCenter: CGPoint(x: cx, y: cy), startRadius: r * 0.8, endCenter: CGPoint(x: cx, y: cy),
-                                   endRadius: r + 14, options: [.drawsBeforeStartLocation])
+        /// `box-shadow: inset dx dy blur color` on the pill `b`.
+        func insetShadow(_ b: CGRect, _ dx: CGFloat, _ dy: CGFloat, _ blur: CGFloat, _ color: UInt32, _ alpha: CGFloat) {
+            ctx.saveGState()
+            ctx.addPath(DayNightButton.pill(b)); ctx.clip()
+            softShadow(b.offsetBy(dx: dx, dy: dy), blur, color, alpha, inset: true)
             ctx.restoreGState()
         }
-        if let g = gradient([(0, mix(0xfff1b8, 0xffffff, k)), (0.55, mix(0xffc23d, 0xfff6d9, k)), (1, mix(0xf59e0b, 0xe9d79a, k))]) {
-            let focus = CGPoint(x: cx - r * 0.3, y: cy - r * 0.32)
-            ctx.saveGState(); disc(cx, cy, r); ctx.clip()
-            ctx.drawRadialGradient(g, startCenter: focus, startRadius: 0, endCenter: focus, endRadius: r * 1.75, options: [.drawsAfterEndLocation])
-            ctx.restoreGState()
+        ctx.saveGState()
+        ctx.translateBy(x: (bounds.width - w * em) / 2, y: (bounds.height - h * em) / 2)
+        ctx.scaleBy(x: em, y: em)
+        let box = CGRect(x: 0, y: 0, width: w, height: h)
+        // Outer highlight: 0.06em 0.06em 0.125em rgba(255, 255, 255, 0.94).
+        softShadow(CGRect(x: 0.06, y: 0.06, width: w, height: h), 0.125, 0xffffff, 0.94, inset: false)
+        ctx.saveGState()
+        ctx.addPath(DayNightButton.pill(box)); ctx.clip()
+        ctx.setFillColor(NetMateColors.mix(0x3d7eae, 0x1d1f2c, k).cgColor); ctx.fill(box)
+        // Clouds hang from (0.3em, 2em) and sink 3em at night.
+        let cx: CGFloat = 0.3 + 0.625, cy: CGFloat = 2.0 + 0.625 + 3 * k
+        for (puffs, color) in [(DayNightButton.cloudBack, UInt32(0xaacadf)), (DayNightButton.cloudFront, UInt32(0xf3fdff))] {
+            for (dx, dy, spread) in puffs { disc(cx + dx, cy + dy, 0.625 + spread) }
+            ctx.setFillColor(rgb(color)); ctx.fillPath()
         }
-        let crater = max(0, min(1, (k - 0.4) / 0.6))
-        if crater > 0 {
-            ctx.setFillColor(NSColor(srgbRed: 214 / 255, green: 196 / 255, blue: 140 / 255, alpha: 0.5 * crater).cgColor)
-            for (dx, dy, cr) in [(CGFloat(-11), CGFloat(-10), CGFloat(8)), (12, 4, 6), (-5, 15, 4.5), (14, -15, 3.5)] { disc(cx + dx, cy + dy, cr) }
-            ctx.fillPath()
+        // Stars: 2.75em wide at 0.3em; 2em above the frame by day, 0.5em down at night.
+        ctx.saveGState()
+        ctx.translateBy(x: 0.3, y: -2 + 2.5 * k)
+        ctx.scaleBy(x: 2.75 / 144, y: 2.75 / 144)
+        for (x, y) in DayNightButton.sparkles {
+            ctx.move(to: CGPoint(x: x - 3.9956, y: y))
+            for s in DayNightButton.sparkle {
+                ctx.addCurve(to: CGPoint(x: x + s[4], y: y + s[5]),
+                             control1: CGPoint(x: x + s[0], y: y + s[1]),
+                             control2: CGPoint(x: x + s[2], y: y + s[3]))
+            }
+            ctx.closePath()
         }
-        if let g = gradient([(0, white(0.45)), (0.12, white(0)), (0.85, NSColor(white: 0, alpha: 0).cgColor), (1, NSColor(white: 0, alpha: 0.1).cgColor)]) {
-            ctx.saveGState(); disc(cx, cy, r); ctx.clip()
-            ctx.drawLinearGradient(g, start: CGPoint(x: 0, y: cy - r), end: CGPoint(x: 0, y: cy + r), options: [])
-            ctx.restoreGState()
+        ctx.setFillColor(rgb(0xffffff)); ctx.fillPath()
+        ctx.restoreGState()
+        // Sun: box-shadows paint last-listed first, so the halo rings go under the drop shadows.
+        let sun = CGRect(x: knob.value, y: DayNightButton.sunOffset, width: d, height: d)
+        let r = d / 2
+        let sx = sun.minX + r, sy = sun.minY + r
+        for spread: CGFloat in [1.875, 1.25, 0.625] {
+            ctx.setFillColor(rgb(0xffffff, 0.1)); disc(sx, sy, r + spread); ctx.fillPath()
+        }
+        softShadow(sun.offsetBy(dx: 0, dy: 0.05), 0.125, 0x000000, 0.25, inset: false)
+        softShadow(sun.offsetBy(dx: 0.05, dy: 0.125), 0.125, 0x000000, 0.25, inset: false)
+        ctx.setFillColor(rgb(0xecca2f)); disc(sx, sy, r); ctx.fillPath()
+        insetShadow(sun, 0, -0.05, 0.05, 0xa1872a, 1)
+        insetShadow(sun, 0.05, 0.05, 0.05, 0xfeffef, 0.61)
+        // Moon mask: slides in from the right, clipped to the sun's circle.
+        ctx.saveGState()
+        disc(sx, sy, r); ctx.clip()
+        let moon = sun.offsetBy(dx: d * (1 - k), dy: 0)
+        ctx.setFillColor(rgb(0xc4c9d1)); disc(moon.minX + r, moon.minY + r, r); ctx.fillPath()
+        insetShadow(moon, 0, -0.062, 0.062, 0x969696, 1)
+        insetShadow(moon, 0.062, 0.062, 0.062, 0xfeffef, 0.61)
+        for (left, top, size) in DayNightButton.craters {
+            let crater = CGRect(x: moon.minX + left, y: moon.minY + top, width: size, height: size)
+            ctx.setFillColor(rgb(0x959db1)); disc(crater.midX, crater.midY, size / 2); ctx.fillPath()
+            insetShadow(crater, 0, 0.03, 0.06, 0x000000, 0.25)
         }
         ctx.restoreGState()
-        // 2 px border, brighter while hovered.
-        let border = (0.25 + 0.2 * lift) * day + (0.08 + 0.1 * lift) * k
-        ctx.addPath(pill(CGRect(x: 1, y: 1, width: 198, height: 88)))
-        ctx.setStrokeColor(white(border)); ctx.setLineWidth(2); ctx.strokePath()
+        // The container's ::after: inset 0 0.05em 0.187em rgba(0, 0, 0, 0.5).
+        insetShadow(box, 0, 0.05, 0.187, 0x000000, 0.5)
+        ctx.restoreGState()
+        ctx.restoreGState()
         if window?.firstResponder === self {
-            ctx.addPath(pill(CGRect(x: -6, y: -6, width: 212, height: 102)))
-            ctx.setStrokeColor(NSColor.keyboardFocusIndicatorColor.cgColor); ctx.setLineWidth(2 / scale); ctx.strokePath()
+            NetMateColors.gold.setStroke()
+            let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: (bounds.height - 2) / 2, yRadius: (bounds.height - 2) / 2)
+            ring.lineWidth = 2; ring.stroke()
         }
-        ctx.restoreGState()
     }
 }
 
-/// About page `.about-mark`: a 64 px rounded square in the sky gradient with a WiFi glyph.
-final class NetMateAppMark: NSView {
+/// `.chip`: the 46×34 gold contact chip with its pad outline and contact line; grey when void.
+final class NetMateChip: NSView {
+    var void = false { didSet { needsDisplay = true } }
     override var isFlipped: Bool { true }
-    override var intrinsicContentSize: NSSize { NSSize(width: 64, height: 64) }
+    override var intrinsicContentSize: NSSize { NSSize(width: 46, height: 34) }
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         translatesAutoresizingMaskIntoConstraints = false
@@ -818,127 +717,180 @@ final class NetMateAppMark: NSView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let dark = NetMateColors.isDark(effectiveAppearance)
-        let hex = NetMateColors.hex
+        let shape = NSBezierPath(roundedRect: bounds, xRadius: 7, yRadius: 7)
+        if void { NetMateColors.line.setFill(); shape.fill(); return }
         ctx.saveGState()
-        ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 16, cornerHeight: 16, transform: nil)); ctx.clip()
-        let colors = dark ? [hex(0x070d1c), hex(0x111a30), hex(0x1f3156)] : [hex(0x3d84d0), hex(0x6fb0ee), hex(0xa9d3f7)]
-        cssLinearGradient(ctx, bounds, angle: 160, colors, [0, dark ? 0.55 : 0.6, 1])
+        ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 7, cornerHeight: 7, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, bounds, angle: 135, NetMateColors.chip, [0, 1])
+        let ink = NSColor(srgbRed: 80 / 255, green: 58 / 255, blue: 14 / 255, alpha: 0.38).cgColor
+        ctx.setStrokeColor(ink); ctx.setLineWidth(1)
+        // `.chip-pad`: inset 8 15, radius 3.
+        let pad = CGRect(x: 15.5, y: 8.5, width: bounds.width - 31, height: bounds.height - 17)
+        ctx.addPath(CGPath(roundedRect: pad, cornerWidth: 3, cornerHeight: 3, transform: nil)); ctx.strokePath()
+        // `.chip-line`: a contact line 16 px from the top.
+        ctx.move(to: CGPoint(x: 0, y: 16.5)); ctx.addLine(to: CGPoint(x: bounds.width, y: 16.5)); ctx.strokePath()
         ctx.restoreGState()
-        let tint = dark ? hex(0xf0d98a) : NSColor.white
-        guard let image = NSImage(systemSymbolName: "wifi", accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 28, weight: .semibold)
-                .applying(NSImage.SymbolConfiguration(paletteColors: [tint]))) else { return }
-        let side: CGFloat = 34
-        let size = image.size.width > 0 ? NSSize(width: side, height: side * image.size.height / image.size.width) : NSSize(width: side, height: side)
-        image.draw(in: NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height),
-                   from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 }
 
-/// The sky panel behind the home page's status copy: gradient by weather and theme, night stars,
-/// and the static 176×120 weather illustration (220×150 viewBox) at the top right.
-final class NetMateSky: NSView {
-    /// "clear", "cloud" or "storm".
-    var weather = "clear" { didSet { needsDisplay = true } }
+/// `.lamp`: a 12 px status dot with a 5 px translucent ring (22 px box).
+final class NetMateLamp: NSView {
+    var tone = "idle" { didSet { needsDisplay = true } }
+    override var intrinsicContentSize: NSSize { NSSize(width: 22, height: 22) }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        setContentHuggingPriority(.required, for: .horizontal); setContentHuggingPriority(.required, for: .vertical)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
+    override func draw(_ dirtyRect: NSRect) {
+        let (color, ring) = NetMateColors.lamp(tone)
+        let c = NSPoint(x: bounds.midX, y: bounds.midY)
+        NetMateColors.hex(color).withAlphaComponent(ring).setFill()
+        NSBezierPath(ovalIn: NSRect(x: c.x - 11, y: c.y - 11, width: 22, height: 22)).fill()
+        NetMateColors.hex(color).setFill()
+        NSBezierPath(ovalIn: NSRect(x: c.x - 6, y: c.y - 6, width: 12, height: 12)).fill()
+    }
+}
+
+/// `.id-card`: the 135° face gradient with radius 16, or the dashed outline of `.id-card.void`.
+/// Its `content` stack is the padded `.id-body`.
+final class NetMateCardFace: NetMateBox {
+    var void = false { didSet { needsDisplay = true } }
+    init(void: Bool, padding: NSEdgeInsets = NSEdgeInsets(top: 22, left: 24, bottom: 22, right: 24)) {
+        super.init(.vertical, padding: padding, spacing: 0)
+        self.void = void
+        radius = 16
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
     override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        if void {
+            NetMateColors.faint.setStroke()
+            let outline = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75), xRadius: 15.25, yRadius: 15.25)
+            outline.lineWidth = 1.5; outline.setLineDash([6, 4], count: 2, phase: 0); outline.stroke()
+            return
+        }
+        ctx.saveGState()
+        ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 16, cornerHeight: 16, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, bounds, angle: 135, NetMateColors.face(dark: NetMateColors.isDark(effectiveAppearance)), [0, 1])
+        // inset 0 1px rgba(255, 255, 255, .06)
+        ctx.setFillColor(NSColor.white.withAlphaComponent(0.06).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: bounds.width, height: 1))
+        ctx.restoreGState()
+    }
+}
+
+/// The magnetic stripe at the foot of the card face, which doubles as the retry progress. It is
+/// pinned to the face's bottom edge and clips itself to the face's rounded corners.
+final class NetMateStripe: NSView {
+    var fraction: CGFloat = 0 { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: 6) }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let faceHeight = max(superview?.bounds.height ?? 0, 32 + bounds.height)
+        ctx.saveGState()
+        let face = CGRect(x: 0, y: bounds.height - faceHeight, width: bounds.width, height: faceHeight)
+        ctx.addPath(CGPath(roundedRect: face, cornerWidth: 16, cornerHeight: 16, transform: nil)); ctx.clip()
+        ctx.setFillColor(NSColor.white.withAlphaComponent(0.08).cgColor); ctx.fill(bounds)
+        ctx.setFillColor(NetMateColors.hex(0xe8a94e).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: bounds.width * max(0, min(1, fraction)), height: bounds.height))
+        ctx.restoreGState()
+    }
+}
+
+/// The home account card deck: up to two card backs behind the 440×276 face, plus the face's
+/// drop shadow (0 20px 34px -20px). The deck is 456×298 as in linux.rs, with 16 pt below for
+/// the shadow.
+final class NetMateDeck: NSView {
+    let backs: Int
+    let shadow: Bool
+    static let faceRect = CGRect(x: 0, y: 22, width: 440, height: 276)
+    init(backs: Int, shadow: Bool) {
+        self.backs = max(0, min(2, backs)); self.shadow = shadow
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        for axis in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+            setContentHuggingPriority(.required, for: axis)
+            setContentCompressionResistancePriority(.required, for: axis)
+        }
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { NSSize(width: 456, height: 314) }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    /// Pins the face at (0, 22) with its fixed 440×276 size.
+    func addFace(_ face: NSView) {
+        face.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(face)
+        let r = Self.faceRect
+        NSLayoutConstraint.activate([
+            face.leadingAnchor.constraint(equalTo: leadingAnchor, constant: r.minX),
+            face.topAnchor.constraint(equalTo: topAnchor, constant: r.minY),
+            face.widthAnchor.constraint(equalToConstant: r.width),
+            face.heightAnchor.constraint(equalToConstant: r.height)
+        ])
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        // back-2 (45, 11, 409×257) then back-1 (24, 16, 424×266); one back keeps back-1 only.
+        let cards: [(CGRect, NSColor)] = [(CGRect(x: 45, y: 11, width: 409, height: 257), NetMateColors.deck2),
+                                          (CGRect(x: 24, y: 16, width: 424, height: 266), NetMateColors.deck1)]
+        for (rect, color) in cards.suffix(backs) {
+            let shape = NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 15, yRadius: 15)
+            color.setFill(); shape.fill()
+            NetMateColors.line.setStroke(); shape.lineWidth = 1; shape.stroke()
+        }
+        guard shadow else { return }
+        // The spread of -20 shrinks the shadow box; the face covers the box itself.
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -20), blur: 34,
+                      color: NSColor(srgbRed: 10 / 255, green: 14 / 255, blue: 18 / 255, alpha: 0.6).cgColor)
+        ctx.addPath(CGPath(roundedRect: Self.faceRect.insetBy(dx: 20, dy: 20), cornerWidth: 8, cornerHeight: 8, transform: nil))
+        ctx.setFillColor(NetMateColors.hex(0x1a2128).cgColor); ctx.fillPath()
+        ctx.restoreGState()
+    }
+}
+
+/// `.mini-card`: a 58×38 card face for an account row; the account in use shows the gold chip.
+final class NetMateMiniCard: NSView {
+    var on = false { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize { NSSize(width: 58, height: 38) }
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        setContentHuggingPriority(.required, for: .horizontal); setContentHuggingPriority(.required, for: .vertical)
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { fatalError("Programmatic view") }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
-        let dark = NetMateColors.isDark(effectiveAppearance)
-        let hex = NetMateColors.hex
-        let shape = CGPath(roundedRect: bounds, cornerWidth: 16, cornerHeight: 16, transform: nil)
+        let chip = CGRect(x: 7, y: 9, width: 14, height: 10)
+        if !on {
+            NetMateColors.line.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+            NetMateColors.faint.setFill(); NSBezierPath(roundedRect: chip, xRadius: 2, yRadius: 2).fill()
+            return
+        }
         ctx.saveGState()
-        ctx.addPath(shape); ctx.clip()
-        cssLinearGradient(ctx, bounds, angle: 160, NetMateColors.sky(weather, dark: dark).map(hex), [0, 0.6, 1])
-        if dark && weather != "storm" {
-            ctx.setFillColor(NSColor.white.withAlphaComponent(weather == "clear" ? 0.85 : 0.35).cgColor)
-            for i in 0..<18 {
-                let x = bounds.width * CGFloat((i * 37 + 39) % 97) / 100, y = bounds.height * CGFloat((i * 53 + 21) % 89) / 100
-                ctx.fillEllipse(in: CGRect(x: x, y: y, width: 2, height: 2))
-            }
-        }
-        // `.wx`: right 30, top 6, 176×120 for the 220×150 viewBox.
-        let art = CGRect(x: bounds.maxX - 30 - 176, y: 6, width: 176, height: 120)
-        ctx.translateBy(x: art.minX, y: art.minY); ctx.scaleBy(x: 176 / 220, y: 120 / 150)
-        let body = CGPoint(x: 138, y: 50)
-        // Glow and sun or moon.
-        let glowAlpha: CGFloat = weather == "storm" ? 0 : (dark ? 1 : (weather == "cloud" ? 0.35 : 1))
-        if glowAlpha > 0 {
-            let color = dark ? hex(0xffecb0) : hex(0xffe680)
-            let inner: CGFloat = dark ? 0.4 : 0.45, alpha: CGFloat = dark ? 0.35 : 0.55
-            if let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [color.withAlphaComponent(alpha).cgColor, color.withAlphaComponent(alpha).cgColor, color.withAlphaComponent(0).cgColor] as CFArray, locations: [0, inner, 1]) {
-                ctx.saveGState(); ctx.setAlpha(glowAlpha)
-                ctx.drawRadialGradient(g, startCenter: body, startRadius: 0, endCenter: body, endRadius: 58, options: [])
-                ctx.restoreGState()
-            }
-        }
-        if weather != "storm" {
-            ctx.saveGState(); ctx.setAlpha(weather == "cloud" ? 0.6 : 1)
-            if dark {
-                radialDisc(ctx, center: body, radius: 28, focus: CGPoint(x: 0.34, y: 0.32), [hex(0xffffff), hex(0xfff6d9), hex(0xf2e3a8)], [0, 0.55, 1])
-                let crater = hex(0xecdca6)
-                for (x, y, r, a) in [(128.0, 44.0, 5.0, 0.55), (147.0, 60.0, 3.5, 0.5), (146.0, 39.0, 2.5, 0.45)] {
-                    ctx.setFillColor(crater.withAlphaComponent(CGFloat(a)).cgColor)
-                    ctx.fillEllipse(in: CGRect(x: CGFloat(x - r), y: CGFloat(y - r), width: CGFloat(r * 2), height: CGFloat(r * 2)))
-                }
-            } else {
-                radialDisc(ctx, center: body, radius: 30, focus: CGPoint(x: 0.36, y: 0.34), [hex(0xfff5c0), hex(0xffd84d), hex(0xffc107)], [0, 0.7, 1])
-            }
-            ctx.restoreGState()
-        }
-        // Cloud fill: day white, storm grey, night blue-grey, night storm mauve-grey.
-        let stops: [NSColor]
-        let locations: [CGFloat]
-        switch (dark, weather == "storm") {
-        case (false, false): stops = [hex(0xffffff), hex(0xf3f8fe), hex(0xd6e6f7)]; locations = [0, 0.7, 1]
-        case (false, true): stops = [hex(0xe3e7ec), hex(0xa9b2bd)]; locations = [0, 1]
-        case (true, false): stops = [hex(0x5d6c8c), hex(0x36425c)]; locations = [0, 1]
-        case (true, true): stops = [hex(0x5a5258), hex(0x352d33)]; locations = [0, 1]
-        }
-        func cloud(_ transform: CGAffineTransform, alpha: CGFloat, shadow: Bool) {
-            let path = netMateCloud(transform)
-            ctx.saveGState(); ctx.setAlpha(alpha)
-            if shadow {
-                ctx.saveGState()
-                ctx.setShadow(offset: CGSize(width: 0, height: -5), blur: 9, color: hex(0x1b4f86).withAlphaComponent(0.22).cgColor)
-                ctx.addPath(path.cgPath); ctx.setFillColor(stops[stops.count - 1].cgColor); ctx.fillPath()
-                ctx.restoreGState()
-            }
-            fillVertical(path, stops, locations)
-            ctx.restoreGState()
-        }
-        if weather != "clear" { cloud(CGAffineTransform(translationX: 6, y: 24).scaledBy(x: 0.82, y: 0.82), alpha: 0.75, shadow: false) }
-        cloud(CGAffineTransform(translationX: 62, y: 50).scaledBy(x: 1.3, y: 1.3), alpha: dark && weather == "clear" ? 0.5 : 1, shadow: true)
-        if weather == "storm" {
-            ctx.setStrokeColor((dark ? hex(0x8ea3c7) : hex(0xd7ebff)).withAlphaComponent(0.9).cgColor)
-            ctx.setLineWidth(3); ctx.setLineCap(.butt)
-            for x in [112.0, 134.0, 156.0, 178.0] {
-                ctx.move(to: CGPoint(x: x, y: 136)); ctx.addLine(to: CGPoint(x: x - 6, y: 148))
-            }
-            ctx.strokePath()
-        }
+        ctx.addPath(CGPath(roundedRect: bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, bounds, angle: 135, NetMateColors.face(dark: NetMateColors.isDark(effectiveAppearance)), [0, 1])
+        ctx.restoreGState()
+        ctx.saveGState()
+        ctx.addPath(CGPath(roundedRect: chip, cornerWidth: 2, cornerHeight: 2, transform: nil)); ctx.clip()
+        cssLinearGradient(ctx, chip, angle: 135, NetMateColors.chip, [0, 1])
         ctx.restoreGState()
     }
 }
 
-/// A coloured status dot with the 3 px soft ring (`.dot.ok` / `.dot.bad`).
-final class NetMateDot: NSView {
-    var color: NSColor = NetMateColors.secondary { didSet { needsDisplay = true } }
-    var ring: NSColor? { didSet { needsDisplay = true } }
-    override var intrinsicContentSize: NSSize { NSSize(width: 14, height: 14) }
-    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-    override func draw(_ dirtyRect: NSRect) {
-        let c = NSPoint(x: bounds.midX, y: bounds.midY)
-        if let ring { ring.setFill(); NSBezierPath(ovalIn: NSRect(x: c.x - 7, y: c.y - 7, width: 14, height: 14)).fill() }
-        color.setFill(); NSBezierPath(ovalIn: NSRect(x: c.x - 4, y: c.y - 4, width: 8, height: 8)).fill()
-    }
-}
-
-/// The `.dd` select: an input-like face (36 high, radius 9, line border, chevron) drawn over a
-/// native NSPopUpButton, which keeps its menu, arrow/Return/Esc handling and accessibility. While
-/// the menu is open the border turns accent with a 3 px accent-soft ring and the chevron flips; the
-/// selected item is shown in accent with the system check mark. The menu itself stays a system menu.
+/// The `.select` dropdown: an input-like face (34 high, radius 8, line border, chevron) drawn over
+/// a native NSPopUpButton, which keeps its menu, arrow/Return/Esc handling and accessibility. While
+/// the menu is open the border turns gold with a 3 px gold-soft ring and the chevron flips; the
+/// selected item is shown in gold text with the system check mark. The menu stays a system menu.
 final class NetMateSelect: NSPopUpButton, NSMenuDelegate {
     private var isOpen = false { didSet { needsDisplay = true } }
     private var hovered = false
@@ -962,14 +914,14 @@ final class NetMateSelect: NSPopUpButton, NSMenuDelegate {
     private func decorate(_ item: NSMenuItem, chosen: Bool) {
         item.attributedTitle = NSAttributedString(string: item.title, attributes: [
             .font: NSFont.systemFont(ofSize: 13.5, weight: chosen ? .semibold : .regular),
-            .foregroundColor: chosen ? NetMateColors.accent : NetMateColors.text
+            .foregroundColor: chosen ? NetMateColors.goldText : NetMateColors.text
         ])
     }
     override var intrinsicContentSize: NSSize {
         let f = font ?? NSFont.systemFont(ofSize: 13.5)
         let widest = itemTitles.map { ($0 as NSString).size(withAttributes: [.font: f]).width }.max() ?? 0
-        // 36 high face plus 3 px on each side for the open-state ring.
-        return NSSize(width: ceil(widest) + 12 + 8 + 16 + 12 + 6, height: 42)
+        // 34 high face plus 3 px on each side for the open-state ring.
+        return NSSize(width: ceil(widest) + 12 + 8 + 16 + 12 + 6, height: 40)
     }
     private var hoverArea: NSTrackingArea?
     override func updateTrackingAreas() {
@@ -981,8 +933,8 @@ final class NetMateSelect: NSPopUpButton, NSMenuDelegate {
     override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
-    /// A click pops a separate menu 6 px below the control (or above it), like `.dd-pop`, so the
-    /// native menu over the control is only used by keyboard and accessibility presses.
+    /// A click pops a separate menu 6 px below the control (or above it), so the native menu over
+    /// the control is only used by keyboard and accessibility presses.
     override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }
         let pop = NSMenu(); pop.autoenablesItems = false; pop.minimumWidth = bounds.width; pop.delegate = self
@@ -1007,19 +959,19 @@ final class NetMateSelect: NSPopUpButton, NSMenuDelegate {
     }
     override func draw(_ dirtyRect: NSRect) {
         let c = NetMateColors.self
-        // The 36 px face, inset 3 px for the open-state ring.
-        let rect = NSRect(x: 3.5, y: (bounds.height - 35) / 2, width: bounds.width - 7, height: 35)
-        let face = NSBezierPath(roundedRect: rect, xRadius: 9, yRadius: 9)
+        // The 34 px face, inset 3 px for the open-state ring.
+        let rect = NSRect(x: 3.5, y: (bounds.height - 33) / 2, width: bounds.width - 7, height: 33)
+        let face = NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8)
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current?.cgContext.setAlpha(isEnabled ? 1 : 0.55)
         if isOpen {
-            c.accentSoft.setStroke()
-            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), xRadius: 10.5, yRadius: 10.5)
+            c.goldSoft.setStroke()
+            let ring = NSBezierPath(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), xRadius: 9.5, yRadius: 9.5)
             ring.lineWidth = 3; ring.stroke()
         }
-        c.surface.setFill(); face.fill()
-        let border = isOpen ? c.accent : (hovered ? (c.accent.blended(withFraction: 0.55, of: c.line) ?? c.line) : c.line)
+        c.field.setFill(); face.fill()
+        let border = isOpen ? c.gold : (hovered ? c.secondary : c.line)
         border.setStroke(); face.lineWidth = 1; face.stroke()
         let title = titleOfSelectedItem ?? ""
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
@@ -1037,10 +989,10 @@ final class NetMateSelect: NSPopUpButton, NSMenuDelegate {
         chevron.line(to: NSPoint(x: box.minX + 12 * u, y: box.midY + down * 3 * u))
         chevron.line(to: NSPoint(x: box.minX + 18 * u, y: box.midY - down * 3 * u))
         chevron.lineWidth = 2.2 * u; chevron.lineCapStyle = .round; chevron.lineJoinStyle = .round
-        (isOpen ? c.accent : c.secondary).setStroke(); chevron.stroke()
+        (isOpen ? c.goldText : c.secondary).setStroke(); chevron.stroke()
         if window?.firstResponder === self && !isOpen {
-            NSColor.keyboardFocusIndicatorColor.setStroke()
-            let f = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 10, yRadius: 10); f.lineWidth = 2; f.stroke()
+            c.gold.setStroke()
+            let f = NSBezierPath(roundedRect: rect.insetBy(dx: -1, dy: -1), xRadius: 9, yRadius: 9); f.lineWidth = 2; f.stroke()
         }
     }
 }

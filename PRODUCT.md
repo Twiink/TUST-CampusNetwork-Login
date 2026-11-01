@@ -31,8 +31,8 @@ NetMate 负责校园网认证与 WiFi 连接管理：多账号顺序认证，按
 ## Brand Commitments
 
 - 名称为 NetMate。
-- 日夜切换按钮以 Elsht666/Button 的「按钮-全月」为准：发光太阳、飘移的云、满月滑块、闪烁的星星，悬停时放大。
-- 用户确认整体采用天空主题，与切换按钮呼应。2026-10-31 起 Linux 改为「校园一卡通」样式（`design/netmate-card.html`），其他平台暂保留天空主题。
+- 日夜切换按钮以 CodePen linxiang-webcraft/pvbvLBN（`design/toggle-pen.html`）为准：太阳滑块、滑入的月面、下沉的云、落下的星星，0.3 s ease，四端一致。
+- 用户确认整体采用「校园一卡通」样式（`design/netmate-card.html`，2026-10-31 起），四端一致；此前的天空主题不再使用。
 
 ## Evidence on Hand
 

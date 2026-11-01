@@ -33,10 +33,8 @@ type Pos = (i32, i32, i32, i32);
 /// Content origin inside the client area, in 96-DPI units.
 const LEFT: i32 = 224;
 const TOP: i32 = 100;
-/// Content card width and inner padding.
+/// Content width; sections have no card, so rows span it edge to edge.
 const CW: i32 = 826;
-const IX: i32 = 32;
-const IW: i32 = CW - 2 * IX;
 const HOME: u16 = 1;
 const LOGS: u16 = 4;
 const SETTINGS: u16 = 5;
@@ -69,8 +67,8 @@ struct Ui {
     dpi: u32,
     scroll: i32,
     layout_scale: f64,
-    fonts: [isize; 13],
-    card_brush: isize,
+    fonts: [isize; appearance::FONT_COUNT],
+    ground_brush: isize,
     input_brush: isize,
     rows: Vec<Value>,
     query: LogQuery,
@@ -94,7 +92,7 @@ struct Ui {
     countdowns: Vec<(u16, bool)>,
     bias: i64,
     ready: bool,
-    /// Day/night switch frame state: transition, hover and ambient motion.
+    /// Day/night switch frame state: the 0.3 s transitions and the hover lean.
     toggle: appearance::Toggle,
     /// Tooltip window for the log toolbar and footer controls (created on first use).
     tips: isize,
@@ -104,7 +102,7 @@ struct Ui {
     combo_focus: u16,
 }
 /// Timers: 1 countdowns and update polling, 2 number save, 3 switch frames (16 ms, only while
-/// the switch moves or the window is active), 4 hover check.
+/// a transition runs), 4 hover check.
 const TOGGLE_TIMER: usize = 3;
 const HOVER_TIMER: usize = 4;
 /// The BUTTON and COMBOBOX window procedures, saved when the first control is subclassed.
@@ -134,7 +132,6 @@ struct Control {
     btn: Btn,
     /// Edits drawn inside a rounded field use the input brush.
     field: bool,
-    badges: Vec<(String, Badge)>,
 }
 impl Control {
     fn new(kind: Kind) -> Self {
@@ -150,7 +147,6 @@ impl Control {
             look: Look::default(),
             btn: Btn::Normal,
             field: false,
-            badges: vec![],
         }
     }
 }
@@ -216,15 +212,6 @@ fn set_bottom(index: usize, bottom: i32) {
     if let Some(item) = ui().surfaces.get_mut(index) {
         item.0.bottom = bottom;
     }
-}
-/// Starts a card at `y`; returns the card index and the first content row.
-fn begin(y: i32) -> (usize, i32) {
-    (surface(0, y, CW, 0, Surface::Card), y + 28)
-}
-/// Closes a card whose content ends at `y`; returns where the next card starts.
-fn end(card: usize, y: i32) -> i32 {
-    set_bottom(card, y + 28);
-    y + 28 + 24
 }
 fn draft(key: &str, default: &str) -> String {
     ui().drafts
@@ -343,19 +330,19 @@ fn same_identity(rule: &Value, ssid: &str, security: Option<&str>, bssid: Option
 }
 fn signal_grade(percent: i32) -> (&'static str, Ink) {
     match percent {
-        75.. => ("优秀", Ink::Success),
-        50..=74 => ("良好", Ink::Good),
-        25..=49 => ("一般", Ink::Warning),
-        _ => ("较差", Ink::Poor),
+        75.. => ("优秀", Ink::Ok),
+        50..=74 => ("良好", Ink::Ok),
+        25..=49 => ("一般", Ink::Warn),
+        _ => ("较差", Ink::Warn),
     }
 }
 fn speed_grade(speed: i32) -> (&'static str, Ink) {
     match speed {
-        500.. => ("优秀", Ink::Success),
-        200..=499 => ("良好", Ink::Good),
-        100..=199 => ("一般", Ink::Warning),
-        50..=99 => ("较差", Ink::Poor),
-        _ => ("很差", Ink::Danger),
+        500.. => ("优秀", Ink::Ok),
+        200..=499 => ("良好", Ink::Ok),
+        100..=199 => ("一般", Ink::Warn),
+        50..=99 => ("较差", Ink::Warn),
+        _ => ("很差", Ink::Bad),
     }
 }
 /// Queues a configuration edit; edits apply to the newest config, one save at a time.
@@ -429,7 +416,7 @@ fn place(c: &Control, root: RECT, dpi: u32, scroll: i32) -> (i32, i32, i32, i32)
     if c.fixed {
         let y = match c.id {
             901 => toggle_y(root.bottom, dpi),
-            903 => toggle_y(root.bottom, dpi) + 56,
+            903 => toggle_y(root.bottom, dpi) + appearance::TOGGLE_BOX.1 + 8,
             _ => c.y,
         };
         (
@@ -582,37 +569,21 @@ unsafe fn width_of(text: &str, font: Font) -> i32 {
     ReleaseDC(None, dc);
     (size.cx as f64 * 96.0 / dpi as f64 / k) as i32 + 2
 }
+/// An outline tag (`.badge`): 20 high, 7px side padding, radius 4. Returns its right edge.
 unsafe fn badge(h: HWND, x: i32, y: i32, text: &str, kind: Badge) -> i32 {
-    let width = width_of(text, Font::Badge) + 20;
+    let width = width_of(text, Font::Tiny) + 16;
     label(
         h,
         0,
-        (x, y, width, 22),
+        (x, y, width, 20),
         text,
         Look {
-            font: Font::Badge,
+            font: Font::Tiny,
             badge: Some(kind),
             ..Default::default()
         },
     );
     x + width
-}
-/// A row of badges drawn by one static; the name lists them for UI Automation.
-unsafe fn pills(h: HWND, pos: Pos, badges: Vec<(String, Badge)>) {
-    let name = badges
-        .iter()
-        .map(|(t, _)| t.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
-    let c = Control {
-        look: Look {
-            shape: Shape::Pills,
-            ..Default::default()
-        },
-        badges,
-        ..at(Kind::Static, 0, pos)
-    };
-    make(h, w!("STATIC"), &name, c, 0);
 }
 /// An owner-drawn button; `action` runs on click. Returns the control id.
 unsafe fn button(
@@ -685,7 +656,8 @@ unsafe fn field(
     }
     e
 }
-/// A captioned field (form-group); returns the bottom edge.
+/// A captioned field (`.form-group`: 12.5px secondary label over the input); returns the bottom
+/// edge.
 #[allow(clippy::too_many_arguments)]
 unsafe fn form(
     h: HWND,
@@ -699,9 +671,9 @@ unsafe fn form(
     key: Option<&str>,
     style: u32,
 ) -> i32 {
-    let y = para(h, x, y, width, title, look(Font::Strong, Ink::Heading)) + 6;
-    field(h, id, (x, y, width, 42), value, cue, key, style);
-    y + 42 + 14
+    let y = para(h, x, y, width, title, look(Font::Small, Ink::Secondary)) + 6;
+    field(h, id, (x, y, width, 36), value, cue, key, style);
+    y + 36 + 12
 }
 unsafe fn check(h: HWND, id: u16, x: i32, y: i32, title: &str, value: bool) -> i32 {
     let width = width_of(title, Font::Normal) + 30;
@@ -710,10 +682,14 @@ unsafe fn check(h: HWND, id: u16, x: i32, y: i32, title: &str, value: bool) -> i
     SendMessageW(handle, BM_SETCHECK, Some(WPARAM(usize::from(value))), None);
     x + width
 }
-/// A checkbox with a parenthesized description (toggle_row); returns the bottom edge.
+/// A settings row (`.set`): the checkbox with its name, the description under it in secondary
+/// text, and a hairline below. Returns the bottom edge.
+#[allow(clippy::too_many_arguments)]
 unsafe fn toggle_row(
     h: HWND,
+    x: i32,
     y: i32,
+    width: i32,
     title: &str,
     desc: &str,
     value: bool,
@@ -721,18 +697,19 @@ unsafe fn toggle_row(
 ) -> i32 {
     let id = reserve(1);
     register(id, act(move |h| f(h, checked(h, id))));
-    let right = check(h, id, IX, y, title, value);
-    let mut bottom = y + 28;
+    check(h, id, x, y + 9, title, value);
+    let mut bottom = y + 9 + 28;
     if !desc.is_empty() {
-        bottom = bottom.max(para(
+        bottom = para(
             h,
-            right + 6,
-            y + 5,
-            IX + IW - right - 6,
-            &format!("({desc})"),
+            x + 22,
+            bottom,
+            width - 22,
+            desc,
             look(Font::Small, Ink::Secondary),
-        ));
+        );
     }
+    hairline(x, bottom + 9, width);
     bottom + 10
 }
 unsafe fn text(h: HWND, id: u16) -> String {
@@ -977,8 +954,8 @@ unsafe extern "system" fn combo_proc(h: HWND, message: u32, w: WPARAM, l: LPARAM
     }
     result
 }
-/// Hover on the day/night switch: the first mouse move brightens the border and starts a
-/// 50 ms check that stops when the cursor leaves (no TrackMouseEvent without
+/// Hover on the day/night switch: the first mouse move leans the sun 0.187em inwards and starts
+/// a 50 ms check that stops when the cursor leaves (no TrackMouseEvent without
 /// Win32_UI_Input_KeyboardAndMouse).
 unsafe extern "system" fn toggle_proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     if message == WM_MOUSEMOVE {
@@ -1006,27 +983,46 @@ unsafe fn check_hover(h: HWND) {
         animate_toggle(h);
     }
 }
-/// Card title with the underline from `.card-title`; returns where content starts.
-unsafe fn card_title(h: HWND, y: i32, title: &str) -> i32 {
+/// A section heading (`.sec-title`): 13px semibold title over a 1.5px ink rule; rows below it
+/// are split by hairlines. `note` is right-aligned secondary text in the heading row. Returns
+/// where the first row starts.
+unsafe fn heading(h: HWND, x: i32, y: i32, width: i32, title: &str, note: &str) -> i32 {
     label(
         h,
         0,
-        (IX, y, IW, 30),
+        (x, y + 6, width, 22),
         title,
-        single(Font::Card, Ink::Heading),
+        single(Font::Section, Ink::Text),
     );
-    surface(IX, y + 40, IW, 1, Surface::Rule);
-    y + 56
-}
-unsafe fn section(h: HWND, x: i32, y: i32, width: i32, title: &str) -> i32 {
-    label(
-        h,
-        0,
-        (x, y, width, 28),
-        title,
-        single(Font::Section, Ink::Heading),
-    );
+    if !note.is_empty() {
+        label(
+            h,
+            0,
+            (x + width - 200, y + 8, 200, 20),
+            note,
+            Look {
+                align: 2,
+                ..single(Font::Small, Ink::Secondary)
+            },
+        );
+    }
+    surface(x, y + 34, width, 2, Surface::Ink);
     y + 36
+}
+/// A 1px hairline under a row ending at `y`.
+fn hairline(x: i32, y: i32, width: i32) {
+    surface(x, y, width, 1, Surface::Rule);
+}
+/// `.form-heading`: a 12.5px semibold secondary caption 16px below the rows above it.
+unsafe fn form_heading(h: HWND, x: i32, y: i32, width: i32, title: &str) -> i32 {
+    label(
+        h,
+        0,
+        (x, y + 16, width, 20),
+        title,
+        single(Font::Strong, Ink::Secondary),
+    );
+    y + 16 + 20 + 8
 }
 /// An undrawn label at `pos`; UI Automation names the next control after it.
 unsafe fn anchor_at(h: HWND, pos: Pos, name: &str) {
@@ -1126,8 +1122,8 @@ pub fn run() {
             dpi: 96,
             scroll: 0,
             layout_scale: 1.0,
-            fonts: [0; 13],
-            card_brush: 0,
+            fonts: [0; appearance::FONT_COUNT],
+            ground_brush: 0,
             input_brush: 0,
             rows: vec![],
             query: LogQuery::default(),
@@ -1187,7 +1183,6 @@ pub fn run() {
         refresh_fonts(h);
         appearance::titlebar(h, dark);
         render(h);
-        set_ambient(h, GetForegroundWindow() == h);
         send(Command::Config);
         // Countdown pills tick once a second while the status page is open.
         SetTimer(Some(h), 1, 1000, None);
@@ -1231,9 +1226,9 @@ pub fn run() {
 unsafe fn refresh_brushes() {
     let mut s = ui();
     let p = Palette::new(s.dark);
-    let old = [s.card_brush, s.input_brush];
-    s.card_brush = CreateSolidBrush(p.card).0 as isize;
-    s.input_brush = CreateSolidBrush(p.input(s.dark)).0 as isize;
+    let old = [s.ground_brush, s.input_brush];
+    s.ground_brush = CreateSolidBrush(p.ground).0 as isize;
+    s.input_brush = CreateSolidBrush(p.field).0 as isize;
     for brush in old.into_iter().filter(|b| *b != 0) {
         let _ = DeleteObject(HGDIOBJ(brush as *mut _));
     }
@@ -1361,12 +1356,13 @@ unsafe fn chrome(h: HWND, page: u16) {
         let s = ui();
         (s.dark, s.feedback.clone())
     };
+    // `.rail`: padding 26/14; the brand card, a hairline 22px below it, then 42px items 4px apart.
     let brand = Control {
         look: Look {
             shape: Shape::Brand,
-            ..single(Font::Brand, Ink::Brand)
+            ..single(Font::Brand, Ink::Text)
         },
-        ..at(Kind::Static, 900, (22, 22, 160, 40))
+        ..at(Kind::Static, 900, (24, 26, 156, 40))
     };
     fixed(h, w!("STATIC"), "NetMate", brand, 0);
     for (index, (id, title)) in [
@@ -1380,15 +1376,20 @@ unsafe fn chrome(h: HWND, page: u16) {
     {
         let c = Control {
             btn: Btn::Nav,
-            ..at(Kind::Button, id, (12, 88 + index as i32 * 46, 170, 42))
+            ..at(Kind::Button, id, (14, 106 + index as i32 * 46, 166, 42))
         };
         fixed(h, w!("BUTTON"), title, c, 0);
     }
-    // The switch is the 200×90 design at 0.44 (88×40); the 100×54 box leaves room for the
-    // 1.07 hover scale, the drop shadow and the focus ring.
+    // The pen's 90×40 switch (5.625em × 2.5em at 16px) in the 96×46 box of linux.rs, centered in
+    // the 194px rail under the `.rail-foot` hairline.
+    let (box_width, box_height) = appearance::TOGGLE_BOX;
     let toggle = Control {
         btn: Btn::Toggle,
-        ..at(Kind::Button, 901, (47, 0, 100, 54))
+        ..at(
+            Kind::Button,
+            901,
+            ((194 - box_width) / 2, 0, box_width, box_height),
+        )
     };
     let switch = fixed(
         h,
@@ -1407,7 +1408,7 @@ unsafe fn chrome(h: HWND, page: u16) {
             align: 1,
             ..single(Font::Tiny, Ink::Rail)
         },
-        ..at(Kind::Static, 903, (12, 0, 170, 20))
+        ..at(Kind::Static, 903, (14, 0, 166, 18))
     };
     fixed(h, w!("STATIC"), "白天 / 黑夜", caption, 0);
     let title = match page_group(page) {
@@ -1419,14 +1420,24 @@ unsafe fn chrome(h: HWND, page: u16) {
     label(
         h,
         902,
-        (0, -68, 420, 52),
+        (0, -68, 420, 40),
         title,
-        single(Font::Title, Ink::Heading),
+        single(Font::Title, Ink::Text),
     );
+    if page_group(page) == SETTINGS {
+        // `.page-subtitle` beside the title, as in linux.rs.
+        label(
+            h,
+            0,
+            (width_of(title, Font::Title) + 14, -60, 260, 24),
+            "修改后立即保存并生效",
+            single(Font::Small, Ink::Secondary),
+        );
+    }
     label(
         h,
         90,
-        (CW - 400, -48, 400, 24),
+        (CW - 400, -60, 400, 24),
         &feedback,
         Look {
             align: 2,
@@ -1478,299 +1489,92 @@ unsafe fn go(h: HWND, page: u16) {
     ui().page = page;
     render(h);
 }
+/// `.banner`: a gold outline with the paused message and the resume action.
 unsafe fn pause_banner(h: HWND, y: i32, config: &Value) -> i32 {
     if config["settings"]["autoAuthPaused"] != true {
         return y;
     }
-    let (card, top) = begin(y);
+    surface(0, y, CW, 50, Surface::Banner);
     label(
         h,
         0,
-        (IX, top + 10, IW - 180, 24),
+        (14, y + 14, CW - 200, 22),
         "自动认证已暂停",
-        single(Font::Strong, Ink::Text),
+        single(Font::Strong, Ink::GoldText),
     );
+    let width = width_of("恢复自动认证", Font::Medium) + 30;
     click(
         h,
-        (IX + IW - 160, top, 160, 44),
+        (CW - 8 - width, y + 8, width, 34),
         "恢复自动认证",
-        Btn::Normal,
+        Btn::Primary,
         |_| mutate(|c| c["settings"]["autoAuthPaused"] = json!(false)),
     );
-    end(card, top + 44)
+    y + 50 + 22
 }
+/// `.loading-card`: the spinner and the two lines under it, without a card container.
 unsafe fn loading(h: HWND, y: i32) -> i32 {
-    let card = surface(0, y, CW, 0, Surface::Card);
     label(
         h,
         0,
-        (CW / 2 - 32, y + 60, 64, 64),
+        (CW / 2 - 32, y + 48, 64, 64),
         "",
         Look {
-            shape: Shape::Glyph(4, Ink::Primary),
+            shape: Shape::Glyph(4, Ink::Text),
             ..Default::default()
         },
     );
     let top = para(
         h,
-        IX,
-        y + 148,
-        IW,
+        32,
+        y + 48 + 64 + 16,
+        CW - 64,
         "正在检测 WiFi 连接...",
         centered(Font::Notice, Ink::Text),
-    ) + 12;
-    let top = para(
+    ) + 6;
+    para(
         h,
-        IX,
+        32,
         top,
-        IW,
+        CW - 64,
         "请稍候，正在检查网络连接状态",
-        centered(Font::Small, Ink::Secondary),
-    );
-    set_bottom(card, top + 60);
-    top + 60 + 24
+        centered(Font::Normal, Ink::Secondary),
+    ) + 48
 }
-/// What the sky panel shows: weather state, copy, chips, progress and actions.
-struct Sky {
-    /// 0 clear, 1 cloudy, 2 rain.
-    state: u8,
-    place: String,
-    title: String,
-    body: String,
-    chips: Vec<(String, Badge)>,
-    /// Shows the "剩余 N 秒后重试" chip, updated by `tick`.
-    retry: bool,
-    progress: Option<(u64, u64)>,
-    actions: Vec<(&'static str, Btn, Option<Action>)>,
-}
-impl Sky {
-    fn new(state: u8, place: &str, title: &str, body: &str) -> Self {
-        Self {
-            state,
-            place: place.into(),
-            title: title.into(),
-            body: body.into(),
-            chips: vec![],
-            retry: false,
-            progress: None,
-            actions: vec![],
-        }
-    }
-    fn chips(mut self, chips: &[&str]) -> Self {
-        self.chips = chips
-            .iter()
-            .map(|c| (c.to_string(), Badge::Chip(false)))
-            .collect();
-        self
-    }
-}
-/// The weather panel (`.sky`): copy on the left, illustration top-right, actions bottom-right.
-/// Its UI Automation name `网络连接状态` comes from the anchor created before it.
-unsafe fn sky_panel(h: HWND, y: i32, sky: Sky) -> i32 {
-    let panel = surface(0, y, CW, 196, Surface::Sky(sky.state));
-    label(
-        h,
-        0,
-        (CW - 30 - 176, y + 6, 176, 120),
-        "",
-        Look {
-            shape: Shape::Weather(sky.state),
-            ..Default::default()
-        },
-    );
-    let x = 28;
-    let copy = CW - 28 - 30 - 176 - 16;
-    label(
-        h,
-        0,
-        (x, y + 26, copy, 20),
-        &sky.place,
-        single(Font::Small, Ink::OnSkySoft),
-    );
-    label(
-        h,
-        0,
-        (x, y + 50, copy, 40),
-        &sky.title,
-        single(Font::Name, Ink::OnSky),
-    );
-    let body = copy.min(520);
-    let mut bottom = y + 94;
-    if !sky.body.is_empty() {
-        bottom = para(
-            h,
-            x,
-            bottom,
-            body,
-            &sky.body,
-            look(Font::Normal, Ink::OnSkySoft),
-        );
-    }
-    if !sky.chips.is_empty() || sky.retry {
-        let row = bottom + 12;
-        let mut chip_x = x;
-        for (text, _) in &sky.chips {
-            chip_x += width_of(text, Font::Badge) + 16 + 6;
-        }
-        if !sky.chips.is_empty() {
-            // The row ends where the retry chip starts so the two statics never overlap.
-            pills(h, (x, row, (chip_x - x).max(1), 22), sky.chips);
-        }
-        if sky.retry {
-            let countdown = reserve(1);
-            label(
-                h,
-                countdown,
-                (chip_x, row, 140, 22),
-                "",
-                Look {
-                    font: Font::Badge,
-                    badge: Some(Badge::Chip(false)),
-                    ..Default::default()
-                },
-            );
-            ui().countdowns.push((countdown, false));
-        }
-        bottom = row + 22;
-    }
-    if let Some((attempt, max)) = sky.progress.filter(|(_, max)| *max > 0) {
-        let row = bottom + 14;
-        surface(x, row, 320, 5, Surface::SkyTrack);
-        let filled = (320 * attempt.min(max) / max) as i32;
-        if filled > 0 {
-            surface(x, row, filled.max(5), 5, Surface::SkyFill);
-        }
-        label(
-            h,
-            0,
-            (x + 332, row - 8, 140, 20),
-            &format!("第 {attempt} / {max} 次"),
-            single(Font::Small, Ink::OnSkySoft),
-        );
-        bottom = row + 5;
-    }
-    // Buttons line up at the bottom-right corner, last one rightmost.
-    let widths: Vec<i32> = sky
-        .actions
-        .iter()
-        .map(|(text, ..)| width_of(text, Font::Strong) + 36)
-        .collect();
-    let total = widths.iter().sum::<i32>() + 8 * (widths.len() as i32 - 1).max(0);
-    let mut height = (bottom + 22 - y).max(196);
-    if !widths.is_empty() && CW - 28 - total < x + body + 12 && bottom > y + height - 22 - 36 - 8 {
-        height = bottom + 14 + 36 + 22 - y;
-    }
-    let mut ax = CW - 28 - total;
-    for ((text, btn, action), width) in sky.actions.into_iter().zip(widths) {
-        let disabled = action.is_none();
-        button(
-            h,
-            (ax, y + height - 22 - 36, width, 36),
-            text,
-            btn,
-            action,
-            disabled,
-        );
-        ax += width + 8;
-    }
-    set_bottom(panel, y + height);
-    y + height + 16
-}
-/// The phase of a running or finished WiFi recovery, as the sky panel shows it.
-fn recovery_sky(snapshot: &Value, config: &Value) -> Option<Sky> {
-    let phase = snapshot["phase"].as_str().unwrap_or("");
-    let (status, running) = match phase {
-        "connecting" => ("正在连接", true),
-        "authenticating" => ("正在认证", true),
-        "verifying" => ("正在确认联网", true),
-        "cooldown" => ("等待下一轮重连", false),
-        "failed" => ("连接失败", false),
-        "cancelled" => ("已取消", false),
-        _ => return None,
-    };
-    let target = snapshot["targetId"].as_str().and_then(|id| {
-        config["wifiRules"]
-            .as_array()?
-            .iter()
-            .find(|w| w["id"] == id)
-            .and_then(|w| w["ssid"].as_str().map(str::to_owned))
-    });
-    let ssid = target
-        .or_else(|| snapshot["network"]["ssid"].as_str().map(str::to_owned))
-        .unwrap_or_default();
-    let message = snapshot["message"]
-        .as_str()
-        .filter(|m| !m.is_empty())
-        .map(str::to_owned);
-    let body = match (message, ssid.is_empty()) {
-        (Some(message), true) => message,
-        (Some(message), false) => format!("{ssid}：{message}"),
-        (None, false) if running => format!("正在连接 {ssid}"),
-        (None, _) => ssid,
-    };
-    let state = if matches!(phase, "failed" | "cancelled") {
-        2
-    } else {
-        1
-    };
-    let mut sky = Sky::new(state, "WiFi 自动重连", status, &body);
-    sky.retry = true;
-    sky.progress = Some((
-        snapshot["attempt"].as_u64().unwrap_or(0),
-        snapshot["maxAttempts"].as_u64().unwrap_or(0),
-    ));
-    if matches!(phase, "failed" | "cooldown" | "cancelled") {
-        sky.actions.push((
-            "立即重试",
-            Btn::OnSky,
-            Some(act(|_| {
-                send(Command::Retry);
-            })),
-        ));
-    }
-    if matches!(
-        phase,
-        "connecting" | "authenticating" | "verifying" | "cooldown"
-    ) {
-        sky.actions.push((
-            "停止恢复",
-            Btn::GhostSky,
-            Some(act(|_| {
-                send(Command::StopRecovery);
-            })),
-        ));
-    }
-    Some(sky)
-}
-/// WifiReconnectFailedCard: every network that failed in the last round.
-unsafe fn failures(h: HWND, y: i32, snapshot: &Value) -> i32 {
+/// WifiReconnectFailedCard (`本轮尝试`): per-network reasons once every WiFi has failed.
+/// Returns the bottom edge, or `y` when there is nothing to show.
+unsafe fn failures(h: HWND, x: i32, y: i32, width: i32, snapshot: &Value) -> i32 {
     let list = snapshot["failures"].as_array().cloned().unwrap_or_default();
     if list.is_empty() || !matches!(snapshot["phase"].as_str(), Some("failed" | "cooldown")) {
         return y;
     }
-    let (card, top) = begin(y);
-    let mut top = card_title(h, top, "所有 WiFi 连接失败");
+    let mut top = heading(h, x, y, width, "本轮尝试", "");
     for failure in list {
+        let name = label(
+            h,
+            0,
+            (x, top + 10, width, 22),
+            failure["ssid"].as_str().unwrap_or(""),
+            single(Font::Strong, Ink::Text),
+        );
         top = para(
             h,
-            IX,
-            top,
-            IW,
-            &format!(
-                "{}：{}",
-                failure["ssid"].as_str().unwrap_or(""),
-                failure["reason"].as_str().unwrap_or("")
-            ),
-            look(Font::Normal, Ink::Text),
-        ) + 6;
+            x,
+            name + 2,
+            width,
+            failure["reason"].as_str().unwrap_or(""),
+            look(Font::Small, Ink::Secondary),
+        ) + 10;
+        hairline(x, top, width);
+        top += 1;
     }
-    end(card, top)
+    top
 }
-/// The metric strip: five equal cells with dividers; the heartbeat countdown is the only
-/// control `tick` updates.
+/// Signal, speed, band, internet and heartbeat under one ink rule (`.metrics`), split by
+/// hairlines; the heartbeat countdown is the only control `tick` updates.
 unsafe fn strip(h: HWND, y: i32, snapshot: &Value, config: &Value) -> i32 {
     let n = network(snapshot);
-    let card = surface(0, y, CW, 72, Surface::Card);
+    surface(0, y, CW, 2, Surface::Ink);
     let (signal, grade, signal_ink) = match n.rssi {
         Some(rssi) => {
             let percent = ((rssi + 100) * 100 / 60).clamp(0, 100);
@@ -1793,201 +1597,79 @@ unsafe fn strip(h: HWND, y: i32, snapshot: &Value, config: &Value) -> i32 {
         _ => "未知",
     };
     let online = snapshot["internetReachable"] == true;
-    let width = CW / 5;
-    let cells: [(&str, String, &str, Ink); 4] = [
-        ("信号强度", signal, grade, signal_ink),
-        ("连接速度", speed, speed_grade_text, speed_ink),
-        ("频段", band.into(), "", Ink::Text),
-        (
-            "互联网",
-            if online { "可达" } else { "不可达" }.into(),
-            "",
-            if online { Ink::Success } else { Ink::Danger },
-        ),
-    ];
-    for (i, (title, value, grade, ink)) in cells.iter().enumerate() {
-        let x = i as i32 * width;
-        if i > 0 {
-            surface(x, y + 12, 1, 48, Surface::Rule);
-        }
-        label(
-            h,
-            0,
-            (x + 20, y + 14, width - 40, 18),
-            title,
-            single(Font::Small, Ink::Secondary),
-        );
-        let value_width = (width_of(value, Font::Metric) + 4).min(width - 40);
-        label(
-            h,
-            0,
-            (x + 20, y + 34, value_width, 26),
-            value,
-            single(Font::Metric, *ink),
-        );
-        if !grade.is_empty() {
-            label(
-                h,
-                0,
-                (
-                    x + 20 + value_width + 4,
-                    y + 39,
-                    width - 44 - value_width,
-                    20,
-                ),
-                grade,
-                single(Font::Small, *ink),
-            );
-        }
-    }
-    let x = 4 * width;
-    surface(x, y + 12, 1, 48, Surface::Rule);
     let enabled = config["settings"]["enableHeartbeat"] == true;
     let interval = config["settings"]["heartbeatIntervalSeconds"]
         .as_u64()
         .unwrap_or(30);
-    label(
-        h,
-        0,
-        (x + 20, y + 14, CW - x - 28, 18),
-        &if enabled {
-            format!("心跳检测 · 每 {interval} 秒")
-        } else {
-            "心跳检测".into()
-        },
-        single(Font::Small, Ink::Secondary),
-    );
-    if enabled {
-        let ink = if online { Ink::Success } else { Ink::Danger };
-        label(
-            h,
-            0,
-            (x + 20, y + 44, 8, 8),
-            "",
-            Look {
-                shape: Shape::Dot(ink),
-                ..Default::default()
-            },
-        );
-        let status = if online { "正常" } else { "异常" };
-        let status_width = width_of(status, Font::Metric) + 4;
-        label(
-            h,
-            0,
-            (x + 35, y + 34, status_width, 26),
-            status,
-            single(Font::Metric, ink),
-        );
-        let countdown = reserve(1);
-        label(
-            h,
-            countdown,
-            (
-                x + 39 + status_width,
-                y + 39,
-                CW - x - 47 - status_width,
-                20,
-            ),
-            "",
-            single(Font::Small, Ink::Secondary),
-        );
-        ui().countdowns.push((countdown, true));
+    let heartbeat = if enabled {
+        format!("心跳检测 · 每 {interval} 秒")
     } else {
+        "心跳检测".into()
+    };
+    let (status, status_ink) = if !enabled {
+        ("已关闭", Ink::Secondary)
+    } else if online {
+        ("正常", Ink::Ok)
+    } else {
+        ("异常", Ink::Bad)
+    };
+    // Only the grade word carries the colour; the number stays in ink.
+    let cells: [(&str, String, Ink, &str, Ink); 5] = [
+        ("信号强度", signal, Ink::Text, grade, signal_ink),
+        ("连接速度", speed, Ink::Text, speed_grade_text, speed_ink),
+        ("频段", band.into(), Ink::Text, "", Ink::Text),
+        (
+            "互联网",
+            if online { "可达" } else { "不可达" }.into(),
+            if online { Ink::Ok } else { Ink::Bad },
+            "",
+            Ink::Text,
+        ),
+        (heartbeat.as_str(), status.into(), status_ink, "", Ink::Text),
+    ];
+    let width = CW / 5;
+    for (i, (title, value, ink, grade, grade_ink)) in cells.iter().enumerate() {
+        let mut x = i as i32 * width;
+        if i > 0 {
+            surface(x, y + 2, 1, 54, Surface::Rule);
+            x += 16;
+        }
+        let inner = (i as i32 + 1) * width - x - 8;
         label(
             h,
             0,
-            (x + 20, y + 34, CW - x - 28, 26),
-            "已关闭",
-            single(Font::Metric, Ink::Secondary),
+            (x, y + 11, inner, 18),
+            title,
+            single(Font::Tiny, Ink::Secondary),
         );
-    }
-    let mut bottom = y + 72;
-    let mut notes = vec![];
-    if let Some(message) = snapshot["message"].as_str().filter(|m| !m.is_empty()) {
-        if !matches!(
-            snapshot["phase"].as_str(),
-            Some(
-                "connecting" | "authenticating" | "verifying" | "cooldown" | "failed" | "cancelled"
-            )
-        ) {
-            notes.push(message.to_string());
+        let value_width = (width_of(value, Font::Metric) + 4).min(inner);
+        label(
+            h,
+            0,
+            (x, y + 30, value_width, 26),
+            value,
+            single(Font::Metric, *ink),
+        );
+        let rest = (x + value_width + 6, y + 34, inner - value_width - 6, 20);
+        if i == 4 && enabled {
+            let countdown = reserve(1);
+            label(h, countdown, rest, "", single(Font::Mono, Ink::Secondary));
+            ui().countdowns.push((countdown, true));
+        } else if !grade.is_empty() {
+            label(h, 0, rest, grade, single(Font::Tiny, *grade_ink));
         }
     }
-    if snapshot["monitorDegraded"] == true {
-        notes.push("系统网络事件监听不可用，已改为定时检测".into());
-    }
-    if !notes.is_empty() {
-        surface(20, bottom, CW - 40, 1, Surface::Rule);
-        bottom = para(
-            h,
-            20,
-            bottom + 10,
-            CW - 40,
-            &notes.join("\n"),
-            look(Font::Small, Ink::Secondary),
-        ) + 12;
-    }
-    set_bottom(card, bottom);
-    bottom + 16
+    y + 56 + 22
 }
-/// Column width for the two home columns.
-const COL: i32 = (CW - 16) / 2;
-/// The left column: 网络详情 when connected, else the paused heartbeat card. Returns the
-/// card index and its content bottom.
-unsafe fn details(h: HWND, y: i32, snapshot: &Value, config: &Value, wifi: bool) -> (usize, i32) {
-    let card = surface(0, y, COL, 0, Surface::Card);
-    if !wifi {
-        let heartbeat = config["settings"]["enableHeartbeat"] == true;
-        let mut x = 20;
-        if heartbeat {
-            label(
-                h,
-                0,
-                (x, y + 24, 8, 8),
-                "",
-                Look {
-                    shape: Shape::Dot(Ink::Muted),
-                    ..Default::default()
-                },
-            );
-            x += 18;
-        }
-        label(
-            h,
-            0,
-            (x, y + 16, COL - x - 20, 24),
-            if heartbeat {
-                "心跳检测 (已暂停)"
-            } else {
-                "网络详情"
-            },
-            single(Font::Card, Ink::Heading),
-        );
-        let bottom = para(
-            h,
-            20,
-            y + 52,
-            COL - 40,
-            if heartbeat {
-                "当前未连接 WiFi，心跳检测功能暂停。连接到 WiFi 后将自动恢复检测。"
-            } else {
-                "当前未连接 WiFi，暂无网络详情。"
-            },
-            look(Font::Small, Ink::Secondary),
-        );
-        return (card, bottom + 18);
-    }
+/// Column width for the two home and settings columns (`.home-cols`, spacing 32).
+const COL: i32 = (CW - 32) / 2;
+/// 网络详情: key/value rows with right-aligned values, then the heartbeat notes.
+unsafe fn details(h: HWND, x: i32, y: i32, width: i32, snapshot: &Value, config: &Value) -> i32 {
     let n = network(snapshot);
-    label(
-        h,
-        0,
-        (20, y + 16, COL - 80, 24),
-        "网络详情",
-        single(Font::Card, Ink::Heading),
-    );
+    let mut top = heading(h, x, y, width, "网络详情", "");
     click(
         h,
-        (COL - 20 - 36, y + 10, 36, 36),
+        (x + width - 28, y + 3, 28, 28),
         "刷新",
         Btn::Refresh,
         |_| {
@@ -1996,11 +1678,7 @@ unsafe fn details(h: HWND, y: i32, snapshot: &Value, config: &Value, wifi: bool)
     );
     let unknown = |v: &Option<String>| v.clone().unwrap_or_else(|| "未知".into());
     let rows = [
-        (
-            "WiFi 名称",
-            n.ssid.clone().unwrap_or_else(|| "未知".into()),
-            false,
-        ),
+        ("WiFi 名称", unknown(&n.ssid), false),
         ("IPv4 地址", unknown(&n.ipv4), true),
         ("IPv6 地址", unknown(&n.ipv6), true),
         ("BSSID", unknown(&n.bssid), true),
@@ -2013,130 +1691,125 @@ unsafe fn details(h: HWND, y: i32, snapshot: &Value, config: &Value, wifi: bool)
         ),
         ("安全类型", unknown(&n.security), false),
     ];
-    let mut row = y + 58;
     for (key, value, mono) in rows {
         label(
             h,
             0,
-            (20, row, 100, 20),
+            (x, top + 11, 100, 20),
             key,
-            single(Font::Small, Ink::Secondary),
+            single(Font::Normal, Ink::Secondary),
         );
         label(
             h,
             0,
-            (124, row, COL - 144, 20),
+            (x + 104, top + 11, width - 104, 20),
             &value,
             Look {
                 align: 2,
-                ..single(if mono { Font::Mono } else { Font::Normal }, Ink::Text)
+                ..single(if mono { Font::Mono } else { Font::Medium }, Ink::Text)
             },
         );
-        row += 30;
+        top += 42;
+        hairline(x, top - 1, width);
     }
-    (card, row + 8)
+    if config["settings"]["enableHeartbeat"] != true {
+        return top;
+    }
+    let mut notes = vec![];
+    if let Some(message) = snapshot["message"].as_str().filter(|m| !m.is_empty()) {
+        notes.push(message.to_string());
+    }
+    if snapshot["monitorDegraded"] == true {
+        notes.push("系统网络事件监听不可用，已改为定时检测".into());
+    }
+    if !notes.is_empty() {
+        top = para(
+            h,
+            x,
+            top + 10,
+            width,
+            &notes.join("\n"),
+            look(Font::Small, Ink::Secondary),
+        ) + 10;
+        hairline(x, top, width);
+        top += 1;
+    }
+    top
 }
-/// The right column: configured networks by priority with fixed badge and action columns.
+/// The left column while no WiFi is connected and heartbeat is enabled.
+unsafe fn heartbeat_paused(h: HWND, x: i32, y: i32, width: i32) -> i32 {
+    let top = heading(h, x, y, width, "心跳检测 (已暂停)", "");
+    let top = para(
+        h,
+        x,
+        top + 10,
+        width,
+        "当前未连接 WiFi，心跳检测功能暂停。连接到 WiFi 后将自动恢复检测。",
+        look(Font::Small, Ink::Secondary),
+    ) + 10;
+    hairline(x, top, width);
+    top + 1
+}
+/// WifiSwitcherCard: configured networks by priority in fixed columns so badges and actions
+/// line up: rank (44) | name and subtitle | badge (92) | action (70).
 unsafe fn switcher(
     h: HWND,
+    x: i32,
     y: i32,
+    width: i32,
     snapshot: &Value,
-    config: &Value,
+    list: &[WifiRule],
     current: Option<&WifiRule>,
-) -> (usize, i32) {
-    let x = COL + 16;
-    let card = surface(x, y, COL, 0, Surface::Card);
-    label(
-        h,
-        0,
-        (x + 20, y + 16, COL - 160, 24),
-        "切换 WiFi",
-        single(Font::Card, Ink::Heading),
-    );
-    label(
-        h,
-        0,
-        (x + COL - 20 - 120, y + 19, 120, 20),
-        "按优先级排序",
-        Look {
-            align: 2,
-            ..single(Font::Small, Ink::Secondary)
-        },
-    );
-    let mut list = rules(config);
-    if list.is_empty() {
-        let bottom = para(
-            h,
-            x + 20,
-            y + 56,
-            COL - 40,
-            "尚未配置 WiFi，请在“配置设置”中添加。",
-            look(Font::Small, Ink::Secondary),
-        );
-        return (card, bottom + 18);
-    }
-    list.sort_by_key(|w| w.priority);
+) -> i32 {
     let switching = matches!(
         snapshot["phase"].as_str(),
         Some("connecting" | "authenticating" | "verifying")
     );
-    let height = 58;
-    let action_x = x + COL - 20 - 68;
-    let badge_x = action_x - 10 - 84;
-    let name_x = x + 48;
-    let name_width = badge_x - 10 - name_x;
-    let mut row = y + 56;
-    for (i, wifi) in list.iter().enumerate() {
+    let mut row = heading(h, x, y, width, "切换 WiFi", "按优先级排序");
+    let height = 60;
+    let action_x = x + width - 70;
+    let badge_x = action_x - 12 - 92;
+    let name_x = x + 44 + 12;
+    let name_width = badge_x - 12 - name_x;
+    for wifi in list {
         let is_current = current.is_some_and(|r| r.id == wifi.id);
-        if is_current {
-            surface(x + 1, row, COL - 2, height, Surface::Current);
-        } else if i > 0 {
-            surface(x, row, COL, 1, Surface::Rule);
-        }
         label(
             h,
             0,
-            (x + 20, row + 20, 18, 18),
-            "",
-            Look {
-                shape: Shape::Icon(1, Ink::Secondary),
-                ..Default::default()
-            },
+            (x, row + 15, 44, 30),
+            &format!("{:02}", wifi.priority),
+            single(Font::Rank, if is_current { Ink::Gold } else { Ink::Faint }),
         );
         label(
             h,
             0,
-            (name_x, row + 9, name_width, 22),
+            (name_x, row + 10, name_width, 22),
             &wifi.ssid,
             single(Font::Strong, Ink::Text),
         );
-        let mut sub = format!("优先级 {}", wifi.priority);
-        for part in [wifi.security.as_deref(), wifi.bssid.as_deref()]
-            .into_iter()
-            .flatten()
-        {
-            sub.push_str(" · ");
-            sub.push_str(part);
-        }
+        let mut sub = vec![format!("优先级 {}", wifi.priority)];
+        sub.extend(wifi.security.clone());
+        sub.extend(wifi.bssid.clone());
         label(
             h,
             0,
-            (name_x, row + 31, name_width, 18),
-            &sub,
+            (name_x, row + 32, name_width, 18),
+            &sub.join(" · "),
             single(Font::Small, Ink::Secondary),
         );
         let (tag, kind) = if wifi.requires_auth {
-            ("校园网认证", Badge::Sky)
+            ("校园网认证", Badge::Auth)
         } else {
             ("普通热点", Badge::Neutral)
         };
+        let tag_width = (width_of(tag, Font::Tiny) + 16).min(92);
         label(
             h,
             0,
-            (badge_x, row + 18, 84, 22),
+            (badge_x, row + 20, tag_width, 20),
             tag,
             Look {
-                font: Font::Badge,
+                font: Font::Tiny,
                 badge: Some(kind),
                 ..Default::default()
             },
@@ -2145,18 +1818,25 @@ unsafe fn switcher(
             label(
                 h,
                 0,
-                (action_x, row + 18, 68, 22),
-                "✓ 当前",
+                (action_x + 18, row + 23, 14, 14),
+                "",
                 Look {
-                    align: 1,
-                    ..single(Font::Strong, Ink::Primary)
+                    shape: Shape::Icon(10, Ink::Ok),
+                    ..Default::default()
                 },
+            );
+            label(
+                h,
+                0,
+                (action_x + 36, row + 19, 34, 22),
+                "当前",
+                single(Font::Strong, Ink::Ok),
             );
         } else {
             let target = wifi.id.clone();
             button(
                 h,
-                (action_x, row + 13, 68, 32),
+                (action_x + 70 - 56, row + 16, 56, 28),
                 &wifi.ssid,
                 Btn::Switch,
                 Some(act(move |_| {
@@ -2166,10 +1846,12 @@ unsafe fn switcher(
             );
         }
         row += height;
+        hairline(x, row - 1, width);
     }
-    (card, row + 10)
+    row
 }
-/// The two equal columns below the strip; both cards end at the taller one.
+/// 网络详情 or the paused heartbeat beside 切换 WiFi; a column with nothing to show gives the
+/// other one the full width, as the homogeneous GTK box does.
 unsafe fn columns(
     h: HWND,
     y: i32,
@@ -2177,13 +1859,356 @@ unsafe fn columns(
     config: &Value,
     wifi: bool,
     current: Option<&WifiRule>,
+) {
+    let mut list = rules(config);
+    list.sort_by_key(|w| w.priority);
+    let failed = snapshot["failures"]
+        .as_array()
+        .is_some_and(|f| !f.is_empty())
+        && matches!(snapshot["phase"].as_str(), Some("failed" | "cooldown"));
+    let heartbeat = config["settings"]["enableHeartbeat"] == true;
+    let left = failed || wifi || heartbeat;
+    let right = !list.is_empty();
+    let (left_width, right_x, right_width) = match (left, right) {
+        (true, true) => (COL, COL + 32, COL),
+        (true, false) => (CW, 0, 0),
+        _ => (0, 0, CW),
+    };
+    if left {
+        let mut top = failures(h, 0, y, left_width, snapshot);
+        if top > y {
+            top += 24;
+        }
+        if wifi {
+            details(h, 0, top, left_width, snapshot, config);
+        } else if heartbeat {
+            heartbeat_paused(h, 0, top, left_width);
+        }
+    }
+    if right {
+        switcher(h, right_x, y, right_width, snapshot, &list, current);
+    }
+}
+/// "2023101234" → "2023 1012 34", printed like the number on a campus card.
+fn card_number(username: &str) -> String {
+    let chars: Vec<char> = username.chars().collect();
+    chars
+        .chunks(4)
+        .map(|c| c.iter().collect::<String>())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+/// Copy for the home account card and the column beside it (`Face` in linux.rs); a running or
+/// finished recovery replaces the status, copy, meta and actions in `account_card`.
+struct Face {
+    /// Lamp: 0 idle, 1 ok, 2 warn, 3 bad.
+    tone: u8,
+    /// An empty dashed outline instead of a card face: no WiFi, no rule or no account.
+    void: bool,
+    /// Cards stacked behind the front one (0–2).
+    backs: usize,
+    issuer: &'static str,
+    place: String,
+    status: String,
+    headline: String,
+    body: String,
+    meta: Vec<(&'static str, String)>,
+    notes: Vec<(String, Badge)>,
+    action: Option<(&'static str, Btn, Option<Action>)>,
+}
+/// Offsets of tags laid out left to right and wrapped at `width`; returns them and the height.
+fn flow(widths: &[i32], width: i32, gap: i32, height: i32) -> (Vec<(i32, i32)>, i32) {
+    let (mut x, mut y) = (0, 0);
+    let mut spots = vec![];
+    for &w in widths {
+        if x > 0 && x + w > width {
+            x = 0;
+            y += height + gap;
+        }
+        spots.push((x, y));
+        x += w + gap;
+    }
+    (spots, if widths.is_empty() { 0 } else { y + height })
+}
+/// Size of the card deck (the face plus room for two cards behind it) and the gap to the side.
+const DECK: (i32, i32) = (456, 298);
+const DECK_GAP: i32 = 40;
+/// The top of the home page: the account card deck on the left, headline, copy, notes and
+/// actions beside it. The magnetic stripe at the card's foot is the retry progress. Returns
+/// where the next block starts.
+unsafe fn account_card(
+    h: HWND,
+    y: i32,
+    mut view: Face,
+    number: Option<String>,
+    snapshot: &Value,
+    config: &Value,
 ) -> i32 {
-    let (left, left_bottom) = details(h, y, snapshot, config, wifi);
-    let (right, right_bottom) = switcher(h, y, snapshot, config, current);
-    let bottom = left_bottom.max(right_bottom);
-    set_bottom(left, bottom);
-    set_bottom(right, bottom);
-    bottom + 16
+    let phase = snapshot["phase"].as_str().unwrap_or("");
+    let recovering = match phase {
+        "connecting" => Some(("正在连接", false)),
+        "authenticating" => Some(("正在认证", false)),
+        "verifying" => Some(("正在确认联网", false)),
+        "cooldown" => Some(("等待下一轮重连", true)),
+        "failed" => Some(("连接失败", true)),
+        "cancelled" => Some(("已取消", true)),
+        _ => None,
+    };
+    let mut actions: Vec<(&'static str, Btn, Option<Action>)> = vec![];
+    let mut progress = None;
+    let mut countdown = false;
+    if let Some((status, failed)) = recovering {
+        let target = snapshot["targetId"].as_str().and_then(|id| {
+            config["wifiRules"]
+                .as_array()?
+                .iter()
+                .find(|w| w["id"] == id)
+                .and_then(|w| w["ssid"].as_str().map(str::to_owned))
+        });
+        let ssid = target
+            .or_else(|| snapshot["network"]["ssid"].as_str().map(str::to_owned))
+            .unwrap_or_default();
+        let all_failed = failed
+            && snapshot["failures"]
+                .as_array()
+                .is_some_and(|f| !f.is_empty());
+        view.void = false;
+        view.tone = if failed { 3 } else { 2 };
+        view.status = status.into();
+        view.headline = if all_failed {
+            "所有 WiFi 连接失败"
+        } else {
+            "WiFi 自动重连"
+        }
+        .into();
+        let mut body = vec![];
+        if !ssid.is_empty() {
+            body.push(format!("目标 WiFi：{ssid}"));
+        }
+        if let Some(message) = snapshot["message"].as_str().filter(|m| !m.is_empty()) {
+            body.push(message.to_string());
+        }
+        view.body = body.join("\n");
+        view.meta.clear();
+        if !ssid.is_empty() {
+            view.place = ssid.clone();
+            view.meta.push(("目标 WiFi", ssid));
+        }
+        let attempt = snapshot["attempt"].as_u64().unwrap_or(0);
+        let max = snapshot["maxAttempts"].as_u64().unwrap_or(0);
+        if max > 0 {
+            view.meta.push(("尝试", format!("第 {attempt} / {max} 次")));
+            progress = Some((attempt.min(max) * 1000 / max) as u16);
+        }
+        view.notes.clear();
+        countdown = true;
+        if failed {
+            actions.push((
+                "立即重试",
+                Btn::Primary,
+                Some(act(|_| {
+                    send(Command::Retry);
+                })),
+            ));
+        }
+        if phase != "failed" && phase != "cancelled" {
+            actions.push((
+                "停止恢复",
+                Btn::Normal,
+                Some(act(|_| {
+                    send(Command::StopRecovery);
+                })),
+            ));
+        }
+        // The home action stays reachable; while connecting it would only repeat the title.
+        if failed {
+            actions.extend(view.action.take());
+        }
+    } else {
+        actions.extend(view.action.take());
+    }
+    // The deck: cards behind the face first, so the face paints over them.
+    let backs = if view.void { 0 } else { view.backs };
+    for (level, x, dy, width, height) in [(2, 45, 11, 409, 257), (1, 24, 16, 424, 266)]
+        .into_iter()
+        .skip(2 - backs)
+    {
+        surface(x, y + dy, width, height, Surface::Back(level));
+    }
+    surface(0, y + 22, 440, 276, Surface::Face(view.void));
+    if let Some(permille) = progress {
+        surface(0, y + 22 + 276 - 6, 440, 6, Surface::Stripe(permille));
+    }
+    let (soft, ink, digits) = if view.void {
+        (Ink::Secondary, Ink::Text, Ink::Faint)
+    } else {
+        (Ink::FaceSoft, Ink::Face, Ink::Face)
+    };
+    // `.id-body` padding 22/24: issuer and place, chip, lamp and status, then number and meta.
+    let top = y + 44;
+    label(
+        h,
+        0,
+        (24, top, 200, 16),
+        view.issuer,
+        single(Font::Tiny, soft),
+    );
+    label(
+        h,
+        0,
+        (224, top, 192, 16),
+        &view.place,
+        Look {
+            align: 2,
+            ..single(Font::Tiny, soft)
+        },
+    );
+    label(
+        h,
+        0,
+        (24, top + 34, 46, 34),
+        "",
+        Look {
+            shape: Shape::Chip(view.void),
+            ..Default::default()
+        },
+    );
+    let status = top + 34 + 34 + 14;
+    label(
+        h,
+        0,
+        (19, status + 11, 22, 22),
+        "",
+        Look {
+            shape: Shape::Lamp(view.tone),
+            ..Default::default()
+        },
+    );
+    label(
+        h,
+        0,
+        (49, status, 367, 44),
+        &view.status,
+        single(Font::Face, ink),
+    );
+    let meta = y + 276 - 39;
+    label(
+        h,
+        0,
+        (24, meta - 8 - 30, 392, 30),
+        match number.as_deref() {
+            Some(number) if !view.void => number,
+            _ => "•••• •••• ••",
+        },
+        single(Font::Number, digits),
+    );
+    let mut x = 24;
+    for (key, value) in &view.meta {
+        if x >= 416 {
+            break;
+        }
+        let width = width_of(key, Font::Key)
+            .max(width_of(value, Font::Meta))
+            .min(416 - x);
+        label(h, 0, (x, meta, width, 18), key, single(Font::Key, soft));
+        label(
+            h,
+            0,
+            (x, meta + 18, width, 21),
+            value,
+            single(Font::Meta, ink),
+        );
+        x += width + 26;
+    }
+    // The side column (spacing 12), centered against the deck.
+    let sx = DECK.0 + DECK_GAP;
+    let sw = CW - sx;
+    let mut tags: Vec<(String, Badge, u16)> = view
+        .notes
+        .iter()
+        .map(|(text, kind)| (text.clone(), *kind, 0))
+        .collect();
+    if countdown {
+        // The retry countdown note stays hidden until `tick` gives it text.
+        let id = reserve(1);
+        ui().countdowns.push((id, false));
+        tags.push((String::new(), Badge::Neutral, id));
+    }
+    let widths: Vec<i32> = tags
+        .iter()
+        .map(|(text, _, id)| {
+            let text = if *id == 0 {
+                text.as_str()
+            } else {
+                "剩余 000 秒后重试"
+            };
+            (width_of(text, Font::Tiny) + 16).min(sw)
+        })
+        .collect();
+    let (spots, notes_height) = flow(&widths, sw, 6, 20);
+    let title_height = line(Font::Side);
+    let body_height = if view.body.is_empty() {
+        0
+    } else {
+        measure(&view.body, Font::Normal, sw)
+    };
+    let mut total = title_height;
+    for part in [
+        body_height,
+        notes_height,
+        if actions.is_empty() { 0 } else { 34 },
+    ] {
+        if part > 0 {
+            total += 12 + part;
+        }
+    }
+    let mut row = y + ((DECK.1 - total) / 2).max(0);
+    row = label(
+        h,
+        0,
+        (sx, row, sw, title_height),
+        &view.headline,
+        single(Font::Side, Ink::Text),
+    );
+    if body_height > 0 {
+        row = para(
+            h,
+            sx,
+            row + 12,
+            sw,
+            &view.body,
+            look(Font::Normal, Ink::Secondary),
+        );
+    }
+    if notes_height > 0 {
+        row += 12;
+        for ((text, kind, id), ((dx, dy), width)) in tags.iter().zip(spots.into_iter().zip(widths))
+        {
+            label(
+                h,
+                *id,
+                (sx + dx, row + dy, width, 20),
+                text,
+                Look {
+                    font: Font::Tiny,
+                    badge: Some(*kind),
+                    ..Default::default()
+                },
+            );
+        }
+        row += notes_height;
+    }
+    if !actions.is_empty() {
+        row += 12;
+        let mut x = sx;
+        for (text, btn, action) in actions {
+            let width = width_of(text, Font::Medium) + 30;
+            let disabled = action.is_none();
+            button(h, (x, row, width, 34), text, btn, action, disabled);
+            x += width + 8;
+        }
+    }
+    y + DECK.1.max(total) + 22
 }
 unsafe fn home_page(h: HWND) {
     let (snapshot, config) = {
@@ -2197,43 +2222,79 @@ unsafe fn home_page(h: HWND) {
         return;
     }
     let n = network(&snapshot);
-    let recovery = recovery_sky(&snapshot, &config);
-    let Some(ssid) = n.ssid.clone() else {
-        let sky = recovery.unwrap_or_else(|| {
-            let mut sky = Sky::new(
-                2,
-                "网络连接状态",
-                "未连接 WiFi",
-                "当前设备未连接到任何 WiFi 网络，请先连接 WiFi。连接到 WiFi 后才能使用网络认证功能。",
-            );
-            if config["settings"]["enableHeartbeat"] == true {
-                sky.chips = vec![("心跳检测已暂停".into(), Badge::Chip(true))];
-            }
-            sky
-        });
-        let y = sky_panel(h, y, sky);
-        let y = failures(h, y, &snapshot);
-        columns(h, y, &snapshot, &config, false, None);
-        return;
-    };
-    let rule = current_rule(&config, &n);
-    let place = format!("当前 WiFi · {ssid}");
+    let wifi = n.ssid.is_some();
+    let heartbeat_on = config["settings"]["enableHeartbeat"] == true;
     let online = snapshot["internetReachable"] == true;
-    let requires_auth = rule
-        .as_ref()
-        .map(|w| w.requires_auth)
-        .unwrap_or(snapshot["requiresAuth"] == true);
-    let mut sky = if rule.is_none() && snapshot["requiresAuth"] != true {
+    let rule = if wifi {
+        current_rule(&config, &n)
+    } else {
+        None
+    };
+    let ssid = n.ssid.clone().unwrap_or_default();
+    let accounts = if wifi {
+        login_accounts(&config, &n, rule.as_ref())
+    } else {
+        vec![]
+    };
+    let number = accounts
+        .first()
+        .and_then(|a| a["username"].as_str())
+        .map(card_number);
+    // Each extra account in the login order shows as one more card behind the front one.
+    let backs = accounts.len().saturating_sub(1).min(2);
+    let view = if !wifi {
+        let mut notes = vec![(
+            "连接到 WiFi 后才能使用网络认证功能".to_string(),
+            Badge::Neutral,
+        )];
+        if heartbeat_on {
+            notes.push(("心跳检测已暂停".into(), Badge::Bad));
+        }
+        Face {
+            tone: 3,
+            void: true,
+            backs: 0,
+            issuer: "TUST · 校园网认证",
+            place: "无 WiFi".into(),
+            status: "未连接 WiFi".into(),
+            headline: "先连上 WiFi".into(),
+            body: "当前设备未连接到任何 WiFi 网络，请先连接 WiFi。".into(),
+            meta: vec![
+                ("WiFi", "无".into()),
+                (
+                    "心跳检测",
+                    if heartbeat_on {
+                        "已暂停"
+                    } else {
+                        "已关闭"
+                    }
+                    .into(),
+                ),
+            ],
+            notes,
+            action: None,
+        }
+    } else if rule.is_none() && snapshot["requiresAuth"] != true {
         let same_name = rules(&config).iter().any(|w| w.ssid == ssid);
-        Sky::new(
-            1,
-            &place,
-            if same_name {
+        Face {
+            tone: 0,
+            void: true,
+            backs: 0,
+            issuer: "TUST · 未配置",
+            place: ssid.clone(),
+            status: if same_name {
                 "请选择当前 WiFi 规则"
             } else {
                 "该 WiFi 未配置"
-            },
-            &if same_name {
+            }
+            .into(),
+            headline: if same_name {
+                "选择 WiFi 规则"
+            } else {
+                "添加这个 WiFi"
+            }
+            .into(),
+            body: if same_name {
                 "同名 WiFi 身份信息不足或规则不匹配，请在配置设置中选择安全类型及 BSSID 后重试。"
                     .to_string()
             } else {
@@ -2241,44 +2302,109 @@ unsafe fn home_page(h: HWND) {
                     "当前连接的 WiFi \"{ssid}\" 尚未配置，请前往\"配置设置\"添加此 WiFi 的配置。"
                 )
             },
-        )
-        .chips(&["点击左侧菜单的\"配置设置\"添加 WiFi 配置"])
-    } else if !requires_auth {
-        Sky::new(
-            if online { 0 } else { 1 },
-            &place,
-            "无需认证",
-            if online {
+            meta: vec![
+                ("WiFi", ssid.clone()),
+                (
+                    "WiFi 规则",
+                    if same_name { "未匹配" } else { "未配置" }.into(),
+                ),
+            ],
+            notes: vec![(
+                "点击左侧菜单的\"配置设置\"添加 WiFi 配置".into(),
+                Badge::Neutral,
+            )],
+            action: None,
+        }
+    } else if !rule
+        .as_ref()
+        .map(|w| w.requires_auth)
+        .unwrap_or(snapshot["requiresAuth"] == true)
+    {
+        Face {
+            tone: if online { 1 } else { 2 },
+            void: false,
+            backs: 0,
+            issuer: "TUST · 无需认证",
+            place: ssid.clone(),
+            status: "无需认证".into(),
+            headline: if online {
+                "互联网可达"
+            } else {
+                "互联网暂不可达"
+            }
+            .into(),
+            body: if online {
                 "当前 WiFi 无需校园网认证，互联网可达。"
             } else {
                 "当前 WiFi 无需校园网认证，互联网暂不可达。"
-            },
-        )
-        .chips(&[
-            "此 WiFi 已配置为「无需认证」",
-            "如家庭 WiFi、手机热点等网络",
-        ])
-    } else if login_accounts(&config, &n, rule.as_ref()).is_empty() {
-        let mut sky = Sky::new(
-            1,
-            &place,
-            "未配置账户",
-            "该 WiFi 需要校园网认证，但尚未关联账户。请前往\"配置设置\"添加账户并关联到此 WiFi。",
-        )
-        .chips(&["点击左侧菜单的\"配置设置\"添加账户并关联"]);
-        sky.actions
-            .push(("添加认证账号", Btn::OnSky, Some(act(|h| go(h, SETTINGS)))));
-        sky
+            }
+            .into(),
+            meta: vec![
+                ("WiFi", ssid.clone()),
+                ("WiFi 规则", "无需认证".into()),
+                ("互联网", if online { "可达" } else { "不可达" }.into()),
+            ],
+            notes: vec![
+                ("此 WiFi 已配置为「无需认证」".into(), Badge::Auth),
+                ("如家庭 WiFi、手机热点等网络".into(), Badge::Neutral),
+            ],
+            action: None,
+        }
+    } else if accounts.is_empty() {
+        Face {
+            tone: 0,
+            void: true,
+            backs: 0,
+            issuer: "TUST · 校园网认证",
+            place: ssid.clone(),
+            status: "未配置账户".into(),
+            headline: "还差一个账号".into(),
+            body: "该 WiFi 需要校园网认证，但尚未关联账户。请前往\"配置设置\"添加账户并关联到此 WiFi。"
+                .into(),
+            meta: vec![("WiFi 规则", "需要认证".into()), ("关联账户", "无".into())],
+            notes: vec![(
+                "点击左侧菜单的\"配置设置\"添加账户并关联".into(),
+                Badge::Neutral,
+            )],
+            action: Some((
+                "添加认证账号",
+                Btn::Primary,
+                Some(act(|h| go(h, SETTINGS))),
+            )),
+        }
     } else {
         let authenticated = snapshot["authenticated"] == true;
         let connecting = matches!(
             snapshot["phase"].as_str(),
             Some("connecting" | "authenticating" | "verifying")
         );
-        let mut sky = Sky::new(
-            if authenticated && online { 0 } else { 1 },
-            &place,
-            if authenticated {
+        let action = if authenticated {
+            (
+                "断开连接",
+                Btn::Danger,
+                Some(act(|_| {
+                    send(Command::Logout);
+                })),
+            )
+        } else if connecting {
+            ("正在认证...", Btn::Primary, None)
+        } else {
+            (
+                "立即连接",
+                Btn::Primary,
+                Some(act(|_| {
+                    send(Command::Login);
+                })),
+            )
+        };
+        let isp = accounts[0]["isp"].as_str().unwrap_or("");
+        Face {
+            tone: if authenticated && online { 1 } else { 2 },
+            void: false,
+            backs,
+            issuer: "TUST · 校园网认证",
+            place: ssid.clone(),
+            status: if authenticated {
                 if online {
                     "已认证并联网"
                 } else {
@@ -2286,86 +2412,91 @@ unsafe fn home_page(h: HWND) {
                 }
             } else {
                 "需要认证"
-            },
-            if authenticated {
+            }
+            .into(),
+            headline: if authenticated {
+                if online {
+                    "一切正常"
+                } else {
+                    "正在检查互联网"
+                }
+            } else if connecting {
+                "正在认证"
+            } else {
+                "等待认证"
+            }
+            .into(),
+            body: if authenticated {
                 if online {
                     "当前 WiFi 已通过认证且可访问互联网。"
                 } else {
                     "门户已确认认证成功，正在检查互联网连接。"
                 }
             } else {
-                "当前 WiFi 需要校园网认证，请点击右侧按钮进行认证。"
-            },
-        )
-        .chips(&[
-            if rule.is_some() {
-                "此 WiFi 已配置为「需要认证」"
-            } else {
-                "根据当前网络信息识别为校园网"
-            },
-            "如校园网 CMCC/CUCC/CTCC",
-        ]);
-        sky.actions.push(if authenticated {
-            (
-                "断开连接",
-                Btn::GhostSky,
-                Some(act(|_| {
-                    send(Command::Logout);
-                })),
-            )
-        } else if connecting {
-            ("正在认证...", Btn::OnSky, None)
-        } else {
-            (
-                "立即连接",
-                Btn::OnSky,
-                Some(act(|_| {
-                    send(Command::Login);
-                })),
-            )
-        });
-        sky
+                "当前 WiFi 需要校园网认证，请点击下方按钮进行认证。"
+            }
+            .into(),
+            meta: vec![
+                ("运营商", isp_label(isp).to_string()),
+                ("关联账户", format!("{} 个", accounts.len())),
+                (
+                    "WiFi 规则",
+                    if rule.is_some() {
+                        "需要认证"
+                    } else {
+                        "自动识别"
+                    }
+                    .into(),
+                ),
+            ],
+            notes: vec![
+                (
+                    if rule.is_some() {
+                        "此 WiFi 已配置为「需要认证」"
+                    } else {
+                        "根据当前网络信息识别为校园网"
+                    }
+                    .into(),
+                    Badge::Auth,
+                ),
+                ("如校园网 CMCC/CUCC/CTCC".into(), Badge::Neutral),
+            ],
+            action: Some(action),
+        }
     };
-    if let Some(mut recovering) = recovery {
-        // A running or failed recovery takes the panel; the authentication action stays.
-        recovering.place = format!("WiFi 自动重连 · {ssid}");
-        recovering.actions.extend(
-            sky.actions
-                .drain(..)
-                .filter(|(_, _, action)| action.is_some()),
-        );
-        sky = recovering;
+    let mut y = account_card(h, y, view, number, &snapshot, &config);
+    if wifi {
+        y = strip(h, y, &snapshot, &config);
     }
-    let y = sky_panel(h, y, sky);
-    let y = failures(h, y, &snapshot);
-    let y = strip(h, y, &snapshot, &config);
-    columns(h, y, &snapshot, &config, true, rule.as_ref());
+    columns(h, y, &snapshot, &config, wifi, rule.as_ref());
 }
-unsafe fn empty_box(h: HWND, y: i32, message: &str) -> i32 {
-    let boxed = surface(IX, y, IW, 0, Surface::Dashed);
+/// `.empty-box`: a dashed outline 12px below the heading with a centered message.
+unsafe fn empty_box(h: HWND, x: i32, y: i32, width: i32, message: &str) -> i32 {
+    let boxed = surface(x, y + 12, width, 0, Surface::Dashed);
     let bottom = para(
         h,
-        IX + 20,
-        y + 28,
-        IW - 40,
+        x + 24,
+        y + 12 + 24,
+        width - 48,
         message,
         centered(Font::Normal, Ink::Secondary),
     );
-    set_bottom(boxed, bottom + 28);
-    bottom + 28 + 14
+    set_bottom(boxed, bottom + 24);
+    bottom + 24
 }
 unsafe fn settings_page(h: HWND) {
     let config = ui().config.clone();
     anchor(h, 0, "账号配置");
     if config.is_null() {
-        let (card, top) = begin(8);
-        let top = para(h, IX, top, IW, "加载中...", look(Font::Normal, Ink::Text));
-        end(card, top);
+        para(h, 0, 8, CW, "加载中...", look(Font::Normal, Ink::Text));
         return;
     }
     let settings = config["settings"].clone();
-    let (card, top) = begin(8);
-    let mut top = card_title(h, top, "通用设置");
+    let y = pause_banner(h, 8, &config);
+    let y = accounts(h, y, &config) + 28;
+    let y = wifis(h, y, &config) + 28;
+    // Two columns as in linux.rs: 通用设置 | 附近 WiFi over 通知设置.
+    let mut top = heading(h, 0, y, COL, "通用设置", "");
     for (key, title, desc) in [
         ("autoLaunch", "开机自动启动", ""),
         (
@@ -2390,12 +2521,17 @@ unsafe fn settings_page(h: HWND) {
         ),
         ("autoUpdate", "自动检查更新", "启动后自动检查新版本"),
     ] {
-        top = toggle_row(h, top, title, desc, settings[key] == true, move |_, v| {
-            mutate(move |c| c["settings"][key] = json!(v))
-        });
+        top = toggle_row(
+            h,
+            0,
+            top,
+            COL,
+            title,
+            desc,
+            settings[key] == true,
+            move |_, v| mutate(move |c| c["settings"][key] = json!(v)),
+        );
     }
-    surface(IX, top + 4, IW, 1, Surface::Rule);
-    top += 24;
     for (id, key, min, max) in NUMBERS {
         if key.starts_with("heartbeat") && settings["enableHeartbeat"] != true {
             continue;
@@ -2408,23 +2544,32 @@ unsafe fn settings_page(h: HWND) {
             "wifiReconnectRetries" => "每个 WiFi 最多尝试次数（含首次）",
             _ => "冷却期时长 (分钟，全部 WiFi 失败后暂停重连；0 为不冷却)",
         };
+        // `.set` with the name on the left and a short number field on the right.
         let value = settings[key].as_u64().unwrap_or(min).clamp(min, max);
-        top = form(
+        let name_bottom = para(
+            h,
+            0,
+            top + 10,
+            COL - 112,
+            title,
+            look(Font::Medium, Ink::Text),
+        );
+        let row = (name_bottom + 10).max(top + 56);
+        field(
             h,
             id,
-            IX,
-            top,
-            IW,
-            title,
+            (COL - 96, (top + row - 36) / 2, 96, 36),
             &value.to_string(),
             &format!("{min}–{max}"),
             None,
             ES_NUMBER as u32,
         );
+        hairline(0, row - 1, COL);
+        top = row;
     }
-    let y = end(card, top - 14);
-    let (card, top) = begin(y);
-    let mut top = card_title(h, top, "通知设置");
+    let x = COL + 32;
+    let right = nearby(h, x, y, COL, &config) + 24;
+    let mut top = heading(h, x, right, COL, "通知设置", "");
     for (key, title) in [
         ("wifiDisconnected", "WiFi 断开"),
         ("reconnectSuccess", "自动重连成功"),
@@ -2433,18 +2578,15 @@ unsafe fn settings_page(h: HWND) {
     ] {
         top = toggle_row(
             h,
+            x,
             top,
+            COL,
             title,
             "",
             settings["notificationSettings"][key] != false,
             move |_, v| mutate(move |c| c["settings"]["notificationSettings"][key] = json!(v)),
         );
     }
-    let y = end(card, top - 10);
-    let y = pause_banner(h, y, &config);
-    let y = nearby(h, y, &config);
-    let y = accounts(h, y, &config);
-    wifis(h, y, &config);
 }
 /// Reads the number settings after typing pauses and saves the ones that changed.
 unsafe fn save_numbers(h: HWND) {
@@ -2470,30 +2612,24 @@ unsafe fn save_numbers(h: HWND) {
         });
     }
 }
-unsafe fn nearby(h: HWND, y: i32, config: &Value) -> i32 {
-    let (card, top) = begin(y);
-    let top = card_title(h, top, "附近 WiFi");
-    let top = para(
-        h,
-        IX,
-        top,
-        IW,
-        "扫描附近网络，选择后添加配置或编辑已保存的网络。",
-        look(Font::Normal, Ink::Secondary),
-    ) + 12;
+/// 附近 WiFi: a quiet scan button in the heading, the note and the scanned networks.
+unsafe fn nearby(h: HWND, x: i32, y: i32, width: i32, config: &Value) -> i32 {
     let (scanning, scan) = {
         let s = ui();
         (s.scanning, s.scan.clone())
     };
+    let top = heading(h, x, y, width, "附近 WiFi", "");
+    let scan_text = if scanning {
+        "扫描中…"
+    } else {
+        "扫描附近 WiFi"
+    };
+    let scan_width = width_of(scan_text, Font::Medium) + 16;
     button(
         h,
-        (IX, top, 180, 44),
-        if scanning {
-            "扫描中…"
-        } else {
-            "扫描附近 WiFi"
-        },
-        Btn::Normal,
+        (x + width - scan_width, y + 3, scan_width, 28),
+        scan_text,
+        Btn::Quiet,
         Some(act(|h| {
             if send(Command::Scan) {
                 ui().scanning = true;
@@ -2502,20 +2638,30 @@ unsafe fn nearby(h: HWND, y: i32, config: &Value) -> i32 {
         })),
         scanning,
     );
-    let mut top = top + 56;
+    let mut top = para(
+        h,
+        x,
+        top + 10,
+        width,
+        "扫描附近网络，选择后添加配置或编辑已保存的网络。",
+        look(Font::Small, Ink::Secondary),
+    ) + 10;
+    hairline(x, top, width);
+    top += 1;
     let Some(networks) = scan.as_array() else {
-        return end(card, top - 12);
+        return top;
     };
     if networks.is_empty() {
         top = para(
             h,
-            IX,
-            top,
-            IW,
+            x,
+            top + 10,
+            width,
             "未发现网络，请确认 WiFi 已开启，或手动填写 WiFi 名称。",
-            look(Font::Normal, Ink::Secondary),
-        );
-        return end(card, top);
+            look(Font::Small, Ink::Secondary),
+        ) + 10;
+        hairline(x, top, width);
+        return top + 1;
     }
     for value in networks {
         let n: Network = serde_json::from_value(value.clone()).unwrap_or_default();
@@ -2530,15 +2676,14 @@ unsafe fn nearby(h: HWND, y: i32, config: &Value) -> i32 {
         if saved.is_some() {
             parts.push("已保存".into());
         }
-        surface(IX, top, IW, 64, Surface::Row);
         label(
             h,
             0,
-            (IX + 16, top + 20, IW - 140, 24),
+            (x, top + 16, width - 76, 22),
             &parts.join(" · "),
             single(Font::Normal, Ink::Text),
         );
-        let pos = (IX + IW - 108, top + 10, 92, 44);
+        let pos = (x + width - 64, top + 9, 64, 34);
         match saved {
             Some(rule) => {
                 let id = json!(rule.id);
@@ -2560,9 +2705,10 @@ unsafe fn nearby(h: HWND, y: i32, config: &Value) -> i32 {
                 });
             }
         }
-        top += 76;
+        top += 52;
+        hairline(x, top - 1, width);
     }
-    end(card, top - 12)
+    top
 }
 unsafe fn open_editor(h: HWND, page: u16, item: Value) {
     {
@@ -2572,138 +2718,163 @@ unsafe fn open_editor(h: HWND, page: u16, item: Value) {
     }
     render(h);
 }
-unsafe fn error_line(h: HWND, y: i32, key: &str) -> i32 {
+unsafe fn error_line(h: HWND, x: i32, y: i32, width: i32, key: &str) -> i32 {
     let error = ui().drafts.get(key).cloned();
     match error {
-        Some(error) => para(h, IX, y, IW, &error, look(Font::Normal, Ink::Error)) + 10,
+        Some(error) => para(h, x, y, width, &error, look(Font::Normal, Ink::Bad)) + 10,
         None => y,
     }
 }
+/// 账号管理: account rows with a mini card face, then the add form (用户名 | 密码 | 运营商 in
+/// one row, then the server address and the submit button). Returns the bottom edge.
 unsafe fn accounts(h: HWND, y: i32, config: &Value) -> i32 {
-    let (card, top) = begin(y);
-    let mut top = card_title(h, top, "账号管理");
+    let mut top = heading(h, 0, y, CW, "账号管理", "按顺序依次认证");
     let list = config["accounts"].as_array().cloned().unwrap_or_default();
     if list.is_empty() {
-        top = empty_box(h, top, "暂无账号，请添加账号以使用登录功能");
+        top = empty_box(h, 0, top, CW, "暂无账号，请添加账号以使用登录功能");
     }
     for account in list {
         let username = account["username"].as_str().unwrap_or("").to_string();
-        surface(IX, top, IW, 76, Surface::Row);
-        let name_width = width_of(&username, Font::Strong).min(IW - 460);
-        label(
-            h,
-            0,
-            (IX + 16, top + 14, name_width, 24),
-            &username,
-            single(Font::Strong, Ink::Text),
-        );
-        badge(
-            h,
-            IX + 24 + name_width,
-            top + 15,
-            isp_label(account["isp"].as_str().unwrap_or("")),
-            Badge::Sky,
-        );
-        label(
-            h,
-            0,
-            (IX + 16, top + 42, IW - 420, 20),
-            account["serverUrl"].as_str().unwrap_or(""),
-            single(Font::Small, Ink::Secondary),
-        );
         let id = account["id"].clone();
         let current = config["currentAccountId"] == id;
-        let right = IX + IW - 16;
-        let use_id = id.clone();
-        button(
+        label(
             h,
-            (right - 356, top + 18, 130, 40),
-            if current {
-                "使用中"
-            } else {
-                "使用此账号"
+            0,
+            (0, top + 13, 58, 38),
+            "",
+            Look {
+                shape: Shape::Mini(current),
+                ..Default::default()
             },
-            if current { Btn::Primary } else { Btn::Normal },
-            Some(act(move |_| {
-                let id = use_id.clone();
-                mutate(move |c| c["currentAccountId"] = id.clone());
-            })),
-            current,
         );
+        let actions = 330;
+        label(
+            h,
+            0,
+            (72, top + 12, CW - 72 - actions, 22),
+            &username,
+            single(Font::Code, Ink::Text),
+        );
+        let mut sub = vec![isp_label(account["isp"].as_str().unwrap_or("")).to_string()];
+        sub.extend(
+            account["serverUrl"]
+                .as_str()
+                .filter(|u| !u.is_empty())
+                .map(str::to_owned),
+        );
+        label(
+            h,
+            0,
+            (72, top + 36, CW - 72 - actions, 18),
+            &sub.join(" · "),
+            single(Font::Small, Ink::Secondary),
+        );
+        let row = top + 15;
+        let mut right = CW - 64;
+        click(h, (right, row, 64, 34), "删除", Btn::Danger, {
+            let id = id.clone();
+            move |_| remove_account(id.clone())
+        });
+        right -= 6 + 64;
         let edit = account.clone();
-        click(
-            h,
-            (right - 214, top + 18, 100, 40),
-            "编辑",
-            Btn::Normal,
-            move |h| open_editor(h, ACCOUNT, edit.clone()),
-        );
-        click(
-            h,
-            (right - 102, top + 18, 102, 40),
-            "删除",
-            Btn::Danger,
-            move |_| remove_account(id.clone()),
-        );
-        top += 88;
+        click(h, (right, row, 64, 34), "编辑", Btn::Normal, move |h| {
+            open_editor(h, ACCOUNT, edit.clone())
+        });
+        if current {
+            label(
+                h,
+                0,
+                (right - 6 - 70, row + 7, 64, 20),
+                "使用中",
+                Look {
+                    align: 2,
+                    ..single(Font::Strong, Ink::Ok)
+                },
+            );
+        } else {
+            let width = width_of("使用此账号", Font::Medium) + 30;
+            let use_id = id.clone();
+            click(
+                h,
+                (right - 6 - width, row, width, 34),
+                "使用此账号",
+                Btn::Normal,
+                move |_| {
+                    let id = use_id.clone();
+                    mutate(move |c| c["currentAccountId"] = id.clone());
+                },
+            );
+        }
+        top += 64;
+        hairline(0, top - 1, CW);
     }
-    top = section(h, IX, top + 4, IW, "添加新账号");
-    top = form(
+    top = form_heading(h, 0, top, CW, "添加新账号");
+    let third = (CW - 20) / 3;
+    form(
         h,
         130,
-        IX,
+        0,
         top,
-        IW,
+        third,
         "用户名",
         &draft("account.username", ""),
         "请输入学号/用户名",
         Some("account.username"),
         0,
     );
-    top = form(
+    form(
         h,
         131,
-        IX,
+        third + 10,
         top,
-        IW,
+        third,
         "密码",
         &draft("account.password", ""),
         "请输入密码",
         Some("account.password"),
         ES_PASSWORD as u32,
     );
-    top = para(h, IX, top, IW, "运营商", look(Font::Strong, Ink::Heading)) + 6;
+    let isp_x = 2 * (third + 10);
+    let field_top = para(
+        h,
+        isp_x,
+        top,
+        third,
+        "运营商",
+        look(Font::Small, Ink::Secondary),
+    ) + 6;
     let values = ["campus", "cmcc", "cucc", "ctcc"];
     let selected = draft("account.isp", "campus");
     let titles: Vec<String> = values.iter().map(|v| isp_label(v).to_string()).collect();
-    top = dropdown(
+    dropdown(
         h,
-        (IX, top, IW),
+        (isp_x, field_top, CW - isp_x),
         "运营商",
         &titles,
         values.iter().position(|v| *v == selected).unwrap_or(0),
         false,
         move |_, i| set_draft("account.isp", values[i]),
-    ) + 14;
+    );
+    top = field_top + 36 + 12;
     if !ui().drafts.contains_key("account.server") {
         set_draft("account.server", "http://10.10.102.50:801");
     }
-    top = form(
+    let submit = width_of("保存并添加账号", Font::Medium) + 30;
+    let bottom = form(
         h,
         132,
-        IX,
+        0,
         top,
-        IW,
+        CW - submit - 10,
         "登录服务器地址",
         &draft("account.server", ""),
         "",
         Some("account.server"),
         0,
     );
-    top = error_line(h, top, "account.error");
     click(
         h,
-        (IX, top, IW, 46),
+        (CW - submit, bottom - 12 - 36, submit, 36),
         "保存并添加账号",
         Btn::Primary,
         |h| {
@@ -2736,56 +2907,46 @@ unsafe fn accounts(h: HWND, y: i32, config: &Value) -> i32 {
             });
         },
     );
-    end(card, top + 46)
+    error_line(h, 0, bottom - 6, CW, "account.error")
 }
+/// WiFi 配置: rules numbered by priority in gold, then the add form. Returns the bottom edge.
 unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
-    let (card, top) = begin(y);
-    let top = card_title(h, top, "WiFi 配置");
+    let top = heading(h, 0, y, CW, "WiFi 配置", "");
     let mut top = para(
         h,
-        IX,
-        top,
-        IW,
+        0,
+        top + 10,
+        CW,
         "配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。点击刷新图标按钮可切换自动重连状态。",
         look(Font::Small, Ink::Secondary),
-    ) + 14;
+    ) + 10;
+    hairline(0, top, CW);
+    top += 1;
     let accounts = config["accounts"].as_array().cloned().unwrap_or_default();
     let list = config["wifiRules"].as_array().cloned().unwrap_or_default();
     if list.is_empty() {
-        top = empty_box(h, top, "暂无 WiFi 配置");
+        top = empty_box(h, 0, top, CW, "暂无 WiFi 配置");
     }
     for wifi in list {
         let ssid = wifi["ssid"].as_str().unwrap_or("").to_string();
         let auth = wifi["requiresAuth"] == true;
         let auto = wifi["autoConnect"] == true;
         let priority = wifi["priority"].as_u64().unwrap_or(10);
-        let height = if auth { 100 } else { 76 };
-        surface(IX, top, IW, height, Surface::Row);
-        let actions = 410;
-        label(
+        // Actions: auto reconnect (34) | 连接 | 编辑 | 删除, 8 apart; the badge sits before them.
+        let actions = 34 + 8 + 64 + 8 + 64 + 8 + 64;
+        let tag = if auth { "需要认证" } else { "无需认证" };
+        let tag_width = width_of(tag, Font::Tiny) + 16;
+        let info_x = 56;
+        let info_width = CW - actions - 12 - tag_width - 12 - info_x;
+        let mut line = top + 11;
+        line = label(
             h,
             0,
-            (IX + 16, top + 14, IW - actions - 32, 24),
+            (info_x, line, info_width, 22),
             &ssid,
             single(Font::Strong, Ink::Text),
-        );
-        let mut badges = vec![
-            if auth {
-                ("需要认证".to_string(), Badge::Sky)
-            } else {
-                ("无需认证".to_string(), Badge::Green)
-            },
-            (
-                format!("★ 优先级 {priority}"),
-                Badge::Prio(priority.min(255) as u8),
-            ),
-        ];
-        badges.push(if auto {
-            ("自动重连".into(), Badge::Green)
-        } else {
-            ("手动连接".into(), Badge::Neutral)
-        });
-        pills(h, (IX + 16, top + 42, IW - actions - 32, 22), badges);
+        ) + 2;
+        let mut sub = vec![];
         if auth {
             let linked: Vec<String> = wifi["linkedAccountIds"]
                 .as_array()
@@ -2801,26 +2962,60 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
                     )
                 })
                 .collect();
-            let (value, ink) = if linked.is_empty() {
-                ("未关联账号（账号可能已删除）".to_string(), Ink::Error)
+            if linked.is_empty() {
+                line = label(
+                    h,
+                    0,
+                    (info_x, line, info_width, 18),
+                    "未关联账号（账号可能已删除）",
+                    single(Font::Small, Ink::Bad),
+                ) + 2;
             } else {
-                (format!("关联账号: {}", linked.join("，")), Ink::Secondary)
-            };
-            label(
-                h,
-                0,
-                (IX + 16, top + 70, IW - actions - 32, 20),
-                &value,
-                single(Font::Small, ink),
-            );
+                sub.push(format!("关联账号: {}", linked.join("，")));
+            }
         }
+        sub.push(
+            if auto {
+                "断开后自动重连"
+            } else {
+                "手动连接"
+            }
+            .into(),
+        );
+        line = label(
+            h,
+            0,
+            (info_x, line, info_width, 18),
+            &sub.join(" · "),
+            single(Font::Small, Ink::Secondary),
+        );
+        let bottom = line + 11;
+        let middle = (top + bottom) / 2;
+        label(
+            h,
+            0,
+            (0, middle - 15, 44, 30),
+            &format!("{priority:02}"),
+            single(Font::Rank, Ink::Gold),
+        );
+        label(
+            h,
+            0,
+            (info_x + info_width + 12, middle - 10, tag_width, 20),
+            tag,
+            Look {
+                font: Font::Tiny,
+                badge: Some(if auth { Badge::Auth } else { Badge::Neutral }),
+                ..Default::default()
+            },
+        );
         let id = wifi["id"].clone();
-        let right = IX + IW - 16;
-        let row = top + (height - 40) / 2;
+        let row = middle - 17;
+        let mut x = CW - actions;
         let toggle_id = id.clone();
         click(
             h,
-            (right - 394, row, 112, 40),
+            (x, row, 34, 34),
             if auto {
                 "↻ 自动重连"
             } else {
@@ -2838,36 +3033,26 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
                 });
             },
         );
+        x += 34 + 8;
         let connect = id.as_str().unwrap_or("").to_string();
-        click(
-            h,
-            (right - 272, row, 80, 40),
-            "连接",
-            Btn::Normal,
-            move |_| {
-                send(Command::Connect {
-                    id: connect.clone(),
-                });
-            },
-        );
+        click(h, (x, row, 64, 34), "连接", Btn::Normal, move |_| {
+            send(Command::Connect {
+                id: connect.clone(),
+            });
+        });
+        x += 64 + 8;
         let edit = wifi.clone();
-        click(
-            h,
-            (right - 182, row, 80, 40),
-            "编辑",
-            Btn::Normal,
-            move |h| open_editor(h, WIFI, edit.clone()),
-        );
-        click(
-            h,
-            (right - 92, row, 92, 40),
-            "删除",
-            Btn::Danger,
-            move |_| remove_wifi(id.clone()),
-        );
-        top += height + 12;
+        click(h, (x, row, 64, 34), "编辑", Btn::Normal, move |h| {
+            open_editor(h, WIFI, edit.clone())
+        });
+        x += 64 + 8;
+        click(h, (x, row, 64, 34), "删除", Btn::Danger, move |_| {
+            remove_wifi(id.clone())
+        });
+        top = bottom.max(row + 34 + 11);
+        hairline(0, top - 1, CW);
     }
-    top = section(h, IX, top + 4, IW, "添加 WiFi");
+    top = form_heading(h, 0, top, CW, "添加 WiFi");
     for (id, key, title, cue, style) in [
         (140, "wifi.ssid", "WiFi 名称 (SSID)", "请输入 WiFi 名称", 0),
         (
@@ -2895,9 +3080,9 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
         top = form(
             h,
             id,
-            IX,
+            0,
             top,
-            IW,
+            CW,
             title,
             &draft(key, ""),
             cue,
@@ -2920,35 +3105,42 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
             draft("wifi.auto", "1") == "1",
         ),
     ] {
-        top = toggle_row(h, top, title, desc, value, move |h, v| {
-            set_draft(key, if v { "1" } else { "0" });
-            if key == "wifi.auth" {
-                ui().drafts.remove("wifi.account");
-                render(h);
-            }
-        });
+        // `.form-group` row: the checkbox, then its description in parentheses.
+        let id = reserve(1);
+        register(
+            id,
+            act(move |h| {
+                set_draft(key, if checked(h, id) { "1" } else { "0" });
+                if key == "wifi.auth" {
+                    ui().drafts.remove("wifi.account");
+                    render(h);
+                }
+            }),
+        );
+        let right = check(h, id, 0, top, title, value);
+        label(
+            h,
+            0,
+            (right + 8, top + 5, CW - right - 8, 18),
+            &format!("({desc})"),
+            single(Font::Small, Ink::Secondary),
+        );
+        top += 28 + 10;
     }
     if auth {
-        top = para(
-            h,
-            IX,
-            top + 4,
-            IW,
-            "关联账号",
-            look(Font::Strong, Ink::Heading),
-        ) + 6;
+        top = para(h, 0, top, CW, "关联账号", look(Font::Small, Ink::Secondary)) + 6;
         if accounts.is_empty() {
-            let boxed = surface(IX, top, IW, 0, Surface::Tint(0xf59e0b));
+            let boxed = surface(0, top, CW, 0, Surface::Warning);
             let bottom = para(
                 h,
-                IX + 16,
-                top + 12,
-                IW - 32,
+                12,
+                top + 8,
+                CW - 24,
                 "请先在上方「账号管理」添加账号",
-                look(Font::Normal, Ink::Level(2)),
+                look(Font::Normal, Ink::Warn),
             );
-            set_bottom(boxed, bottom + 12);
-            top = bottom + 26;
+            set_bottom(boxed, bottom + 8);
+            top = bottom + 8 + 12;
         } else {
             let selected = draft("wifi.account", "");
             let ids: Vec<String> = accounts
@@ -2970,41 +3162,42 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
                 .iter()
                 .position(|id| *id == selected)
                 .unwrap_or(usize::MAX);
-            top = choices(h, IX, top, IW, 1, 56, &titles, chosen, move |_, i| {
+            top = choices(h, 0, top, CW, 1, 56, &titles, chosen, move |_, i| {
                 set_draft("wifi.account", &ids[i])
-            }) + 14;
+            }) + 12;
         }
     }
     top = form(
         h,
         144,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "优先级",
         &draft("wifi.priority", "10"),
         "1–99",
         Some("wifi.priority"),
         ES_NUMBER as u32,
-    ) - 8;
+    ) - 6;
     top = para(
         h,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "数字越小优先级越高（1=最高，99=最低，默认=10）",
         look(Font::Small, Ink::Secondary),
-    ) + 14;
-    top = error_line(h, top, "wifi.error");
+    ) + 12;
+    top = error_line(h, 0, top, CW, "wifi.error");
+    let add = width_of("添加 WiFi", Font::Medium) + 30;
     button(
         h,
-        (IX, top, IW, 46),
+        (0, top, add, 36),
         "添加 WiFi",
         Btn::Primary,
         Some(act(|h| add_wifi(h))),
         auth && accounts.is_empty(),
     );
-    end(card, top + 46)
+    top + 36
 }
 unsafe fn add_wifi(h: HWND) {
     let name = text(h, 140).trim().to_string();
@@ -3069,38 +3262,30 @@ fn password(secret: String, clear: bool) -> Value {
         json!({"action":"replace","value":secret})
     }
 }
-unsafe fn editor_actions(
-    h: HWND,
-    y: i32,
-    remove: &'static str,
-    save: Action,
-    delete: Action,
-) -> i32 {
-    button(h, (IX, y, 140, 46), "保存", Btn::Primary, Some(save), false);
+unsafe fn editor_actions(h: HWND, y: i32, remove: &'static str, save: Action, delete: Action) {
+    button(h, (0, y, 120, 36), "保存", Btn::Primary, Some(save), false);
     button(
         h,
-        (IX + 152, y, 140, 46),
+        (128, y, 120, 36),
         remove,
         Btn::Danger,
         Some(delete),
         false,
     );
-    click(h, (IX + 304, y, 120, 46), "取消", Btn::Normal, |h| {
+    click(h, (256, y, 100, 36), "取消", Btn::Normal, |h| {
         go(h, SETTINGS)
     });
-    y + 46
 }
 unsafe fn account_editor(h: HWND) {
     let old = ui().edit.clone();
-    let (card, top) = begin(8);
-    let mut top = card_title(h, top, "编辑账号");
+    let mut top = heading(h, 0, 8, CW, "编辑账号", "") + 14;
     for (id, title, key) in [(300, "显示名称", "name"), (301, "用户名", "username")] {
         top = form(
             h,
             id,
-            IX,
+            0,
             top,
-            IW,
+            CW,
             title,
             old[key].as_str().unwrap_or(""),
             "",
@@ -3111,9 +3296,9 @@ unsafe fn account_editor(h: HWND) {
     top = form(
         h,
         302,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "密码（留空保留）",
         "",
         "",
@@ -3121,20 +3306,20 @@ unsafe fn account_editor(h: HWND) {
         ES_PASSWORD as u32,
     );
     let clear = reserve(1);
-    check(h, clear, IX, top - 4, "清空已保存密码", false);
+    check(h, clear, 0, top - 4, "清空已保存密码", false);
     top = form(
         h,
         303,
-        IX,
+        0,
         top + 34,
-        IW,
+        CW,
         "登录服务器地址",
         old["serverUrl"].as_str().unwrap_or(""),
         "",
         None,
         0,
     );
-    top = para(h, IX, top, IW, "运营商", look(Font::Strong, Ink::Heading)) + 6;
+    top = para(h, 0, top, CW, "运营商", look(Font::Small, Ink::Secondary)) + 6;
     let values = ["campus", "cmcc", "cucc", "ctcc"];
     let selected = values
         .iter()
@@ -3145,7 +3330,7 @@ unsafe fn account_editor(h: HWND) {
     let titles: Vec<String> = values.iter().map(|v| isp_label(v).to_string()).collect();
     top = dropdown(
         h,
-        (IX, top, IW),
+        (0, top, CW),
         "运营商",
         &titles,
         selected,
@@ -3165,8 +3350,7 @@ unsafe fn account_editor(h: HWND) {
         remove_account(id.clone());
         go(h, SETTINGS);
     });
-    let top = editor_actions(h, top, "删除账号", save, delete);
-    end(card, top);
+    editor_actions(h, top, "删除账号", save, delete);
 }
 unsafe fn wifi_editor(h: HWND) {
     let (old, accounts) = {
@@ -3176,14 +3360,13 @@ unsafe fn wifi_editor(h: HWND) {
             s.config["accounts"].as_array().cloned().unwrap_or_default(),
         )
     };
-    let (card, top) = begin(8);
-    let mut top = card_title(h, top, "编辑 WiFi");
+    let mut top = heading(h, 0, 8, CW, "编辑 WiFi", "") + 14;
     top = form(
         h,
         300,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "WiFi 名称 (SSID)",
         old["ssid"].as_str().unwrap_or(""),
         "",
@@ -3193,9 +3376,9 @@ unsafe fn wifi_editor(h: HWND) {
     top = form(
         h,
         301,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "WiFi 密码（留空保留）",
         "",
         "",
@@ -3203,7 +3386,7 @@ unsafe fn wifi_editor(h: HWND) {
         ES_PASSWORD as u32,
     );
     let clear = reserve(1);
-    check(h, clear, IX, top - 4, "清空密码（开放网络）", false);
+    check(h, clear, 0, top - 4, "清空密码（开放网络）", false);
     top += 34;
     for (id, title, key) in [
         (302, "安全类型（留空自动识别）", "security"),
@@ -3212,9 +3395,9 @@ unsafe fn wifi_editor(h: HWND) {
         top = form(
             h,
             id,
-            IX,
+            0,
             top,
-            IW,
+            CW,
             title,
             old[key].as_str().unwrap_or(""),
             "",
@@ -3225,9 +3408,9 @@ unsafe fn wifi_editor(h: HWND) {
     top = form(
         h,
         304,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         "优先级",
         &old["priority"].as_u64().unwrap_or(10).to_string(),
         "1–99",
@@ -3238,7 +3421,7 @@ unsafe fn wifi_editor(h: HWND) {
     check(
         h,
         auto,
-        IX,
+        0,
         top,
         "断开后自动重连",
         old["autoConnect"] == true,
@@ -3246,18 +3429,18 @@ unsafe fn wifi_editor(h: HWND) {
     check(
         h,
         auto + 1,
-        IX,
+        0,
         top + 36,
         "需要校园网认证",
         old["requiresAuth"] == true,
     );
     top = para(
         h,
-        IX,
+        0,
         top + 82,
-        IW,
+        CW,
         "关联账号（按下面顺序尝试；可调整序号）",
-        look(Font::Strong, Ink::Heading),
+        look(Font::Small, Ink::Secondary),
     ) + 8;
     let ids = old["linkedAccountIds"]
         .as_array()
@@ -3272,7 +3455,7 @@ unsafe fn wifi_editor(h: HWND) {
             .filter(|s| !s.is_empty())
             .or(a["username"].as_str())
             .unwrap_or("账号");
-        check(h, box_id, IX, top + 7, name, ids.contains(&json!(id)));
+        check(h, box_id, 0, top + 7, name, ids.contains(&json!(id)));
         let order = ids
             .iter()
             .position(|v| v == &json!(id))
@@ -3281,7 +3464,7 @@ unsafe fn wifi_editor(h: HWND) {
         field(
             h,
             box_id + 1,
-            (IX + IW - 120, top, 120, 42),
+            (CW - 120, top, 120, 36),
             &order.to_string(),
             "序号",
             None,
@@ -3325,8 +3508,7 @@ unsafe fn wifi_editor(h: HWND) {
         remove_wifi(id.clone());
         go(h, SETTINGS);
     });
-    let top = editor_actions(h, top, "删除网络", save, delete);
-    end(card, top);
+    editor_actions(h, top, "删除网络", save, delete);
 }
 fn reload_logs() {
     let q = {
@@ -3370,8 +3552,7 @@ unsafe fn logs_page(h: HWND) {
         "连接、认证与恢复记录，保留最近 7 天",
         single(Font::Small, Ink::Secondary),
     ) + 16;
-    let card = surface(0, top, CW, 0, Surface::Card);
-    let mut y = top + 14;
+    let mut y = top;
     let hours = query
         .start_time
         .map(|start| {
@@ -3389,7 +3570,7 @@ unsafe fn logs_page(h: HWND) {
     ];
     let mut tips = vec![];
     for (id, x, width, name, cue) in toolbar {
-        anchor_at(h, (IX + x, y, width, 2), name);
+        anchor_at(h, (x, y, width, 2), name);
         let (key, value, style) = match id {
             120 => ("log.keyword", query.keyword.clone(), 0),
             121 => ("log.source", query.source.clone(), 0),
@@ -3398,7 +3579,7 @@ unsafe fn logs_page(h: HWND) {
         let edit = field(
             h,
             id,
-            (IX + x, y, width, 36),
+            (x, y, width, 36),
             &draft(key, &value),
             cue,
             Some(key),
@@ -3415,26 +3596,36 @@ unsafe fn logs_page(h: HWND) {
     }
     click(
         h,
-        (IX + 634, y, IW - 634, 36),
+        (634, y, CW - 634, 36),
         "搜索 / 刷新",
-        Btn::Primary,
+        Btn::Normal,
         |h| apply_log_filter(h),
     );
-    y += 36 + 14;
-    surface(0, y, CW, 1, Surface::Rule);
-    y += 14;
+    y += 36 + 12;
     let levels = ["", "info", "success", "warn", "error", "debug"];
     let first = reserve(levels.len() as u16);
     let group: Vec<u16> = (0..levels.len() as u16).map(|i| first + i).collect();
-    let mut x = IX;
+    // `.seg`: the levels sit in one field-coloured strip, 3px inside its border.
+    let titles: Vec<&str> = levels
+        .iter()
+        .map(|value| {
+            if value.is_empty() {
+                "全部"
+            } else {
+                level_label(value)
+            }
+        })
+        .collect();
+    let widths: Vec<i32> = titles
+        .iter()
+        .map(|title| width_of(title, Font::Small) + 22)
+        .collect();
+    surface(0, y, widths.iter().sum::<i32>() + 6, 34, Surface::Field);
+    let mut x = 3;
     for (i, value) in levels.into_iter().enumerate() {
         let id = first + i as u16;
-        let title = if value.is_empty() {
-            "全部"
-        } else {
-            level_label(value)
-        };
-        let width = width_of(title, Font::Strong) + 32;
+        let title = titles[i];
+        let width = widths[i];
         let group = group.clone();
         register(
             id,
@@ -3447,27 +3638,28 @@ unsafe fn logs_page(h: HWND) {
         let active = query.level == value || (value.is_empty() && query.level == "all");
         let c = Control {
             btn: Btn::Pill(active),
-            ..at(Kind::Button, id, (x, y, width, 36))
+            ..at(Kind::Button, id, (x, y + 3, width, 28))
         };
         make(h, w!("BUTTON"), title, c, 0);
-        x += width + 6;
+        x += width;
     }
+    x += 3;
     // Single line, so the count never wraps.
     label(
         h,
         91,
-        (x + 12, y + 8, IX + IW - x - 12, 20),
+        (x + 12, y + 7, CW - x - 12, 20),
         "",
         Look {
             align: 2,
             ..single(Font::Tiny, Ink::Secondary)
         },
     );
-    y += 36 + 14;
-    surface(0, y, CW, 1, Surface::Rule);
-    let list_top = y + 1;
+    y += 34 + 12;
+    surface(0, y, CW, 2, Surface::Ink);
+    let list_top = y + 2;
     let list_height = 420;
-    let c = at(Kind::List, 100, (8, list_top, CW - 16, list_height));
+    let c = at(Kind::List, 100, (0, list_top, CW, list_height));
     let list = make(
         h,
         WC_LISTVIEWW,
@@ -3493,7 +3685,7 @@ unsafe fn logs_page(h: HWND) {
         ("时间", 176),
         ("级别", 64),
         ("来源", 120),
-        ("消息", CW - 16 - 176 - 64 - 120 - 24),
+        ("消息", CW - 176 - 64 - 120 - 24),
     ]
     .into_iter()
     .enumerate()
@@ -3517,7 +3709,7 @@ unsafe fn logs_page(h: HWND) {
     label(
         h,
         92,
-        (IX, list_top + 150, IW, 60),
+        (0, list_top + 150, CW, 60),
         "正在读取日志…",
         centered(Font::Normal, Ink::Secondary),
     );
@@ -3526,8 +3718,8 @@ unsafe fn logs_page(h: HWND) {
     y += 12;
     // Footer: paging on the left; scope and format dropdowns, export and clear on the right,
     // all 36 high on one line.
-    let pager = width_of("上一页", Font::Strong) + 32;
-    click(h, (IX, y, pager, 36), "上一页", Btn::Normal, |_| {
+    let pager = width_of("上一页", Font::Medium) + 30;
+    click(h, (0, y, pager, 36), "上一页", Btn::Normal, |_| {
         let q = {
             let mut s = ui();
             let Some(cursor) = s.cursors.pop() else {
@@ -3540,7 +3732,7 @@ unsafe fn logs_page(h: HWND) {
     });
     click(
         h,
-        (IX + pager + 8, y, pager, 36),
+        (pager + 8, y, pager, 36),
         "下一页",
         Btn::Normal,
         |_| {
@@ -3557,10 +3749,10 @@ unsafe fn logs_page(h: HWND) {
             send(Command::Logs(q));
         },
     );
-    let export_width = width_of("导出日志", Font::Strong) + 32;
-    let clear_width = width_of("清除日志", Font::Strong) + 32;
+    let export_width = width_of("导出日志", Font::Medium) + 30;
+    let clear_width = width_of("清除日志", Font::Medium) + 30;
     let menu = 150;
-    let x = IX + IW - clear_width - 8 - export_width - 12 - menu - 10 - menu;
+    let x = CW - clear_width - 8 - export_width - 12 - menu - 10 - menu;
     let scope = ["全部保留日志".to_string(), "当前筛选结果".to_string()];
     let chosen = usize::from(draft("log.scope", "0") == "1");
     let first_menu = ui().next_id;
@@ -3586,14 +3778,9 @@ unsafe fn logs_page(h: HWND) {
     }
     click(
         h,
-        (
-            IX + IW - clear_width - 8 - export_width,
-            y,
-            export_width,
-            36,
-        ),
+        (CW - clear_width - 8 - export_width, y, export_width, 36),
         "导出日志",
-        Btn::Primary,
+        Btn::Normal,
         |_| {
             let query = if draft("log.scope", "0") == "1" {
                 let mut q = ui().query.clone();
@@ -3615,7 +3802,7 @@ unsafe fn logs_page(h: HWND) {
     );
     click(
         h,
-        (IX + IW - clear_width, y, clear_width, 36),
+        (CW - clear_width, y, clear_width, 36),
         "清除日志",
         Btn::Danger,
         |h| {
@@ -3630,19 +3817,23 @@ unsafe fn logs_page(h: HWND) {
             }
         },
     );
-    set_bottom(card, y + 36 + 12);
     tooltips(h, &tips);
     log_status(h, None);
     send(Command::Logs(query));
 }
 unsafe fn color_list(list: HWND, dark: bool) {
     let p = Palette::new(dark);
-    SendMessageW(list, LVM_SETBKCOLOR, None, Some(LPARAM(p.card.0 as isize)));
+    SendMessageW(
+        list,
+        LVM_SETBKCOLOR,
+        None,
+        Some(LPARAM(p.ground.0 as isize)),
+    );
     SendMessageW(
         list,
         LVM_SETTEXTBKCOLOR,
         None,
-        Some(LPARAM(p.card.0 as isize)),
+        Some(LPARAM(p.ground.0 as isize)),
     );
     SendMessageW(
         list,
@@ -3708,38 +3899,37 @@ unsafe fn detail_page(h: HWND) {
         let s = ui();
         (s.detail.clone(), s.bias)
     };
-    let (card, top) = begin(8);
-    let top = card_title(h, top, "日志详情");
+    let top = heading(h, 0, 8, CW, "日志详情", "") + 14;
     let kind = entry["level"].as_str().unwrap_or("");
     badge(
         h,
-        IX,
+        0,
         top,
         level_label(kind),
         Badge::Level(level_index(kind)),
     );
-    let top = top + 34;
+    let top = top + 30;
     let top = para(
         h,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         &format_time(entry["timestamp"].as_u64().unwrap_or(0), bias),
         single(Font::Mono, Ink::Secondary),
     ) + 4;
     let top = para(
         h,
-        IX,
+        0,
         top,
-        IW,
+        CW,
         entry["source"].as_str().unwrap_or("应用"),
         single(Font::Normal, Ink::Secondary),
     ) + 12;
-    surface(IX, top, IW, 300, Surface::Field);
+    surface(0, top, CW, 300, Surface::Field);
     let c = Control {
         look: look(Font::Mono, Ink::Text),
         field: true,
-        ..at(Kind::ReadOnly, 160, (IX + 12, top + 12, IW - 24, 276))
+        ..at(Kind::ReadOnly, 160, (12, top + 12, CW - 24, 276))
     };
     make(
         h,
@@ -3749,79 +3939,83 @@ unsafe fn detail_page(h: HWND) {
         ES_MULTILINE as u32 | ES_AUTOVSCROLL as u32 | WS_VSCROLL.0,
     );
     let top = top + 316;
-    click(h, (IX, top, 140, 44), "复制详情", Btn::Primary, |h| {
+    click(h, (0, top, 120, 36), "复制详情", Btn::Normal, |h| {
         if let Ok(edit) = GetDlgItem(Some(h), 160) {
             SendMessageW(edit, EM_SETSEL, Some(WPARAM(0)), Some(LPARAM(-1)));
             SendMessageW(edit, WM_COPY, None, None);
             feedback(h, "已复制日志详情");
         }
     });
-    click(
-        h,
-        (IX + 152, top, 140, 44),
-        "返回日志",
-        Btn::Normal,
-        |h| go(h, LOGS),
-    );
-    end(card, top + 44);
+    click(h, (128, top, 120, 36), "返回日志", Btn::Normal, |h| {
+        go(h, LOGS)
+    });
 }
 unsafe fn about_page(h: HWND) {
-    // Grid as in linux.rs: a hero card across the top, then 核心功能 | 更新检查 over 项目信息.
-    surface(0, 0, CW, 112, Surface::Card);
+    // Layout as in linux.rs: a 320×200 version card beside the name, then 核心功能 | 更新检查
+    // over 项目信息.
+    surface(0, 0, 320, 200, Surface::Face(false));
     label(
         h,
         0,
-        (24, 24, 64, 64),
+        (24, 22, 140, 16),
+        "NETMATE",
+        single(Font::Tiny, Ink::FaceSoft),
+    );
+    label(
+        h,
+        0,
+        (164, 22, 132, 16),
+        concat!("v", env!("CARGO_PKG_VERSION")),
+        Look {
+            align: 2,
+            ..single(Font::Mono, Ink::FaceSoft)
+        },
+    );
+    label(
+        h,
+        0,
+        (24, 56, 46, 34),
         "",
         Look {
-            shape: Shape::Mark,
+            shape: Shape::Chip(false),
             ..Default::default()
         },
     );
-    let version = concat!("版本 ", env!("CARGO_PKG_VERSION"));
-    let pill = width_of(version, Font::Strong) + 28;
-    let names = CW - 24 - 64 - 20 - 20 - pill - 24;
     label(
         h,
         0,
-        (108, 26, names, 32),
+        (24, 104, 272, 40),
         "NetMate",
-        single(Font::Notice, Ink::Heading),
+        single(Font::Name, Ink::Face),
     );
     label(
         h,
         0,
-        (108, 62, names, 22),
+        (24, 156, 272, 22),
+        "TUST CAMPUS NETWORK",
+        single(Font::Mono, Ink::Face),
+    );
+    let x = 320 + 36;
+    let names = CW - x;
+    label(
+        h,
+        0,
+        (x, 44, names, 42),
+        "NetMate",
+        single(Font::Name, Ink::Text),
+    );
+    label(
+        h,
+        0,
+        (x, 94, names, 22),
         "智能 WiFi 管理工具",
         single(Font::Normal, Ink::Secondary),
     );
-    label(
-        h,
-        0,
-        (CW - 24 - pill, 41, pill, 30),
-        version,
-        Look {
-            font: Font::Strong,
-            badge: Some(Badge::Sky),
-            ..Default::default()
-        },
-    );
-    let top = 112 + 16;
+    let version = concat!("版本 ", env!("CARGO_PKG_VERSION"));
+    badge(h, x, 124, version, Badge::Auth);
+    let top = 200 + 32;
     // Left column: core features.
-    let features = surface(0, top, COL, 0, Surface::Card);
-    let (ix, width) = (20, COL - 40);
-    let rule = |x: i32, y: i32, width: i32| {
-        surface(x, y + 34, width, 1, Surface::Rule);
-        y + 48
-    };
-    label(
-        h,
-        0,
-        (ix, top + 18, width, 24),
-        "核心功能",
-        single(Font::Card, Ink::Heading),
-    );
-    let mut y = rule(ix, top + 18, width);
+    let mut y = heading(h, 0, top, COL, "核心功能", "");
     for item in [
         "WiFi 自动重连（三阶段优先级切换）",
         "校园网认证自动登录",
@@ -3832,47 +4026,28 @@ unsafe fn about_page(h: HWND) {
         label(
             h,
             0,
-            (ix, y + 4, 16, 16),
+            (0, y + 12, 16, 16),
             "",
             Look {
-                shape: Shape::Glyph(3, Ink::Success),
+                shape: Shape::Glyph(3, Ink::Ok),
                 ..Default::default()
             },
         );
         label(
             h,
             0,
-            (ix + 26, y, width - 26, 24),
+            (26, y + 9, COL - 26, 22),
             item,
             single(Font::Normal, Ink::Text),
         );
-        y += 33;
+        y += 40;
+        hairline(0, y - 1, COL);
     }
-    let left_bottom = y + 11;
     // Right column: update check above project information.
-    let x = COL + 16;
-    let ix = x + 20;
-    let update = surface(x, top, COL, 0, Surface::Card);
-    label(
-        h,
-        0,
-        (ix, top + 18, width, 24),
-        "更新检查",
-        single(Font::Card, Ink::Heading),
-    );
-    let y = rule(ix, top + 18, width);
-    let update_bottom = update_view(h, ix, y, width) + 20;
-    set_bottom(update, update_bottom);
-    let top = update_bottom + 16;
-    let links = surface(x, top, COL, 0, Surface::Card);
-    label(
-        h,
-        0,
-        (ix, top + 18, width, 24),
-        "项目信息",
-        single(Font::Card, Ink::Heading),
-    );
-    let mut y = rule(ix, top + 18, width);
+    let x = COL + 32;
+    let y = heading(h, x, top, COL, "更新检查", "");
+    let y = update_view(h, x, y + 10, COL) + 24;
+    let mut y = heading(h, x, y, COL, "项目信息", "");
     for (title, url) in [
         (
             "GitHub 仓库",
@@ -3886,35 +4061,38 @@ unsafe fn about_page(h: HWND) {
         label(
             h,
             0,
-            (ix, y, 96, 22),
+            (x, y + 10, 96, 22),
             title,
-            single(Font::Strong, Ink::Primary),
+            single(Font::Strong, Ink::GoldText),
         );
         // Without Win32_UI_Shell there is no ShellExecuteW; the address stays selectable.
         let c = Control {
             look: look(Font::Small, Ink::Secondary),
-            ..at(Kind::ReadOnly, 0, (ix + 100, y + 2, width - 100, 20))
+            ..at(Kind::ReadOnly, 0, (x + 100, y + 12, COL - 100, 20))
         };
         make(h, w!("EDIT"), url, c, ES_AUTOHSCROLL as u32);
-        y += 30;
+        y += 42;
+        hairline(x, y - 1, COL);
     }
-    y = para(
+    let quit = width_of("退出 NetMate", Font::Medium) + 30;
+    label(
         h,
-        ix,
-        y + 2,
-        width,
+        0,
+        (x, y + 15, COL - quit - 12, 20),
         "© 2026 NetMate. All rights reserved.",
         single(Font::Small, Ink::Secondary),
-    ) + 10;
-    let quit = width_of("退出 NetMate", Font::Strong) + 36;
-    click(h, (ix, y, quit, 36), "退出 NetMate", Btn::Danger, |h| {
-        send(Command::Quit);
-        let _ = DestroyWindow(h);
-    });
-    let right_bottom = y + 36 + 20;
-    set_bottom(links, right_bottom);
-    // Equal column heights: the features card reaches the bottom of the right column.
-    set_bottom(features, left_bottom.max(right_bottom));
+    );
+    click(
+        h,
+        (x + COL - quit, y + 8, quit, 34),
+        "退出 NetMate",
+        Btn::Danger,
+        |h| {
+            send(Command::Quit);
+            let _ = DestroyWindow(h);
+        },
+    );
+    hairline(x, y + 50, COL);
 }
 /// The update block: status text above the actions the agent's update state allows.
 /// Returns the bottom edge.
@@ -3959,13 +4137,17 @@ unsafe fn update_view(h: HWND, x: i32, y: i32, width: i32) -> i32 {
     let top = para(h, x, y, width, &message, look(Font::Small, Ink::Secondary)) + 10;
     let mut left = x;
     for (title, command, disabled) in actions {
-        let w = width_of(title, Font::Strong) + 32;
+        let w = width_of(title, Font::Medium) + 30;
         let checking = matches!(command, Command::UpdateCheck);
         button(
             h,
-            (left, top, w, 36),
+            (left, top, w, 34),
             title,
-            Btn::Normal,
+            if matches!(command, Command::UpdateDownload | Command::UpdateInstall) {
+                Btn::Primary
+            } else {
+                Btn::Normal
+            },
             Some(act(move |h| {
                 if send(command.clone()) && checking {
                     ui().update["checking"] = json!(true);
@@ -3976,7 +4158,7 @@ unsafe fn update_view(h: HWND, x: i32, y: i32, width: i32) -> i32 {
         );
         left += w + 8;
     }
-    top + 36
+    top + 34
 }
 unsafe fn on_theme(h: HWND) {
     let dark = {
@@ -4010,14 +4192,14 @@ unsafe fn on_theme(h: HWND) {
         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
     );
 }
-/// Runs the 0.55 s switch transition towards `dark`, or jumps there when animations are off.
+/// Runs the 0.3 s switch transition towards `dark`, or jumps there when animations are off.
 unsafe fn start_toggle(h: HWND, dark: bool) {
     ui().toggle.night = dark;
     animate_toggle(h);
 }
-/// Starts the 16 ms frame timer for a switch, hover or activation change; `step_toggle` stops
-/// it once nothing moves and the window is not active. With system animations off the switch
-/// jumps to its end state and no timer runs.
+/// Starts the 16 ms frame timer for a theme or hover change; `step_toggle` stops it once nothing
+/// moves, so the switch never animates while idle. With system animations off the switch jumps
+/// to its end state and no timer runs.
 unsafe fn animate_toggle(h: HWND) {
     let start = {
         let mut s = ui();
@@ -4029,7 +4211,6 @@ unsafe fn animate_toggle(h: HWND) {
             let start = !s.toggle.ticking;
             if start {
                 s.toggle.ticking = true;
-                s.toggle.last = None;
             }
             start
         }
@@ -4056,23 +4237,6 @@ unsafe fn step_toggle(h: HWND) {
     }
     if let Ok(toggle) = GetDlgItem(Some(h), 901) {
         let _ = InvalidateRect(Some(toggle), None, false);
-    }
-}
-/// Ambient motion (halo breathing, cloud sway, star twinkle) runs only while the window is
-/// shown, not minimized and active; otherwise it eases to a still frame and the timer stops.
-unsafe fn set_ambient(h: HWND, active: bool) {
-    let active = active
-        && IsWindowVisible(h).as_bool()
-        && !IsIconic(h).as_bool()
-        && appearance::animations_enabled();
-    let changed = {
-        let mut s = ui();
-        let changed = s.toggle.ambient != active;
-        s.toggle.ambient = active;
-        changed
-    };
-    if changed {
-        animate_toggle(h);
     }
 }
 unsafe fn on_command(h: HWND, id: u16, code: u32) {
@@ -4420,15 +4584,7 @@ unsafe fn draw_item(h: HWND, item: &DRAWITEMSTRUCT) {
         origin: (x, y),
     };
     if item.CtlType == ODT_STATIC {
-        appearance::static_text(
-            item,
-            control.look,
-            dark,
-            &fonts,
-            dpi,
-            &control.badges,
-            &backdrop,
-        );
+        appearance::static_text(item, control.look, dark, &fonts, dpi, &backdrop);
     } else {
         let active = control.btn == Btn::Nav && page_group(page) == control.id;
         appearance::button(
@@ -4455,11 +4611,11 @@ unsafe fn control_color(message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         .map(|c| c.look.ink.color(s.dark))
         .unwrap_or(p.text);
     let _ = SetTextColor(dc, ink);
-    let _ = SetBkColor(dc, if input { p.input(s.dark) } else { p.card });
+    let _ = SetBkColor(dc, if input { p.field } else { p.ground });
     if message == WM_CTLCOLORSTATIC || message == WM_CTLCOLORBTN {
         let _ = SetBkMode(dc, TRANSPARENT);
     }
-    LRESULT(if input { s.input_brush } else { s.card_brush })
+    LRESULT(if input { s.input_brush } else { s.ground_brush })
 }
 unsafe fn list_notify(h: HWND, l: LPARAM) -> LRESULT {
     let header = &*(l.0 as *const NMHDR);
@@ -4499,10 +4655,10 @@ unsafe fn list_notify(h: HWND, l: LPARAM) -> LRESULT {
                 .unwrap_or(5);
             draw.clrText = match draw.iSubItem {
                 1 => Ink::Level(level).color(s.dark),
-                0 | 2 => rgb_secondary(s.dark),
+                0 | 2 => p.text2,
                 _ => p.text,
             };
-            draw.clrTextBk = p.card;
+            draw.clrTextBk = p.ground;
             return LRESULT(CDRF_DODEFAULT as isize);
         }
     } else if header.code == NM_DBLCLK || header.code == NM_RETURN {
@@ -4523,9 +4679,6 @@ unsafe fn list_notify(h: HWND, l: LPARAM) -> LRESULT {
         }
     }
     LRESULT(0)
-}
-fn rgb_secondary(dark: bool) -> COLORREF {
-    appearance::rgb(if dark { 0x94a3b8 } else { 0x64748b })
 }
 unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match message {
@@ -4561,32 +4714,9 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
             ui().sizing = true;
             LRESULT(0)
         }
-        WM_ACTIVATE => {
-            // Low word: WA_INACTIVE or an activation; high word: minimized.
-            let active = (w.0 & 0xffff) as u32 != WA_INACTIVE && (w.0 >> 16) & 0xffff == 0;
-            set_ambient(h, active);
-            DefWindowProcW(h, message, w, l)
-        }
-        WM_ACTIVATEAPP => {
-            if w.0 == 0 {
-                set_ambient(h, false);
-            }
-            DefWindowProcW(h, message, w, l)
-        }
-        WM_SHOWWINDOW => {
-            if w.0 == 0 {
-                set_ambient(h, false);
-            }
-            DefWindowProcW(h, message, w, l)
-        }
         WM_SIZE | WM_EXITSIZEMOVE => {
             if message == WM_EXITSIZEMOVE {
                 ui().sizing = false;
-            }
-            if message == WM_SIZE {
-                // Minimizing pauses the ambient motion; restoring resumes it if still active.
-                let active = w.0 as u32 != SIZE_MINIMIZED && GetForegroundWindow() == h;
-                set_ambient(h, active);
             }
             let (sizing, stale, page) = {
                 let s = ui();
@@ -4723,7 +4853,7 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
             }
             {
                 let mut s = ui();
-                for object in s.fonts.into_iter().chain([s.card_brush, s.input_brush]) {
+                for object in s.fonts.into_iter().chain([s.ground_brush, s.input_brush]) {
                     let _ = DeleteObject(HGDIOBJ(object as *mut _));
                 }
                 s.children.clear();

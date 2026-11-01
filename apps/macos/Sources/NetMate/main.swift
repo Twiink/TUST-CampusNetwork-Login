@@ -134,20 +134,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         root.onAppearanceChange = { [weak self] dark in self?.themeSwitch.dark = dark }
         window.contentView = root
         let sidebar = NetMateSidebar(); sidebar.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(sidebar)
+        // `.rail`: the brand card, a hairline, the page list, then the theme switch at the foot.
         let menu = NSStackView(); menu.orientation = .vertical; menu.alignment = .leading; menu.spacing = 4
         menu.translatesAutoresizingMaskIntoConstraints = false; sidebar.addSubview(menu)
-        // `.brand`: WiFi mark and NetMate in the rail text colour.
-        let brand = hstack(10, in: menu)
-        brand.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
-        icon("wifi", size: 20, color: NetMateColors.railText, in: brand)
-        tag("NetMate", in: brand, size: 19, weight: .heavy, color: NetMateColors.railText)
-        menu.setCustomSpacing(26, after: brand)
+        let brand = hstack(12, in: menu)
+        brand.edgeInsets = NSEdgeInsets(top: 0, left: 4, bottom: 0, right: 4)
+        brand.addArrangedSubview(NetMateBrandCard(frame: .zero))
+        let brandNames = vstack(1, in: brand, fill: false)
+        tag("NetMate", in: brandNames, size: 18, weight: .bold, color: NetMateColors.railText)
+        tag("天津科技大学校园网", in: brandNames, size: 11.5, color: NetMateColors.railText2)
+        menu.setCustomSpacing(22, after: brand)
+        let navRule = NetMateRule(NetMateColors.railLine); menu.addArrangedSubview(navRule); fillWidth(navRule, menu)
+        menu.setCustomSpacing(18, after: navRule)
         for (name, title, symbol) in [("运行状态", "运行状态", "wifi"), ("配置设置", "配置设置", "slider.vertical.3"), ("日志", "运行日志", "doc.text"), ("关于", "关于", "info.circle")] {
             let b = button(title, in: menu) { [weak self] in self?.go(name) }
             b.navigation = true; b.symbol = symbol
             b.widthAnchor.constraint(equalToConstant: 172).isActive = true
             navigation[name] = b
         }
+        let footRule = NetMateRule(NetMateColors.railLine); sidebar.addSubview(footRule)
         let themeAction = Action { [weak self] in self?.switchTheme() }
         themeSwitch.target = themeAction; themeSwitch.action = #selector(Action.invoke)
         objc_setAssociatedObject(themeSwitch, &actionKey, themeAction, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -163,15 +168,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         feedback.font = .systemFont(ofSize: 12.5); feedback.textColor = NetMateColors.secondary; feedback.isSelectable = true
         main.addArrangedSubview(feedback)
         NSLayoutConstraint.activate([
+            // The rail is 200 wide with 26/14/20 padding; the navigation items are 172 wide.
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor), sidebar.topAnchor.constraint(equalTo: root.topAnchor),
-            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor), sidebar.widthAnchor.constraint(equalToConstant: 196),
-            menu.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12), menu.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 40),
-            // 88×40 toggle (200×90 at 0.44) plus room for the 1.07 hover scale and its shadow.
-            themeSwitch.centerXAnchor.constraint(equalTo: sidebar.centerXAnchor), themeSwitch.bottomAnchor.constraint(equalTo: themeCaption.topAnchor, constant: 2),
-            themeSwitch.widthAnchor.constraint(equalToConstant: 100), themeSwitch.heightAnchor.constraint(equalToConstant: 54),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor), sidebar.widthAnchor.constraint(equalToConstant: 200),
+            menu.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 14), menu.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -14),
+            menu.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 26),
+            // `.rail-foot`: a hairline, 18 above the 96×46 switch, and the caption 8 below it.
+            footRule.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 14), footRule.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -14),
+            footRule.topAnchor.constraint(greaterThanOrEqualTo: menu.bottomAnchor, constant: 16),
+            footRule.bottomAnchor.constraint(equalTo: themeSwitch.topAnchor, constant: -18),
+            themeSwitch.centerXAnchor.constraint(equalTo: sidebar.centerXAnchor), themeSwitch.bottomAnchor.constraint(equalTo: themeCaption.topAnchor, constant: -8),
+            themeSwitch.widthAnchor.constraint(equalToConstant: 96), themeSwitch.heightAnchor.constraint(equalToConstant: 46),
             themeCaption.centerXAnchor.constraint(equalTo: sidebar.centerXAnchor), themeCaption.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -20),
-            main.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: 36), main.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -36),
-            main.topAnchor.constraint(equalTo: root.topAnchor, constant: 40), main.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -24),
+            // `.main`: padding 26 32 24.
+            main.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: 32), main.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -32),
+            main.topAnchor.constraint(equalTo: root.topAnchor, constant: 26), main.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -24),
             pageHost.widthAnchor.constraint(equalTo: main.widthAnchor), feedback.widthAnchor.constraint(equalTo: main.widthAnchor),
             pageHost.heightAnchor.constraint(greaterThanOrEqualToConstant: 400)
         ])
@@ -335,7 +346,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         let b = NetMateButton(title: title, target: action, action: #selector(Action.invoke))
         b.primary = ["立即连接", "保存", "添加认证账号", "添加 WiFi", "保存并添加账号", "恢复自动认证", "下载更新", "立即安装"].contains(title)
         b.destructive = title.contains("删除") || ["断开连接", "清除日志", "确认清空"].contains(title)
-        b.font = .systemFont(ofSize: 15)
+        b.font = .systemFont(ofSize: 13.5, weight: .medium)
         let accessible = name ?? title
         b.setAccessibilityLabel(accessible); b.setAccessibilityIdentifier(accessible)
         retain(action, on: b); box.addArrangedSubview(b)
@@ -354,30 +365,79 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         view.contentTintColor = color
         parent.addArrangedSubview(view)
     }
-    @discardableResult func badge(_ value: String, _ color: NSColor, _ background: NSColor, in parent: NSStackView) -> NetMateBadge {
-        let b = NetMateBadge(value, color, background); parent.addArrangedSubview(b); return b
+    /// A single-line label with optional letter spacing (in em) and a monospaced face.
+    @discardableResult func label(_ value: String, in parent: NSStackView, size: CGFloat, weight: NSFont.Weight = .regular,
+                                  color: NSColor, tracking: CGFloat = 0, mono: Bool = false) -> NSTextField {
+        let font: NSFont = mono ? .monospacedSystemFont(ofSize: size, weight: weight) : .systemFont(ofSize: size, weight: weight)
+        let field = NSTextField(labelWithString: value)
+        field.font = font; field.textColor = color; field.lineBreakMode = .byTruncatingTail
+        if tracking != 0 {
+            let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
+            field.attributedStringValue = NSAttributedString(string: value, attributes: [.font: font, .foregroundColor: color, .kern: tracking * size, .paragraphStyle: paragraph])
+        }
+        parent.addArrangedSubview(field)
+        return field
+    }
+    /// `.badge`: an outlined 11.5 px tag.
+    @discardableResult func badge(_ value: String, _ color: NSColor, border: NSColor, in parent: NSStackView) -> NetMateBadge {
+        let b = NetMateBadge(value, color, border: border); parent.addArrangedSubview(b); return b
+    }
+    /// `.note`: the outlined pills beside the home card; `kind` is `gold`, `bad` or empty.
+    func note(_ value: String, _ kind: String) -> NetMateBadge {
+        let color = kind == "gold" ? NetMateColors.goldText : (kind == "bad" ? NetMateColors.bad : NetMateColors.secondary)
+        let border = kind == "gold" ? NetMateColors.gold : (kind == "bad" ? NetMateColors.bad : NetMateColors.line)
+        let n = NetMateBadge(value, color, border: border, size: 12, padding: NSEdgeInsets(top: 2, left: 8, bottom: 2, right: 8), radius: 5)
+        n.label.font = .systemFont(ofSize: 12)
+        return n
     }
     func rule(in parent: NSStackView) { let r = NetMateRule(); parent.addArrangedSubview(r); fillWidth(r, parent) }
-    /// `.card` with an `h3`-style heading separated by a bottom rule, as in App.css.
-    func card(_ title: String, in parent: NSStackView) -> NetMateCard {
-        let c = NetMateCard(); parent.addArrangedSubview(c); fillWidth(c, parent)
-        if !title.isEmpty { cardTitle(title, in: c.content) }
-        return c
+    /// `.sec`: a section whose heading sits on a 1.5 px ink rule; its rows are split by hairlines
+    /// instead of sitting on a card.
+    func section(_ title: String, in parent: NSStackView) -> NetMateBox {
+        let s = NetMateBox(.vertical, spacing: 0)
+        parent.addArrangedSubview(s); fillWidth(s, parent)
+        if !title.isEmpty { sectionHead(title, in: s.content) }
+        return s
     }
-    /// `.panel-h h2`.
+    /// `.panel-head`: the 13 px title, a flexible gap and room for trailing widgets; returns the row.
+    @discardableResult func sectionHead(_ title: String, in parent: NSStackView) -> NSStackView {
+        let head = NetMateBox(.horizontal, padding: NSEdgeInsets(top: 0, left: 0, bottom: 6, right: 0), spacing: 10)
+        head.bottomRule = NetMateColors.ink; head.bottomRuleWidth = 1.5
+        parent.addArrangedSubview(head); fillWidth(head, parent)
+        head.heightAnchor.constraint(greaterThanOrEqualToConstant: 34).isActive = true
+        label(title, in: head.content, size: 13, weight: .semibold, color: NetMateColors.text, tracking: 0.06)
+        spacer(in: head.content)
+        return head.content
+    }
+    /// A section with a head row; returns the section body and the head row.
+    func panel(_ title: String, in parent: NSStackView) -> (NSStackView, NSStackView) {
+        let s = section("", in: parent)
+        let head = sectionHead(title, in: s.content)
+        return (s.content, head)
+    }
+    /// A row on a 1 px hairline (`.set`, `.acct`, `.rule`, `.list-row`, `.kv`, `.feature` …).
+    func hairRow(in parent: NSStackView, _ orientation: NSUserInterfaceLayoutOrientation = .horizontal,
+                 padding: NSEdgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 10, right: 0), spacing: CGFloat = 12, minHeight: CGFloat = 0) -> NetMateBox {
+        let r = NetMateBox(orientation, padding: padding, spacing: spacing)
+        r.bottomRule = NetMateColors.line
+        parent.addArrangedSubview(r); fillWidth(r, parent)
+        if minHeight > 0 { r.heightAnchor.constraint(greaterThanOrEqualToConstant: minHeight).isActive = true }
+        return r
+    }
+    /// `.dialog-title` in the edit sheets.
     func cardTitle(_ title: String, in parent: NSStackView) {
-        let heading = tag(title, in: parent, size: 15, weight: .bold, color: NetMateColors.heading)
+        let heading = tag(title, in: parent, size: 18, weight: .bold, color: NetMateColors.heading)
         parent.setCustomSpacing(14, after: heading)
     }
     func box(_ orientation: NSUserInterfaceLayoutOrientation, in parent: NSStackView, padding: NSEdgeInsets, spacing: CGFloat = 8,
-             fill: NSColor?, stroke: NSColor? = nil, radius: CGFloat = 16, fullWidth: Bool = true) -> NetMateBox {
+             fill: NSColor?, stroke: NSColor? = nil, radius: CGFloat = 8, fullWidth: Bool = true) -> NetMateBox {
         let b = NetMateBox(orientation, padding: padding, spacing: spacing)
         b.fill = fill; b.stroke = stroke; b.radius = radius
         parent.addArrangedSubview(b); if fullWidth { fillWidth(b, parent) }
         return b
     }
     func insets(_ v: CGFloat, _ h: CGFloat) -> NSEdgeInsets { NSEdgeInsets(top: v, left: h, bottom: v, right: h) }
-    /// Rows of equal-width cells, `columns` per row (WifiMetricGrid / switcher grid).
+    /// Rows of equal-width cells, `columns` per row.
     func grid(_ views: [NSView], columns: Int, in parent: NSStackView, spacing: CGFloat = 12) {
         let rows = vstack(spacing, in: parent)
         var index = 0
@@ -390,10 +450,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
             index += columns
         }
     }
-    /// `.page-head h1`.
-    func pageTitle(_ title: String, in parent: NSStackView) -> NSStackView {
-        let row = hstack(10, in: parent)
-        tag(title, in: row, size: 26, weight: .heavy, color: NetMateColors.heading)
+    /// `.page-title-row`: the 22 px title in a row at least 40 high.
+    func pageTitle(_ title: String, in parent: NSStackView? = nil) -> NSStackView {
+        let row = hstack(14, in: parent)
+        row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40).isActive = true
+        tag(title, in: row, size: 22, weight: .bold, color: NetMateColors.heading)
         return row
     }
     /// `.dd`: a styled select whose choice runs `fn` with the selected index.
@@ -404,14 +465,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         if let fn { bind(popup) { [weak popup] in fn(popup?.indexOfSelectedItem ?? 0) } }
         return popup
     }
+    /// `.form-group`: a 12.5 px label over its control; in a row the groups share the width.
     func formGroup(_ title: String, in parent: NSStackView) -> NSStackView {
-        let group = vstack(8, in: parent)
-        text(title, in: group, size: 14, weight: .semibold, color: NetMateColors.label)
+        let vertical = parent.orientation == .vertical
+        let group = vstack(8, in: parent, fill: vertical)
+        text(title, in: group, size: 12.5, color: NetMateColors.label)
+        if vertical { parent.setCustomSpacing(10, after: group) }
         return group
     }
     func inputField(_ value: String, secure: Bool = false, placeholder: String = "", name: String) -> NSTextField {
         let f: NSTextField = secure ? NSSecureTextField(string: value) : NSTextField(string: value)
-        f.placeholderString = placeholder; f.font = .systemFont(ofSize: 15)
+        f.placeholderString = placeholder; f.font = .systemFont(ofSize: 13.5)
         f.bezelStyle = .roundedBezel; f.controlSize = .large
         f.setAccessibilityLabel(name); f.setAccessibilityIdentifier(name)
         return f
@@ -433,29 +497,39 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
     }
     @discardableResult func check(_ title: String, _ value: Bool, in parent: NSStackView, _ fn: ((Bool) -> Void)? = nil) -> NSButton {
         let b = NSButton(checkboxWithTitle: title, target: nil, action: nil)
-        b.state = value ? .on : .off; b.font = .systemFont(ofSize: 15)
+        b.state = value ? .on : .off; b.font = .systemFont(ofSize: 13.5)
         if let fn { bind(b) { [weak b] in fn(b?.state == .on) } }
         parent.addArrangedSubview(b)
         return b
     }
-    /// A checkbox with its explanation underneath (`label` + `(desc)` in the original form rows).
-    func toggleRow(_ title: String, _ desc: String, _ value: Bool, in parent: NSStackView, _ fn: @escaping (Bool) -> Void) {
-        let group = vstack(2, in: parent)
-        check(title, value, in: group, fn)
-        if !desc.isEmpty {
-            let d = text("(\(desc))", in: group, size: 13, color: NetMateColors.secondary)
-            d.setContentHuggingPriority(.init(1), for: .horizontal)
-        }
-        parent.setCustomSpacing(14, after: group)
+    /// A form checkbox with its explanation inline: `label (desc)`.
+    func checkRow(_ title: String, _ desc: String, _ value: Bool, in parent: NSStackView, _ fn: @escaping (Bool) -> Void) {
+        let line = hstack(8, in: parent)
+        check(title, value, in: line, fn)
+        if !desc.isEmpty { tag("(\(desc))", in: line, size: 12.5, color: NetMateColors.secondary) }
+        parent.setCustomSpacing(10, after: line)
     }
-    /// A group of buttons where exactly one is selected, like GTK's grouped toggle buttons.
+    /// `.set`: label and description on the left, a switch on the right, over a hairline.
+    func setRow(_ title: String, _ desc: String, _ value: Bool, in parent: NSStackView, _ fn: @escaping (Bool) -> Void) {
+        let line = hairRow(in: parent, padding: insets(10, 0), spacing: 24, minHeight: 46)
+        let copy = vstack(2, in: line.content, fill: false)
+        copy.setContentHuggingPriority(.init(1), for: .horizontal)
+        text(title, in: copy, size: 14, weight: .medium)
+        if !desc.isEmpty { text(desc, in: copy, size: 12.5, color: NetMateColors.secondary) }
+        let toggle = NSSwitch()
+        toggle.state = value ? .on : .off
+        toggle.setAccessibilityLabel(title)
+        bind(toggle) { [weak toggle] in fn(toggle?.state == .on) }
+        line.content.addArrangedSubview(toggle)
+    }
+    /// A group of buttons where exactly one is selected; `chip` draws the log level `.seg` track.
     func choices(_ items: [(String, String)], selected: String, chip: Bool, columns: Int, in parent: NSStackView, _ fn: @escaping (String) -> Void) {
         let buttons = NSHashTable<NetMateButton>.weakObjects()
         var views = [NSView]()
         for (value, title) in items {
             let b = NetMateButton(title: title, target: nil, action: nil)
             b.choice = !chip; b.chip = chip; b.selectedPage = value == selected
-            b.font = .systemFont(ofSize: chip ? 13 : 15)
+            b.font = .systemFont(ofSize: chip ? 12.5 : 13.5, weight: .medium)
             b.setAccessibilityLabel(title); b.setAccessibilityIdentifier(title)
             bind(b) { [weak b] in
                 guard let b else { return }
@@ -467,24 +541,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         if columns > 0 {
             grid(views, columns: columns, in: parent, spacing: 10)
         } else {
-            let track = box(.horizontal, in: parent, padding: insets(3, 3), spacing: 2, fill: NetMateColors.surface2, radius: 9, fullWidth: false)
+            let track = box(.horizontal, in: parent, padding: insets(3, 3), spacing: 2, fill: NetMateColors.field, stroke: NetMateColors.line, radius: 8, fullWidth: false)
             views.forEach { track.content.addArrangedSubview($0) }
         }
     }
+    /// `.empty-box`: a dashed outline with a faded icon.
     func emptyBox(_ symbol: String, _ message: String, in parent: NSStackView) {
-        let b = box(.vertical, in: parent, padding: insets(28, 28), fill: nil, stroke: NetMateColors.emptyStroke, radius: 9)
-        b.lineWidth = 2; b.dashed = true; b.content.alignment = .centerX
-        icon(symbol, size: 28, color: NetMateColors.idle, in: b.content)
-        text(message, in: b.content, color: NetMateColors.secondary, center: true)
-    }
-    func listRow(in parent: NSStackView) -> NetMateBox {
-        let row = box(.horizontal, in: parent, padding: insets(11, 16), spacing: 12, fill: NetMateColors.rowFill, stroke: NetMateColors.rowStroke, radius: 9)
-        parent.setCustomSpacing(8, after: row)
-        return row
-    }
-    func priorityBadge(_ title: String, _ priority: Int, in parent: NSStackView) {
-        let (color, fill) = NetMateColors.priority(priority)
-        badge(title, color, fill, in: parent)
+        let previous = parent.arrangedSubviews.last
+        let b = box(.vertical, in: parent, padding: insets(24, 24), fill: nil, stroke: NetMateColors.faint, radius: 10)
+        if let previous { parent.setCustomSpacing(12, after: previous) }
+        b.lineWidth = 1.5; b.dashed = true; b.content.alignment = .centerX
+        icon(symbol, size: 28, color: NetMateColors.secondary.withAlphaComponent(0.5), in: b.content)
+        text(message, in: b.content, size: 14, color: NetMateColors.secondary, center: true)
     }
 }
 
@@ -529,16 +597,15 @@ extension App {
         for (name, item) in navigation { item.selectedPage = name == page }
         renderedPage = page
         if page == "日志" { logsPage(); return }
-        let titleRow = hstack(10)
-        let title = ["运行状态": "运行状态", "配置设置": "配置设置"][page] ?? "关于"
-        tag(title, in: titleRow, size: 26, weight: .heavy, color: NetMateColors.heading)
+        let titleRow = pageTitle(["运行状态": "运行状态", "配置设置": "配置设置"][page] ?? "关于")
+        if page == "配置设置" { tag("修改后立即保存并生效", in: titleRow, size: 13, color: NetMateColors.secondary) }
         let (scroll, content) = scrolled(in: pageHost)
-        layout(titleRow, scroll, gap: 22)
+        layout(titleRow, scroll, gap: 8)
         pageScroll = scroll
         switch page {
         case "运行状态":
             // A group whose accessible name is the ready marker CI looks up.
-            let group = vstack(16, in: content)
+            let group = vstack(22, in: content)
             group.setAccessibilityElement(true); group.setAccessibilityRole(.group)
             group.setAccessibilityLabel("网络连接状态"); group.setAccessibilityIdentifier("网络连接状态")
             home = group
@@ -562,6 +629,11 @@ extension App {
         let data = (try? JSONSerialization.data(withJSONObject: [s, config["revision"] ?? NSNull(), config.isEmpty] as [Any], options: [.sortedKeys])) ?? Data()
         return String(data: data, encoding: .utf8) ?? ""
     }
+    /// "2023101234" → "2023 1012 34", printed like the number on a campus card.
+    func cardNumber(_ username: String) -> String {
+        let chars = Array(username)
+        return stride(from: 0, to: chars.count, by: 4).map { String(chars[$0..<min($0 + 4, chars.count)]) }.joined(separator: " ")
+    }
     func refreshHome() {
         guard page == "运行状态", let home else { return }
         let signature = homeSignatureValue()
@@ -570,69 +642,85 @@ extension App {
         home.arrangedSubviews.forEach { home.removeArrangedSubview($0); $0.removeFromSuperview() }
         pauseBanner(in: home)
         if snapshot.isEmpty || config.isEmpty {
-            let loading = card("", in: home)
-            loading.content.alignment = .centerX; loading.content.edgeInsets = insets(20, 0)
+            let loading = vstack(8, in: home)
+            loading.alignment = .centerX; loading.edgeInsets = insets(48, 32)
             let spinner = NSProgressIndicator(); spinner.style = .spinning; spinner.controlSize = .large; spinner.startAnimation(nil)
-            loading.content.addArrangedSubview(spinner)
-            text("正在检测 WiFi 连接...", in: loading.content, size: 22, weight: .bold, center: true)
-            text("请稍候，正在检查网络连接状态", in: loading.content, color: NetMateColors.secondary, center: true)
+            loading.addArrangedSubview(spinner)
+            loading.setCustomSpacing(16, after: spinner)
+            text("正在检测 WiFi 连接...", in: loading, size: 20, weight: .bold, center: true)
+            text("请稍候，正在检查网络连接状态", in: loading, size: 14, color: NetMateColors.secondary, center: true)
             return
         }
         let n = snapshot["network"] as? JSON ?? [:]
-        let ssid = str(n["ssid"])
-        let wifi = ssid != nil
+        let wifi = str(n["ssid"]) != nil
+        let ssid = str(n["ssid"]) ?? ""
         let heartbeatOn = flag(settingsValue["enableHeartbeat"])
         let online = flag(snapshot["internetReachable"])
         let rule = wifi ? currentRule(n) : nil
-        let place = "当前 WiFi · \(ssid ?? "")"
-        var view: SkyCopy
+        let accounts = wifi ? loginAccounts(n, rule) : []
+        let number = accounts.first.flatMap { str($0["username"]) }.map(cardNumber)
+        // Each extra account in the login order shows as one more card behind the front one.
+        let backs = min(2, max(0, accounts.count - 1))
+        var view: Face
         if !wifi {
-            var chips = [SkyChip("连接到 WiFi 后才能使用网络认证功能")]
-            if heartbeatOn { chips.append(SkyChip("心跳检测已暂停", alert: true)) }
-            view = SkyCopy(weather: "storm", place: "网络连接状态", title: "未连接 WiFi",
-                           body: "当前设备未连接到任何 WiFi 网络，请先连接 WiFi。", chips: chips)
+            var notes = [("连接到 WiFi 后才能使用网络认证功能", "")]
+            if heartbeatOn { notes.append(("心跳检测已暂停", "bad")) }
+            view = Face(tone: "bad", void: true, issuer: "TUST · 校园网认证", place: "无 WiFi", status: "未连接 WiFi",
+                        headline: "先连上 WiFi", body: "当前设备未连接到任何 WiFi 网络，请先连接 WiFi。",
+                        meta: [("WiFi", "无"), ("心跳检测", heartbeatOn ? "已暂停" : "已关闭")], notes: notes)
         } else if rule == nil && !flag(snapshot["requiresAuth"]) {
             let sameName = list("wifiRules").contains { str($0["ssid"]) == ssid }
-            view = SkyCopy(weather: "cloud", place: place, title: sameName ? "请选择当前 WiFi 规则" : "该 WiFi 未配置",
-                           body: sameName ? "同名 WiFi 身份信息不足或规则不匹配，请在配置设置中选择安全类型及 BSSID 后重试。" : "当前连接的 WiFi \"\(ssid ?? "")\" 尚未配置，请前往\"配置设置\"添加此 WiFi 的配置。",
-                           chips: [SkyChip("点击左侧菜单的\"配置设置\"添加 WiFi 配置")])
+            view = Face(tone: "idle", void: true, issuer: "TUST · 未配置", place: ssid,
+                        status: sameName ? "请选择当前 WiFi 规则" : "该 WiFi 未配置",
+                        headline: sameName ? "选择 WiFi 规则" : "添加这个 WiFi",
+                        body: sameName ? "同名 WiFi 身份信息不足或规则不匹配，请在配置设置中选择安全类型及 BSSID 后重试。" : "当前连接的 WiFi \"\(ssid)\" 尚未配置，请前往\"配置设置\"添加此 WiFi 的配置。",
+                        meta: [("WiFi", ssid), ("WiFi 规则", sameName ? "未匹配" : "未配置")],
+                        notes: [("点击左侧菜单的\"配置设置\"添加 WiFi 配置", "")])
         } else if !(rule.map({ flag($0["requiresAuth"]) }) ?? flag(snapshot["requiresAuth"])) {
-            view = SkyCopy(weather: online ? "clear" : "cloud", place: place, title: "无需认证",
-                           body: online ? "当前 WiFi 无需校园网认证，互联网可达。" : "当前 WiFi 无需校园网认证，互联网暂不可达。",
-                           chips: [SkyChip("此 WiFi 已配置为「无需认证」"), SkyChip("如家庭 WiFi、手机热点等网络")])
-        } else if loginAccounts(n, rule).isEmpty {
-            view = SkyCopy(weather: "cloud", place: place, title: "未配置账户",
-                           body: "该 WiFi 需要校园网认证，但尚未关联账户。请前往\"配置设置\"添加账户并关联到此 WiFi。",
-                           chips: [SkyChip("点击左侧菜单的\"配置设置\"添加账户并关联")])
+            view = Face(tone: online ? "ok" : "warn", void: false, issuer: "TUST · 无需认证", place: ssid, status: "无需认证",
+                        headline: online ? "互联网可达" : "互联网暂不可达",
+                        body: online ? "当前 WiFi 无需校园网认证，互联网可达。" : "当前 WiFi 无需校园网认证，互联网暂不可达。",
+                        meta: [("WiFi", ssid), ("WiFi 规则", "无需认证"), ("互联网", online ? "可达" : "不可达")],
+                        notes: [("此 WiFi 已配置为「无需认证」", "gold"), ("如家庭 WiFi、手机热点等网络", "")])
+        } else if accounts.isEmpty {
+            view = Face(tone: "idle", void: true, issuer: "TUST · 校园网认证", place: ssid, status: "未配置账户",
+                        headline: "还差一个账号", body: "该 WiFi 需要校园网认证，但尚未关联账户。请前往\"配置设置\"添加账户并关联到此 WiFi。",
+                        meta: [("WiFi 规则", "需要认证"), ("关联账户", "无")],
+                        notes: [("点击左侧菜单的\"配置设置\"添加账户并关联", "")])
             view.action = { [weak self] actions in
-                _ = self?.skyButton("添加认证账号", .onSky, in: actions) { [weak self] in self?.go("配置设置") }
+                _ = self?.button("添加认证账号", in: actions) { [weak self] in self?.go("配置设置") }
             }
         } else {
             let authenticated = flag(snapshot["authenticated"])
             let connecting = ["connecting", "authenticating", "verifying"].contains(snapshot["phase"] as? String ?? "")
-            view = SkyCopy(weather: authenticated && online ? "clear" : "cloud", place: place,
-                           title: authenticated ? (online ? "已认证并联网" : "已认证，互联网不可达") : "需要认证",
-                           body: authenticated ? (online ? "当前 WiFi 已通过认证且可访问互联网。" : "门户已确认认证成功，正在检查互联网连接。") : "当前 WiFi 需要校园网认证，请点击下方按钮进行认证。",
-                           chips: [SkyChip(rule != nil ? "此 WiFi 已配置为「需要认证」" : "根据当前网络信息识别为校园网"), SkyChip("如校园网 CMCC/CUCC/CTCC")])
+            view = Face(tone: authenticated && online ? "ok" : "warn", void: false, backs: backs, issuer: "TUST · 校园网认证", place: ssid,
+                        status: authenticated ? (online ? "已认证并联网" : "已认证，互联网不可达") : "需要认证",
+                        headline: authenticated ? (online ? "一切正常" : "正在检查互联网") : (connecting ? "正在认证" : "等待认证"),
+                        body: authenticated ? (online ? "当前 WiFi 已通过认证且可访问互联网。" : "门户已确认认证成功，正在检查互联网连接。") : "当前 WiFi 需要校园网认证，请点击下方按钮进行认证。",
+                        meta: [("运营商", ispLabel(str(accounts[0]["isp"]) ?? "")), ("关联账户", "\(accounts.count) 个"),
+                               ("WiFi 规则", rule != nil ? "需要认证" : "自动识别")],
+                        notes: [(rule != nil ? "此 WiFi 已配置为「需要认证」" : "根据当前网络信息识别为校园网", "gold"), ("如校园网 CMCC/CUCC/CTCC", "")])
             view.action = { [weak self] actions in
                 guard let self else { return }
                 if authenticated {
-                    self.skyButton("断开连接", .ghostSky, in: actions) { [weak self] in self?.request("logout") }
+                    self.button("断开连接", in: actions) { [weak self] in self?.request("logout") }
                 } else if connecting {
-                    self.skyButton("正在认证...", .onSky, in: actions) {}.isEnabled = false
+                    let b = self.button("正在认证...", in: actions) {}
+                    b.primary = true; b.isEnabled = false
                 } else {
-                    self.skyButton("立即连接", .onSky, in: actions) { [weak self] in self?.request("login") }
+                    self.button("立即连接", in: actions) { [weak self] in self?.request("login") }
                 }
             }
         }
-        skyPanel(view, in: home)
-        recoveryFailures(in: home)
+        accountCard(view, number: number, in: home)
         if wifi { metricStrip(n, in: home) }
-        // Two equal, top-aligned columns of equal height.
-        let cols = hstack(16, in: home, fill: true)
+        // Two equal, top-aligned columns: 本轮尝试 and 网络详情 | 切换 WiFi.
+        let cols = hstack(32, in: home, fill: true)
         cols.distribution = .fillEqually; cols.alignment = .top
-        cols.setHuggingPriority(.defaultHigh, for: .vertical)
-        if wifi { wifiDetails(n, in: cols) } else if heartbeatOn { heartbeatPaused(in: cols) }
+        let left = vstack(24, in: cols, fill: false)
+        recoveryFailures(in: left)
+        if wifi { wifiDetails(n, in: left) } else if heartbeatOn { heartbeatPaused(in: left) }
+        if left.arrangedSubviews.isEmpty { cols.removeArrangedSubview(left); left.removeFromSuperview() }
         switcher(current: rule, in: cols)
         if cols.arrangedSubviews.isEmpty { home.removeArrangedSubview(cols); cols.removeFromSuperview() }
         startTicking()
@@ -659,10 +747,12 @@ extension App {
     }
     func pauseBanner(in parent: NSStackView) {
         guard flag(settingsValue["autoAuthPaused"]) else { return }
-        let banner = card("", in: parent)
-        text("自动认证已暂停", in: banner.content)
-        let actions = hstack(0, in: banner.content)
-        button("恢复自动认证", in: actions) { [weak self] in
+        // `.banner`: gold outline, the message in gold text, the action on the right.
+        let banner = box(.horizontal, in: parent, padding: NSEdgeInsets(top: 8, left: 14, bottom: 8, right: 8), spacing: 12,
+                         fill: nil, stroke: NetMateColors.gold, radius: 8)
+        let message = tag("自动认证已暂停", in: banner.content, size: 14, weight: .semibold, color: NetMateColors.goldText)
+        message.setContentHuggingPriority(.init(1), for: .horizontal)
+        button("恢复自动认证", in: banner.content) { [weak self] in
             guard let self else { return }
             self.mutate(self.setting("autoAuthPaused", false))
         }
@@ -671,159 +761,174 @@ extension App {
         for (minimum, label, color) in steps where value >= minimum { return (label, color) }
         return fallback
     }
-    /// One white chip on the sky panel; `alert` is the red `.chip.alert`.
-    struct SkyChip {
-        let text: String
-        let alert: Bool
-        init(_ text: String, alert: Bool = false) { self.text = text; self.alert = alert }
-    }
-    /// Copy for the sky panel; an active recovery phase replaces it in `skyPanel`.
-    struct SkyCopy {
-        var weather: String
+    /// Copy for the home account card and the column beside it; an active recovery phase
+    /// replaces the status, copy, meta and actions in `accountCard`.
+    struct Face {
+        /// Lamp colour: `ok`, `warn`, `bad` or `idle`.
+        var tone: String
+        /// An empty dashed outline instead of a card face: no WiFi, no rule or no account.
+        var void: Bool
+        /// Cards stacked behind the front one (0–2).
+        var backs = 0
+        var issuer: String
         var place: String
-        var title: String
+        var status: String
+        var headline: String
         var body: String
-        var chips: [SkyChip]
-        var action: ((NSStackView) -> Void)?
-        init(weather: String, place: String, title: String, body: String, chips: [SkyChip]) {
-            self.weather = weather; self.place = place; self.title = title; self.body = body; self.chips = chips
-        }
+        var meta: [(String, String)]
+        /// Note text and its style: `gold`, `bad` or empty.
+        var notes: [(String, String)]
+        var action: ((NSStackView) -> Void)? = nil
     }
-    @discardableResult func skyButton(_ title: String, _ style: NetMateButtonStyle, in parent: NSStackView, _ fn: @escaping () -> Void) -> NetMateButton {
-        let b = button(title, in: parent, fn)
-        b.primary = false; b.destructive = false; b.look = style
-        return b
-    }
-    func skyLabel(_ value: String, in parent: NSStackView, size: CGFloat, weight: NSFont.Weight = .regular, alpha: CGFloat = 1) -> NSTextField {
-        let field = text(value, in: parent, size: size, weight: weight, color: NetMateColors.skyText.withAlphaComponent(alpha))
-        return field
-    }
-    func skyChip(_ value: String, alert: Bool = false, in parent: NSStackView) -> NetMateBadge {
-        let chip = NetMateBadge(value, .white, alert ? NetMateColors.hex(0xff5a5a).withAlphaComponent(0.85) : NSColor.white.withAlphaComponent(0.2))
-        parent.addArrangedSubview(chip)
-        return chip
-    }
-    /// The weather panel: copy at the bottom left, actions at the bottom right, static art behind.
-    func skyPanel(_ copyView: SkyCopy, in parent: NSStackView) {
-        var view = copyView
+    /// The top of the home page: the account card deck on the left, headline, copy, notes and
+    /// actions beside it. The magnetic stripe at the card's foot is the retry progress.
+    func accountCard(_ initial: Face, number: String?, in parent: NSStackView) {
+        var view = initial
         let phase = snapshot["phase"] as? String ?? ""
         let states: [String: (String, Bool)] = ["connecting": ("正在连接", false), "authenticating": ("正在认证", false), "verifying": ("正在确认联网", false),
                                                 "cooldown": ("等待下一轮重连", true), "failed": ("连接失败", true), "cancelled": ("已取消", true)]
-        let sky = NetMateSky()
-        sky.translatesAutoresizingMaskIntoConstraints = false
-        parent.addArrangedSubview(sky); fillWidth(sky, parent)
-        let copy = vstack(0); sky.addSubview(copy)
-        let actions = hstack(8); sky.addSubview(actions)
-        // The panel hugs its copy, at least 196 high.
-        let hug = sky.heightAnchor.constraint(equalToConstant: 196); hug.priority = .defaultLow; hug.isActive = true
-        NSLayoutConstraint.activate([
-            sky.heightAnchor.constraint(greaterThanOrEqualToConstant: 196),
-            copy.leadingAnchor.constraint(equalTo: sky.leadingAnchor, constant: 28),
-            copy.topAnchor.constraint(greaterThanOrEqualTo: sky.topAnchor, constant: 26),
-            copy.bottomAnchor.constraint(equalTo: sky.bottomAnchor, constant: -22),
-            copy.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
-            copy.trailingAnchor.constraint(lessThanOrEqualTo: actions.leadingAnchor, constant: -18),
-            actions.trailingAnchor.constraint(equalTo: sky.trailingAnchor, constant: -32),
-            actions.bottomAnchor.constraint(equalTo: sky.bottomAnchor, constant: -22)
-        ])
-        actions.setContentCompressionResistancePriority(.required, for: .horizontal)
-        // Keep the copy clear of the 176-wide weather art where the panel is wide enough.
-        let clear = copy.trailingAnchor.constraint(lessThanOrEqualTo: sky.trailingAnchor, constant: -236)
-        clear.priority = .defaultHigh; clear.isActive = true
-        // Otherwise take the available width so the wrapping labels do not collapse.
-        let stretch = copy.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -18)
-        stretch.priority = .init(500); stretch.isActive = true
-        let chips = hstack(6)
-        func heading(_ place: String, _ title: String) {
-            let placeLabel = skyLabel(place, in: copy, size: 13, alpha: 0.88)
-            copy.setCustomSpacing(6, after: placeLabel)
-            let t = skyLabel(title, in: copy, size: 30, weight: .heavy)
-            copy.setCustomSpacing(6, after: t)
-        }
-        func addChips() {
-            if let last = copy.arrangedSubviews.last { copy.setCustomSpacing(12, after: last) }
-            copy.addArrangedSubview(chips)
-        }
+        // Notes stack one per line in the narrow column beside the card.
+        let notes = vstack(6); notes.alignment = .leading
+        let actions = hstack(8)
+        var progress: (CGFloat, Int, Int)?
         if let state = states[phase] {
             let (status, failed) = state
-            view.weather = failed ? "storm" : "cloud"
             let target = str(snapshot["targetId"]).flatMap { id in list("wifiRules").first { str($0["id"]) == id }.flatMap { str($0["ssid"]) } }
             let ssid = target ?? str((snapshot["network"] as? JSON)?["ssid"]) ?? ""
-            heading("WiFi 自动重连", status)
-            var body = [String]()
-            if !ssid.isEmpty { body.append("目标 WiFi：\(ssid)") }
-            if let message = str(snapshot["message"]), !message.isEmpty { body.append(message) }
-            if !body.isEmpty { _ = skyLabel(body.joined(separator: "\n"), in: copy, size: 13.5, alpha: 0.9) }
-            addChips()
-            let countdown = skyChip("", in: chips)
-            countdown.isHidden = true
-            countdowns.append((countdown as NSView, countdown.label, false))
+            let allFailed = failed && !(snapshot["failures"] as? [JSON] ?? []).isEmpty
+            view.void = false
+            view.tone = failed ? "bad" : "warn"
+            view.status = status
+            view.headline = allFailed ? "所有 WiFi 连接失败" : "WiFi 自动重连"
+            var lines = [String]()
+            if !ssid.isEmpty { lines.append("目标 WiFi：\(ssid)") }
+            if let message = str(snapshot["message"]), !message.isEmpty { lines.append(message) }
+            view.body = lines.joined(separator: "\n")
+            view.meta = []
+            if !ssid.isEmpty { view.place = ssid; view.meta.append(("目标 WiFi", ssid)) }
             let attempt = int(snapshot["attempt"]) ?? 0, maxAttempts = int(snapshot["maxAttempts"]) ?? 0
             if maxAttempts > 0 {
-                copy.setCustomSpacing(14, after: chips)
-                let progress = hstack(10, in: copy)
-                let bar = NetMateProgress()
-                bar.barHeight = 5; bar.fraction = CGFloat(attempt) / CGFloat(maxAttempts)
-                bar.trough = NSColor.white.withAlphaComponent(0.28)
-                bar.color = NetMateColors.adaptive(0xffffff, 0xf0d98a)
-                bar.setAccessibilityElement(true); bar.setAccessibilityRole(.progressIndicator); bar.setAccessibilityLabel("尝试进度")
-                bar.setAccessibilityValue("\(attempt) / \(maxAttempts)")
-                progress.addArrangedSubview(bar)
-                bar.widthAnchor.constraint(equalToConstant: 260).isActive = true
-                _ = skyChip("第 \(attempt) / \(maxAttempts) 次", in: progress)
+                view.meta.append(("尝试", "第 \(attempt) / \(maxAttempts) 次"))
+                progress = (max(0, min(1, CGFloat(attempt) / CGFloat(maxAttempts))), attempt, maxAttempts)
             }
-            if failed { skyButton("立即重试", .onSky, in: actions) { [weak self] in self?.request("retry") } }
-            if phase != "failed" && phase != "cancelled" { skyButton("停止恢复", .ghostSky, in: actions) { [weak self] in self?.request("stop_recovery") } }
+            view.notes = []
+            let countdown = note("", "")
+            countdown.isHidden = true
+            notes.addArrangedSubview(countdown)
+            countdowns.append((countdown as NSView, countdown.label, false))
+            if failed { button("立即重试", in: actions) { [weak self] in self?.request("retry") }.primary = true }
+            if phase != "failed" && phase != "cancelled" { button("停止恢复", in: actions) { [weak self] in self?.request("stop_recovery") } }
             // The home action stays reachable; while connecting it would only repeat the title.
             if failed { view.action?(actions) }
         } else {
-            heading(view.place, view.title)
-            _ = skyLabel(view.body, in: copy, size: 13.5, alpha: 0.9)
-            addChips()
-            for chip in view.chips { _ = skyChip(chip.text, alert: chip.alert, in: chips) }
             view.action?(actions)
         }
-        sky.weather = view.weather
+        let hero = hstack(40, in: parent, fill: true)
+        hero.alignment = .centerY
+        let deck = NetMateDeck(backs: view.void ? 0 : view.backs, shadow: !view.void)
+        hero.addArrangedSubview(deck)
+        let card = NetMateCardFace(void: view.void)
+        deck.addFace(card)
+        let face = card.content
+        let c = NetMateColors.self
+        let ink = view.void ? c.text : c.faceText
+        let muted = view.void ? c.secondary : c.faceText2
+        // `.id-top`: issuer and place in 11.5 px, tracked 0.12 em.
+        let top = hstack(12, in: face, fill: true)
+        let issuer = label(view.issuer, in: top, size: 11.5, color: muted, tracking: 0.12)
+        issuer.setContentCompressionResistancePriority(.required, for: .horizontal)
+        spacer(in: top)
+        let place = label(view.place, in: top, size: 11.5, color: muted, tracking: 0.12)
+        place.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        face.setCustomSpacing(18, after: top)
+        let chip = NetMateChip(frame: .zero); chip.void = view.void
+        face.addArrangedSubview(chip)
+        face.setCustomSpacing(14, after: chip)
+        // The lamp's 22 px box holds the 12 px dot and its 5 px ring; 8 + 5 keeps the 13 px gap.
+        let status = hstack(8, in: face, fill: true)
+        let lamp = NetMateLamp(frame: .zero); lamp.tone = view.tone
+        status.addArrangedSubview(lamp)
+        let title = label(view.status, in: status, size: 34, weight: .bold, color: ink, tracking: 0.01)
+        title.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        let gap = NSView(); gap.translatesAutoresizingMaskIntoConstraints = false
+        gap.setContentHuggingPriority(.init(1), for: .vertical)
+        gap.setContentCompressionResistancePriority(.init(1), for: .vertical)
+        face.addArrangedSubview(gap)
+        let real = !view.void && number != nil
+        let digits = label(real ? number ?? "" : "•••• •••• ••", in: face, size: 19, color: view.void ? c.faint : c.faceText, tracking: 0.2, mono: true)
+        digits.isSelectable = real
+        face.setCustomSpacing(8, after: digits)
+        let meta = hstack(26, in: face)
+        meta.alignment = .top
+        for (key, value) in view.meta {
+            let cell = vstack(0, in: meta, fill: false)
+            tag(key, in: cell, size: 11, color: muted)
+            let v = tag(value, in: cell, size: 13, weight: .medium, color: ink)
+            v.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        }
+        if let progress {
+            let (fraction, attempt, maxAttempts) = progress
+            let stripe = NetMateStripe(); stripe.fraction = fraction
+            stripe.translatesAutoresizingMaskIntoConstraints = false
+            stripe.setAccessibilityElement(true); stripe.setAccessibilityRole(.progressIndicator)
+            stripe.setAccessibilityLabel("尝试进度"); stripe.setAccessibilityValue("\(attempt) / \(maxAttempts)")
+            card.addSubview(stripe)
+            NSLayoutConstraint.activate([
+                stripe.leadingAnchor.constraint(equalTo: card.leadingAnchor), stripe.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+                stripe.bottomAnchor.constraint(equalTo: card.bottomAnchor), stripe.heightAnchor.constraint(equalToConstant: 6)
+            ])
+        }
+        let side = vstack(12, in: hero, fill: false)
+        side.setContentHuggingPriority(.init(1), for: .horizontal)
+        side.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        text(view.headline, in: side, size: 21, weight: .bold)
+        if !view.body.isEmpty { text(view.body, in: side, size: 14, color: c.secondary) }
+        for (value, kind) in view.notes { notes.addArrangedSubview(note(value, kind)) }
+        if !notes.arrangedSubviews.isEmpty { side.addArrangedSubview(notes) }
+        if !actions.arrangedSubviews.isEmpty { side.addArrangedSubview(actions) }
     }
     /// WifiReconnectFailedCard: per-network reasons once every WiFi has failed.
     func recoveryFailures(in parent: NSStackView) {
         let failures = snapshot["failures"] as? [JSON] ?? []
         guard !failures.isEmpty, ["failed", "cooldown"].contains(snapshot["phase"] as? String ?? "") else { return }
-        let f = NetMateCard(); parent.addArrangedSubview(f); fillWidth(f, parent)
-        f.tint = NetMateColors.adaptive(0xc93838, 0.45, 0xff7b7b, 0.45)
-        tag("所有 WiFi 连接失败", in: f.content, size: 15, weight: .bold, color: NetMateColors.bad)
-        for failure in failures { text("\(str(failure["ssid"]) ?? "")：\(str(failure["reason"]) ?? "")", in: f.content, size: 13.5) }
+        let (c, _) = panel("本轮尝试", in: parent)
+        for failure in failures {
+            let item = hairRow(in: c, .vertical, padding: insets(10, 0), spacing: 2)
+            text(str(failure["ssid"]) ?? "", in: item.content, size: 14, weight: .semibold)
+            text(str(failure["reason"]) ?? "", in: item.content, size: 12.5, color: NetMateColors.secondary)
+        }
     }
-    /// One strip cell: caption above a value row; returns the value row.
+    /// One strip cell: caption above a value row; cells after the first carry a left hairline.
     func stripCell(_ title: String, in strip: NetMateStrip) -> NSStackView {
-        let cell = NetMateBox(.vertical, padding: insets(14, 20), spacing: 2)
+        let divided = !strip.content.arrangedSubviews.isEmpty
+        let cell = NetMateBox(.vertical, padding: NSEdgeInsets(top: 9, left: divided ? 16 : 0, bottom: 0, right: 8), spacing: 2)
+        if divided { cell.leftRule = NetMateColors.line }
         strip.content.addArrangedSubview(cell)
-        let caption = tag(title, in: cell.content, size: 12.5, color: NetMateColors.secondary)
+        let caption = tag(title, in: cell.content, size: 11.5, color: NetMateColors.secondary)
         caption.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         let value = hstack(6, in: cell.content)
         value.alignment = .firstBaseline
         return value
     }
-    func stripValue(_ value: String, color: NSColor = NetMateColors.text, grade: String? = nil, in row: NSStackView) {
-        let v = tag(value, in: row, size: 17, weight: .bold, color: color)
+    /// Only the grade word carries the colour unless `color` says otherwise; the number stays in ink.
+    func stripValue(_ value: String, color: NSColor = NetMateColors.ink, grade: (String, NSColor)? = nil, in row: NSStackView) {
+        let v = tag(value, in: row, size: 18, weight: .bold, color: color)
         v.isSelectable = true
-        if let grade { tag(grade, in: row, size: 12.5, weight: .semibold, color: color) }
         v.setContentCompressionResistancePriority(.init(2), for: .horizontal)
+        if let grade { tag(grade.0, in: row, size: 11.5, color: grade.1) }
     }
-    /// Signal, speed, band, internet and heartbeat in one card; the countdown label is the only
-    /// view the one-second tick touches.
+    /// Signal, speed, band, internet and heartbeat under one ink rule; the countdown label is the
+    /// only view the one-second tick touches.
     func metricStrip(_ n: JSON, in parent: NSStackView) {
         let strip = NetMateStrip(); parent.addArrangedSubview(strip); fillWidth(strip, parent)
         var cell = stripCell("信号强度", in: strip)
         if let rssi = int(n["rssi"]) {
             let percent = max(0, min(100, (rssi + 100) * 100 / 60))
-            let g = grade(percent, [(75, "优秀", NetMateColors.excellent), (50, "良好", NetMateColors.good), (25, "一般", NetMateColors.fair)], ("较差", NetMateColors.poor))
-            stripValue("\(percent)%", color: g.1, grade: g.0, in: cell)
+            stripValue("\(percent)%", grade: grade(percent, [(75, "优秀", NetMateColors.excellent), (50, "良好", NetMateColors.good), (25, "一般", NetMateColors.fair)], ("较差", NetMateColors.poor)), in: cell)
         } else { stripValue("未知", in: cell) }
         cell = stripCell("连接速度", in: strip)
         if let s = int(n["linkSpeed"]), s > 0 {
-            let g = grade(s, [(500, "优秀", NetMateColors.excellent), (200, "良好", NetMateColors.good), (100, "一般", NetMateColors.fair), (50, "较差", NetMateColors.poor)], ("很差", NetMateColors.bad))
-            stripValue("\(s) Mbps", color: g.1, grade: g.0, in: cell)
+            stripValue("\(s) Mbps", grade: grade(s, [(500, "优秀", NetMateColors.excellent), (200, "良好", NetMateColors.good), (100, "一般", NetMateColors.fair), (50, "较差", NetMateColors.poor)], ("很差", NetMateColors.bad)), in: cell)
         } else { stripValue("未知", in: cell) }
         let f = int(n["frequency"]) ?? 0
         stripValue(f >= 5925 ? "6GHz" : (4900...5924).contains(f) ? "5GHz" : (2400...2500).contains(f) ? "2.4GHz" : "未知", in: stripCell("频段", in: strip))
@@ -833,110 +938,89 @@ extension App {
             stripValue("已关闭", color: NetMateColors.secondary, in: stripCell("心跳检测", in: strip)); return
         }
         cell = stripCell("心跳检测 · 每 \(int(settingsValue["heartbeatIntervalSeconds"]) ?? 30) 秒", in: strip)
-        cell.alignment = .centerY
-        let dot = NetMateDot(); dot.color = online ? NetMateColors.ok : NetMateColors.bad; dot.ring = online ? NetMateColors.okSoft : NetMateColors.badSoft
-        cell.addArrangedSubview(dot)
         stripValue(online ? "正常" : "异常", color: online ? NetMateColors.ok : NetMateColors.bad, in: cell)
-        let countdown = tag("", in: cell, size: 12.5, weight: .medium, color: NetMateColors.secondary)
-        countdown.font = .monospacedDigitSystemFont(ofSize: 12.5, weight: .medium)
+        let countdown = tag("", in: cell, size: 11.5, color: NetMateColors.secondary)
+        countdown.font = .monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)
         countdown.isHidden = true
         countdowns.append((countdown as NSView, countdown, true))
     }
-    /// `.panel` column card with a `.panel-h` header; returns the card and its header row.
-    func columnCard(_ title: String, in cols: NSStackView, padding: NSEdgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 18, right: 20)) -> (NetMateCard, NSStackView) {
-        let c = NetMateCard(padding: padding, topAligned: true)
-        c.content.spacing = 14
-        cols.addArrangedSubview(c)
-        c.heightAnchor.constraint(equalTo: cols.heightAnchor).isActive = true
-        let head = hstack(10, in: c.content, fill: true)
-        head.heightAnchor.constraint(greaterThanOrEqualToConstant: 36).isActive = true
-        tag(title, in: head, size: 15, weight: .bold, color: NetMateColors.heading)
-        spacer(in: head)
-        return (c, head)
+    /// A `.kv` row: key on the left, the value right-aligned and char-wrapped.
+    func kvRow(_ key: String, _ value: String, mono: Bool, in parent: NSStackView) {
+        let line = hairRow(in: parent, padding: insets(4, 0), spacing: 16, minHeight: 42)
+        let k = tag(key, in: line.content, size: 14, color: NetMateColors.secondary)
+        k.setContentHuggingPriority(.required, for: .horizontal)
+        k.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let v = NSTextField(wrappingLabelWithString: value)
+        v.isSelectable = true; v.alignment = .right; v.lineBreakMode = .byCharWrapping
+        v.font = mono ? .monospacedSystemFont(ofSize: 13, weight: .medium) : .systemFont(ofSize: 14, weight: .medium)
+        v.textColor = NetMateColors.text
+        v.setContentHuggingPriority(.init(1), for: .horizontal)
+        v.setContentCompressionResistancePriority(.init(249), for: .horizontal)
+        line.content.addArrangedSubview(v)
     }
-    /// 网络详情: key/value table with right-aligned values.
-    func wifiDetails(_ n: JSON, in cols: NSStackView) {
-        let (c, head) = columnCard("网络详情", in: cols)
+    /// 网络详情: key/value rows with right-aligned values.
+    func wifiDetails(_ n: JSON, in parent: NSStackView) {
+        let (c, head) = panel("网络详情", in: parent)
         iconButton("arrow.clockwise", "刷新 WiFi 信息", in: head) { [weak self] in
             self?.request("snapshot") { value in if let value = value as? JSON { self?.applyState(value) } }
-        }
-        let table = vstack(10, in: c.content)
+        }.quiet = true
         for (key, value, mono) in [("WiFi 名称", str(n["ssid"]), false), ("IPv4 地址", str(n["ipv4"]), true), ("IPv6 地址", str(n["ipv6"]), true),
                                    ("BSSID", str(n["bssid"]), true), ("WiFi 信道", str(n["channel"]), true), ("安全类型", str(n["security"]), false)] {
-            let line = hstack(24, in: table, fill: true)
-            line.alignment = .firstBaseline
-            let k = tag(key, in: line, size: 13, color: NetMateColors.secondary)
-            k.setContentHuggingPriority(.required, for: .horizontal)
-            k.setContentCompressionResistancePriority(.required, for: .horizontal)
-            let v = NSTextField(wrappingLabelWithString: value ?? "未知")
-            v.isSelectable = true; v.alignment = .right; v.lineBreakMode = .byCharWrapping
-            v.font = mono ? .monospacedSystemFont(ofSize: 13, weight: .regular) : .systemFont(ofSize: 13.5)
-            v.textColor = NetMateColors.text
-            v.setContentHuggingPriority(.init(1), for: .horizontal)
-            v.setContentCompressionResistancePriority(.init(249), for: .horizontal)
-            line.addArrangedSubview(v)
+            kvRow(key, value ?? "未知", mono: mono, in: c)
         }
         guard flag(settingsValue["enableHeartbeat"]) else { return }
         var notes = [String]()
         if let message = str(snapshot["message"]), !message.isEmpty { notes.append(message) }
         if flag(snapshot["monitorDegraded"]) { notes.append("系统网络事件监听不可用，已改为定时检测") }
         if !notes.isEmpty {
-            let b = box(.vertical, in: c.content, padding: insets(10, 12), fill: NetMateColors.mutedFill, radius: 9)
-            text(notes.joined(separator: "\n"), in: b.content, size: 12.5, color: NetMateColors.secondary)
+            let row = hairRow(in: c, .vertical, padding: insets(10, 0))
+            text(notes.joined(separator: "\n"), in: row.content, size: 12.5, color: NetMateColors.secondary)
         }
     }
     /// Left column while no WiFi is connected and heartbeat is enabled.
-    func heartbeatPaused(in cols: NSStackView) {
-        let (c, head) = columnCard("心跳检测 (已暂停)", in: cols)
-        let dot = NetMateDot(); dot.color = NetMateColors.secondary
-        head.insertArrangedSubview(dot, at: 0)
-        text("当前未连接 WiFi，心跳检测功能暂停。连接到 WiFi 后将自动恢复检测。", in: c.content, size: 12.5, color: NetMateColors.secondary)
+    func heartbeatPaused(in parent: NSStackView) {
+        let (c, _) = panel("心跳检测 (已暂停)", in: parent)
+        let row = hairRow(in: c, .vertical, padding: insets(10, 0))
+        text("当前未连接 WiFi，心跳检测功能暂停。连接到 WiFi 后将自动恢复检测。", in: row.content, size: 12.5, color: NetMateColors.secondary)
     }
     /// WifiSwitcherCard: configured networks ordered by priority, in fixed columns so badges and
-    /// actions line up: icon 18 | name and subtitle | badge 84 | action 68.
+    /// actions line up: rank 44 | name and subtitle | badge 92 | action 70.
     func switcher(current: JSON?, in cols: NSStackView) {
         let rules = list("wifiRules").sorted { (int($0["priority"]) ?? 10) < (int($1["priority"]) ?? 10) }
         guard !rules.isEmpty else { return }
         let switching = ["connecting", "authenticating", "verifying"].contains(snapshot["phase"] as? String ?? "")
-        let (c, head) = columnCard("切换 WiFi", in: cols, padding: NSEdgeInsets(top: 16, left: 0, bottom: 8, right: 0))
-        head.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
+        let column = vstack(0, in: cols, fill: false)
+        let (c, head) = panel("切换 WiFi", in: column)
         tag("按优先级排序", in: head, size: 12.5, color: NetMateColors.secondary)
-        let rows = vstack(0, in: c.content)
-        for (index, wifi) in rules.enumerated() {
+        for wifi in rules {
             let id = str(wifi["id"]) ?? "", ssid = str(wifi["ssid"]) ?? ""
+            let priority = int(wifi["priority"]) ?? 10
             let isCurrent = current.map { str($0["id"]) == id } ?? false
-            let row = NetMateListRow(.horizontal, padding: NSEdgeInsets(top: 12, left: 20, bottom: 12, right: 20), spacing: 12)
-            row.divider = index > 0; row.current = isCurrent
-            rows.addArrangedSubview(row); fillWidth(row, rows)
-            if let image = NSImage(systemSymbolName: "wifi", accessibilityDescription: nil) {
-                let glyph = NSImageView(image: image)
-                glyph.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
-                glyph.contentTintColor = NetMateColors.secondary
-                glyph.widthAnchor.constraint(equalToConstant: 18).isActive = true
-                row.content.addArrangedSubview(glyph)
-            }
-            let info = vstack(1, in: row.content, fill: false)
+            let item = hairRow(in: c, padding: insets(10, 0), spacing: 12)
+            let rank = label(String(format: "%02ld", priority), in: item.content, size: 21, weight: .bold,
+                             color: isCurrent ? NetMateColors.gold : NetMateColors.faint, mono: true)
+            rank.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            let info = vstack(1, in: item.content, fill: false)
             info.setContentHuggingPriority(.init(1), for: .horizontal)
             info.setContentCompressionResistancePriority(.init(1), for: .horizontal)
             let name = tag(ssid, in: info, size: 14, weight: .semibold)
-            let sub = tag((["优先级 \(int(wifi["priority"]) ?? 10)"] + [str(wifi["security"]), str(wifi["bssid"])].compactMap { $0 }).joined(separator: " · "),
+            let sub = tag((["优先级 \(priority)"] + [str(wifi["security"]), str(wifi["bssid"])].compactMap { $0 }).joined(separator: " · "),
                           in: info, size: 12.5, color: NetMateColors.secondary)
-            for label in [name, sub] { label.setContentCompressionResistancePriority(.init(1), for: .horizontal) }
+            for l in [name, sub] { l.setContentCompressionResistancePriority(.init(1), for: .horizontal) }
+            let slot = hstack(0, in: item.content)
+            slot.widthAnchor.constraint(equalToConstant: 92).isActive = true
             let auth = flag(wifi["requiresAuth"])
-            let badge = NetMateBadge(auth ? "校园网认证" : "普通热点", auth ? NetMateColors.accent : NetMateColors.secondary, auth ? NetMateColors.accentSoft : NetMateColors.surface2)
-            badge.fixWidth(84); row.content.addArrangedSubview(badge)
+            badge(auth ? "校园网认证" : "普通热点", auth ? NetMateColors.goldText : NetMateColors.secondary,
+                  border: auth ? NetMateColors.gold : NetMateColors.line, in: slot)
+            let end = hstack(4, in: item.content)
+            end.widthAnchor.constraint(equalToConstant: 70).isActive = true
+            spacer(in: end)
             if isCurrent {
-                let mark = hstack(4, in: row.content)
-                mark.distribution = .gravityAreas
-                mark.widthAnchor.constraint(equalToConstant: 68).isActive = true
-                let inner = hstack(4)
-                icon("checkmark", size: 11, color: NetMateColors.accent, in: inner)
-                tag("当前", in: inner, size: 12.5, weight: .bold, color: NetMateColors.accent)
-                mark.addView(inner, in: .center)
+                icon("checkmark", size: 12, color: NetMateColors.ok, in: end)
+                tag("当前", in: end, size: 13, weight: .semibold, color: NetMateColors.ok)
             } else {
-                let b = button("切换", in: row.content, name: "切换到 \(ssid)") { [weak self] in self?.request("connect", ["id": id]) }
-                b.compact = true; b.invalidateIntrinsicContentSize()
-                b.widthAnchor.constraint(equalToConstant: 68).isActive = true
+                let b = button("切换", in: end, name: "切换到 \(ssid)") { [weak self] in self?.request("connect", ["id": id]) }
+                b.compact = true
                 b.isEnabled = !switching
             }
         }
@@ -967,16 +1051,21 @@ extension App {
 
 // MARK: 配置设置
 extension App {
-    /// A number field with a stepper; it saves 600 ms after the last change.
+    /// `.set` with a number: the label on the left, field and stepper on the right; it saves
+    /// 600 ms after the last change.
     func numberRow(_ key: String, _ title: String, _ range: ClosedRange<Int>, _ value: Int, in parent: NSStackView) {
-        let group = formGroup(title, in: parent)
-        let line = hstack(8, in: group)
+        let line = hairRow(in: parent, padding: insets(10, 0), spacing: 24, minHeight: 46)
+        let name = text(title, in: line.content, size: 14, weight: .medium)
+        name.setContentHuggingPriority(.init(1), for: .horizontal)
         let field = inputField("\(value)", name: title)
-        field.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        field.font = .monospacedDigitSystemFont(ofSize: 13.5, weight: .regular)
+        field.alignment = .right
+        field.widthAnchor.constraint(equalToConstant: 72).isActive = true
         let stepper = NSStepper(); stepper.minValue = Double(range.lowerBound); stepper.maxValue = Double(range.upperBound)
         stepper.increment = 1; stepper.valueWraps = false; stepper.integerValue = value
         stepper.setAccessibilityLabel(title)
-        line.addArrangedSubview(field); line.addArrangedSubview(stepper)
+        line.content.addArrangedSubview(field); line.content.addArrangedSubview(stepper)
+        line.content.setCustomSpacing(4, after: field)
         let schedule: (Int) -> Void = { [weak self] number in
             guard let self else { return }
             self.debounces[key]?.invalidate()
@@ -995,12 +1084,19 @@ extension App {
             guard let stepper else { return }
             field?.stringValue = "\(stepper.integerValue)"; schedule(stepper.integerValue)
         }
-        parent.setCustomSpacing(14, after: group)
     }
     func settingsPage(_ content: NSStackView) {
-        guard !config.isEmpty else { text("加载中...", in: card("", in: content).content); return }
+        guard !config.isEmpty else { text("加载中...", in: content); return }
         let settings = settingsValue
-        let general = card("通用设置", in: content).content
+        pauseBanner(in: content)
+        accounts(in: content)
+        wifis(in: content)
+        // Two columns as in the prototype: 通用设置 | 附近 WiFi and 通知设置.
+        let cols = hstack(32, in: content, fill: true)
+        cols.distribution = .fillEqually; cols.alignment = .top
+        let left = vstack(24, in: cols, fill: false)
+        let right = vstack(24, in: cols, fill: false)
+        let general = section("通用设置", in: left).content
         for (key, title, desc) in [
             ("autoLaunch", "开机自动启动", ""),
             ("enableHeartbeat", "启用心跳检测", "按间隔检测网络；关闭后仅在 WiFi 变化时检测，另有 30 秒兜底检查"),
@@ -1009,12 +1105,11 @@ extension App {
             ("keepCurrentConnection", "保持当前连接", "启动时已连接其他 WiFi 则不切换；关闭后切换到附近最高优先级的已配置 WiFi"),
             ("autoUpdate", "自动检查更新", "启动后自动检查新版本")
         ] {
-            toggleRow(title, desc, flag(settings[key]), in: general) { [weak self] value in
+            setRow(title, desc, flag(settings[key]), in: general) { [weak self] value in
                 guard let self else { return }
                 self.mutate(self.setting(key, value))
             }
         }
-        rule(in: general)
         var fields = [(String, String, ClosedRange<Int>)]()
         if flag(settings["enableHeartbeat"]) {
             fields.append(("heartbeatIntervalSeconds", "心跳检测间隔 (秒)", 5...300))
@@ -1023,10 +1118,11 @@ extension App {
         fields.append(("wifiReconnectRetries", "每个 WiFi 最多尝试次数（含首次）", 1...10))
         fields.append(("wifiReconnectCooldownMinutes", "冷却期时长 (分钟，全部 WiFi 失败后暂停重连；0 为不冷却)", 0...1440))
         for (key, title, range) in fields { numberRow(key, title, range, int(settings[key]) ?? range.lowerBound, in: general) }
-        let notices = card("通知设置", in: content).content
+        nearby(in: right)
+        let notices = section("通知设置", in: right).content
         let current = settings["notificationSettings"] as? JSON ?? [:]
         for (key, title) in [("wifiDisconnected", "WiFi 断开"), ("reconnectSuccess", "自动重连成功"), ("reconnectFailed", "自动重连全部失败"), ("authRecovered", "认证恢复成功")] {
-            toggleRow(title, "", (current[key] as? Bool) != false, in: notices) { [weak self] value in
+            setRow(title, "", (current[key] as? Bool) != false, in: notices) { [weak self] value in
                 self?.mutate { c in
                     var s = c["settings"] as? JSON ?? [:]
                     var n = s["notificationSettings"] as? JSON ?? [:]
@@ -1034,16 +1130,16 @@ extension App {
                 }
             }
         }
-        pauseBanner(in: content)
-        nearby(in: content)
-        accounts(in: content)
-        wifis(in: content)
+    }
+    /// `.sec-note`: a small secondary line on its own hairline.
+    func sectionNote(_ value: String, in parent: NSStackView) {
+        let row = hairRow(in: parent, .vertical, padding: insets(10, 0))
+        text(value, in: row.content, size: 12.5, color: NetMateColors.secondary)
     }
     func nearby(in content: NSStackView) {
-        let c = card("附近 WiFi", in: content).content
-        text("扫描附近网络，选择后添加配置或编辑已保存的网络。", in: c, color: NetMateColors.secondary)
-        let actions = hstack(0, in: c)
-        let b = button(scanning ? "扫描中…" : "扫描附近 WiFi", in: actions) { [weak self] in
+        let (c, head) = panel("附近 WiFi", in: content)
+        sectionNote("扫描附近网络，选择后添加配置或编辑已保存的网络。", in: c)
+        let b = button(scanning ? "扫描中…" : "扫描附近 WiFi", in: head) { [weak self] in
             guard let self, !self.scanning else { return }
             self.scanning = true
             if let b = self.scanButton { b.title = "扫描中…"; b.isEnabled = false; b.invalidateIntrinsicContentSize() }
@@ -1057,19 +1153,19 @@ extension App {
                 if let b = self.scanButton { b.title = "扫描附近 WiFi"; b.isEnabled = true; b.invalidateIntrinsicContentSize() }
             })
         }
+        b.quiet = true
         b.isEnabled = !scanning; scanButton = b
         guard let networks = scan else { return }
-        if networks.isEmpty { text("未发现网络，请确认 WiFi 已开启，或手动填写 WiFi 名称。", in: c, color: NetMateColors.secondary); return }
-        let rows = vstack(0, in: c)
+        if networks.isEmpty { sectionNote("未发现网络，请确认 WiFi 已开启，或手动填写 WiFi 名称。", in: c); return }
         for n in networks {
             let saved = currentRule(n)
-            let item = listRow(in: rows)
+            let item = hairRow(in: c, padding: insets(9, 0), spacing: 12)
             var parts = [str(n["ssid"]) ?? ""]
             if let rssi = int(n["rssi"]) { parts.append("\(max(0, min(100, (rssi + 100) * 100 / 60)))%") }
             if let s = str(n["security"]) { parts.append(s) }
             if let b = str(n["bssid"]) { parts.append(b) }
             if saved != nil { parts.append("已保存") }
-            let l = text(parts.joined(separator: " · "), in: item.content)
+            let l = text(parts.joined(separator: " · "), in: item.content, size: 14)
             l.setContentHuggingPriority(.init(1), for: .horizontal)
             spacer(in: item.content)
             let ssid = str(n["ssid"]) ?? ""
@@ -1090,50 +1186,67 @@ extension App {
             }
         }
     }
+    /// `.form-heading`: 12.5 px semibold, tracked, 16 above.
+    func formHeading(_ title: String, in parent: NSStackView) {
+        if let last = parent.arrangedSubviews.last { parent.setCustomSpacing(16, after: last) }
+        let h = label(title, in: parent, size: 12.5, weight: .semibold, color: NetMateColors.secondary, tracking: 0.06)
+        parent.setCustomSpacing(14, after: h)
+    }
     func accounts(in content: NSStackView) {
-        let panel = card("", in: content)
-        // CI finds this page through the card's accessible name.
+        let panel = section("", in: content)
+        // CI finds this page through the section's accessible name.
         panel.setAccessibilityElement(true); panel.setAccessibilityRole(.group)
         panel.setAccessibilityLabel("账号配置"); panel.setAccessibilityIdentifier("账号配置")
         let c = panel.content
-        cardTitle("账号管理", in: c)
+        let head = sectionHead("账号管理", in: c)
+        tag("按顺序依次认证", in: head, size: 12.5, color: NetMateColors.secondary)
         let accounts = list("accounts")
         if accounts.isEmpty { emptyBox("person.crop.circle", "暂无账号，请添加账号以使用登录功能", in: c) }
-        let rows = vstack(0, in: c)
         for account in accounts {
-            let item = listRow(in: rows)
-            let info = vstack(4, in: item.content, fill: false)
-            info.setContentHuggingPriority(.init(1), for: .horizontal)
-            let title = hstack(8, in: info)
-            let username = str(account["username"]) ?? ""
-            tag(username, in: title, weight: .bold)
-            badge(ispLabel(str(account["isp"]) ?? ""), NetMateColors.pillText, NetMateColors.authFill, in: title)
-            text(str(account["serverUrl"]) ?? "", in: info, size: 13, color: NetMateColors.secondary)
-            spacer(in: item.content)
-            let actions = hstack(8, in: item.content)
+            let item = hairRow(in: c, padding: insets(12, 0), spacing: 14)
             let id = str(account["id"])
             let isCurrent = id != nil && id == str(config["currentAccountId"])
-            let use = button(isCurrent ? "使用中" : "使用此账号", in: actions) { [weak self] in
-                self?.mutate { c in c["currentAccountId"] = id.map { $0 as Any } ?? NSNull() }
+            // A small card face: gold chip for the account in use, greyed out for the others.
+            let mini = NetMateMiniCard(frame: .zero); mini.on = isCurrent
+            item.content.addArrangedSubview(mini)
+            let info = vstack(2, in: item.content, fill: false)
+            info.setContentHuggingPriority(.init(1), for: .horizontal)
+            info.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+            let username = str(account["username"]) ?? ""
+            label(username, in: info, size: 14, weight: .semibold, color: NetMateColors.text, tracking: 0.06, mono: true)
+            let sub = ([ispLabel(str(account["isp"]) ?? "")] + [str(account["serverUrl"])].compactMap { $0 }.filter { !$0.isEmpty }).joined(separator: " · ")
+            tag(sub, in: info, size: 12.5, color: NetMateColors.secondary).setContentCompressionResistancePriority(.init(1), for: .horizontal)
+            let actions = hstack(6, in: item.content)
+            if isCurrent {
+                let inuse = tag("使用中", in: actions, size: 12.5, weight: .semibold, color: NetMateColors.ok)
+                actions.setCustomSpacing(12, after: inuse)
+            } else {
+                button("使用此账号", in: actions) { [weak self] in
+                    self?.mutate { c in c["currentAccountId"] = id.map { $0 as Any } ?? NSNull() }
+                }
             }
-            use.compact = true; use.invalidateIntrinsicContentSize()
-            if isCurrent { use.primary = true; use.isEnabled = false }
             button("编辑", in: actions, name: "编辑账号 \(username)") { [weak self] in self?.accountEditor(account) }
             iconButton("trash", "删除账号 \(username)", in: actions) { [weak self] in self?.removeAccount(id) }.destructive = true
         }
-        text("添加新账号", in: c, size: 17, weight: .bold, color: NetMateColors.heading)
-        let user = draftEntry("account.username", "用户名", "用户名", "请输入学号/用户名", in: c)
-        let password = draftEntry("account.password", "密码", "密码", "请输入密码", secure: true, in: c)
-        let isp = formGroup("运营商", in: c)
+        formHeading("添加新账号", in: c)
+        // Fields side by side as in the prototype: 用户名 | 密码 | 运营商, then server and the button.
+        let fields = hstack(10, in: c, fill: true)
+        fields.distribution = .fillEqually; fields.alignment = .top
+        let user = draftEntry("account.username", "用户名", "用户名", "请输入学号/用户名", in: fields)
+        let password = draftEntry("account.password", "密码", "密码", "请输入密码", secure: true, in: fields)
+        let isp = formGroup("运营商", in: fields)
         let ispValues = ["campus", "cmcc", "cucc", "ctcc"]
         let ispSelect = dropdown(ispValues.map(ispLabel), name: "运营商", selected: ispValues.firstIndex(of: draft("account.isp", "campus")) ?? 0) { [weak self] index in
             self?.drafts["account.isp"] = ispValues[index]
         }
         isp.addArrangedSubview(ispSelect); fillWidth(ispSelect, isp)
+        c.setCustomSpacing(10, after: fields)
         if drafts["account.server"] == nil { drafts["account.server"] = "http://10.10.102.50:801" }
-        let server = draftEntry("account.server", "登录服务器地址", "登录服务器地址", "", in: c)
-        if let error = drafts["account.error"] { text(error, in: c, color: NetMateColors.errorText) }
-        let add = button("保存并添加账号", in: c) { [weak self] in
+        let submit = hstack(10, in: c, fill: true)
+        submit.alignment = .bottom
+        let server = draftEntry("account.server", "登录服务器地址", "登录服务器地址", "", in: submit)
+        server.superview?.setContentHuggingPriority(.init(1), for: .horizontal)
+        button("保存并添加账号", in: submit) { [weak self] in
             guard let self else { return }
             let username = user.stringValue.trimmingCharacters(in: .whitespaces)
             let secret = password.stringValue
@@ -1153,7 +1266,10 @@ extension App {
                 if str(c["currentAccountId"]) == nil { c["currentAccountId"] = id }
             }
         }
-        fillWidth(add, c)
+        if let error = drafts["account.error"] {
+            c.setCustomSpacing(10, after: submit)
+            text(error, in: c, size: 13, color: NetMateColors.errorText)
+        }
     }
     func removeAccount(_ id: String?) {
         mutate { c in
@@ -1173,31 +1289,34 @@ extension App {
             && str(rule["bssid"])?.lowercased() == bssid?.lowercased()
     }
     func wifis(in content: NSStackView) {
-        let c = card("WiFi 配置", in: content).content
-        text("配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。点击刷新图标按钮可切换自动重连状态。", in: c, size: 13, color: NetMateColors.secondary)
+        let c = section("WiFi 配置", in: content).content
+        sectionNote("配置WiFi网络及其连接选项。新添加的WiFi默认启用自动重连，WiFi断开后会自动尝试重新连接。点击刷新图标按钮可切换自动重连状态。", in: c)
         let accounts = list("accounts")
         let rules = list("wifiRules")
         if rules.isEmpty { emptyBox("wifi", "暂无 WiFi 配置", in: c) }
-        let rows = vstack(0, in: c)
         for wifi in rules {
-            let item = listRow(in: rows)
-            let info = vstack(4, in: item.content, fill: false)
-            info.setContentHuggingPriority(.init(1), for: .horizontal)
-            let title = hstack(6, in: info)
+            let item = hairRow(in: c, padding: insets(11, 0), spacing: 12)
             let ssid = str(wifi["ssid"]) ?? ""
-            tag(ssid, in: title, weight: .bold)
             let auth = flag(wifi["requiresAuth"]), auto = flag(wifi["autoConnect"])
             let priority = int(wifi["priority"]) ?? 10
-            if auth { badge("需要认证", NetMateColors.pillText, NetMateColors.authFill, in: title) } else { badge("无需认证", NetMateColors.openText, NetMateColors.openFill, in: title) }
-            priorityBadge("★ 优先级 \(priority)", priority, in: title)
-            if auto { badge("自动重连", NetMateColors.openText, NetMateColors.openFill, in: title) } else { badge("手动连接", NetMateColors.badgeText, NetMateColors.badgeFill, in: title) }
+            let rank = label(String(format: "%02ld", priority), in: item.content, size: 21, weight: .bold, color: NetMateColors.gold, mono: true)
+            rank.widthAnchor.constraint(equalToConstant: 44).isActive = true
+            rank.toolTip = "优先级 \(priority)"
+            let info = vstack(2, in: item.content, fill: false)
+            info.setContentHuggingPriority(.init(1), for: .horizontal)
+            info.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+            tag(ssid, in: info, size: 14, weight: .semibold).setContentCompressionResistancePriority(.init(1), for: .horizontal)
+            var sub = [String]()
             if auth {
                 let linked = (wifi["linkedAccountIds"] as? [String] ?? []).compactMap { id in accounts.first { str($0["id"]) == id } }
                     .map { "\(str($0["username"]) ?? "") (\(ispLabel(str($0["isp"]) ?? "")) - \(str($0["serverUrl"]) ?? ""))" }
-                if linked.isEmpty { text("未关联账号（账号可能已删除）", in: info, size: 13, color: NetMateColors.errorText) }
-                else { text("关联账号: \(linked.joined(separator: "，"))", in: info, size: 13, color: NetMateColors.secondary) }
+                if linked.isEmpty { text("未关联账号（账号可能已删除）", in: info, size: 12.5, color: NetMateColors.errorText) }
+                else { sub.append("关联账号: \(linked.joined(separator: "，"))") }
             }
-            spacer(in: item.content)
+            sub.append(auto ? "断开后自动重连" : "手动连接")
+            text(sub.joined(separator: " · "), in: info, size: 12.5, color: NetMateColors.secondary)
+            if auth { badge("需要认证", NetMateColors.goldText, border: NetMateColors.gold, in: item.content) }
+            else { badge("无需认证", NetMateColors.secondary, border: NetMateColors.line, in: item.content) }
             let actions = hstack(8, in: item.content)
             let id = str(wifi["id"]) ?? ""
             let toggle = iconButton("arrow.clockwise", auto ? "禁用 \(ssid) 自动重连" : "启用 \(ssid) 自动重连", in: actions) { [weak self] in
@@ -1207,14 +1326,14 @@ extension App {
                     }
                 }
             }
-            toggle.tint = auto ? NetMateColors.excellent : NetMateColors.idle
+            toggle.tint = auto ? NetMateColors.ok : NetMateColors.secondary
             button("连接", in: actions, name: "连接 \(ssid)") { [weak self] in self?.request("connect", ["id": id]) }
             button("编辑", in: actions, name: "编辑 WiFi \(ssid)") { [weak self] in self?.wifiEditor(wifi) }
             iconButton("trash", "删除 WiFi \(ssid)", in: actions) { [weak self] in
                 self?.mutate { c in c["wifiRules"] = (c["wifiRules"] as? [JSON] ?? []).filter { str($0["id"]) != id } }
             }.destructive = true
         }
-        text("添加 WiFi", in: c, size: 17, weight: .bold, color: NetMateColors.heading)
+        formHeading("添加 WiFi", in: c)
         let ssid = draftEntry("wifi.ssid", "WiFi 名称 (SSID)", "WiFi 名称", "请输入 WiFi 名称", in: c)
         let security = draftEntry("wifi.security", "安全类型（留空自动识别）", "安全类型", "WPA2 / WPA3 / WPA2-WPA3 / Open", in: c)
         let bssid = draftEntry("wifi.bssid", "BSSID（可选，限定接入点）", "BSSID", "aa:bb:cc:dd:ee:ff", in: c)
@@ -1222,7 +1341,7 @@ extension App {
         let auth = draft("wifi.auth", "1") == "1"
         for (key, title, desc, value) in [("wifi.auth", "需要校园网认证", "关闭则视为家庭/热点网络", auth),
                                           ("wifi.auto", "断开后自动重连", "关闭后需手动连接此 WiFi", draft("wifi.auto", "1") == "1")] {
-            toggleRow(title, desc, value, in: c) { [weak self] on in
+            checkRow(title, desc, value, in: c) { [weak self] on in
                 guard let self else { return }
                 self.drafts[key] = on ? "1" : "0"
                 if key == "wifi.auth" { self.drafts.removeValue(forKey: "wifi.account"); self.render() }
@@ -1231,17 +1350,16 @@ extension App {
         if auth {
             let group = formGroup("关联账号", in: c)
             if accounts.isEmpty {
-                let warning = box(.vertical, in: group, padding: insets(12, 16), fill: NetMateColors.warningFill, stroke: NetMateColors.warningStroke, radius: 9)
-                text("请先在上方「账号管理」添加账号", in: warning.content, color: NetMateColors.warningText)
+                let warning = box(.vertical, in: group, padding: insets(8, 12), fill: nil, stroke: NetMateColors.warn, radius: 8)
+                text("请先在上方「账号管理」添加账号", in: warning.content, size: 13.5, color: NetMateColors.warn)
             } else {
                 let tiles = NSHashTable<NetMateTile>.weakObjects()
                 let selected = draft("wifi.account")
                 for account in accounts {
                     let id = str(account["id"]) ?? "", name = str(account["username"]) ?? ""
                     let tile = NetMateTile(); tile.selected = selected == id
-                    tile.content.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0); tile.content.spacing = 2
                     tile.setAccessibilityLabel("选择账号 \(name)")
-                    tag(name, in: tile.content, weight: .bold)
+                    tag(name, in: tile.content, size: 14, weight: .semibold)
                     tag("\(ispLabel(str(account["isp"]) ?? "")) · \(str(account["serverUrl"]) ?? "")", in: tile.content, size: 12, color: NetMateColors.secondary)
                     tile.onPress = { [weak self, weak tile] in
                         self?.drafts["wifi.account"] = id
@@ -1253,8 +1371,9 @@ extension App {
             }
         }
         let group = formGroup("优先级", in: c)
-        let line = hstack(8, in: group)
+        let line = hstack(4, in: group)
         let priority = inputField(draft("wifi.priority", "10"), name: "WiFi 优先级")
+        priority.font = .monospacedDigitSystemFont(ofSize: 13.5, weight: .regular)
         priority.widthAnchor.constraint(equalToConstant: 140).isActive = true
         let stepper = NSStepper(); stepper.minValue = 1; stepper.maxValue = 99; stepper.increment = 1
         stepper.integerValue = Int(draft("wifi.priority", "10")) ?? 10
@@ -1268,8 +1387,11 @@ extension App {
             guard let stepper else { return }
             priority?.stringValue = "\(stepper.integerValue)"; self?.drafts["wifi.priority"] = "\(stepper.integerValue)"
         }
-        text("数字越小优先级越高（1=最高，99=最低，默认=10）", in: group, size: 13, color: NetMateColors.secondary)
-        if let error = drafts["wifi.error"] { text(error, in: c, color: NetMateColors.errorText) }
+        text("数字越小优先级越高（1=最高，99=最低，默认=10）", in: group, size: 12.5, color: NetMateColors.secondary)
+        if let error = drafts["wifi.error"] {
+            let message = text(error, in: c, size: 13, color: NetMateColors.errorText)
+            c.setCustomSpacing(10, after: message)
+        }
         let add = button("添加 WiFi", in: c) { [weak self] in
             guard let self else { return }
             let name = ssid.stringValue.trimmingCharacters(in: .whitespaces)
@@ -1407,51 +1529,67 @@ extension App {
 
 // MARK: 关于
 extension App {
-    /// Prototype layout: a hero card across the top, then 核心功能 | 更新检查 and 项目信息 cards.
+    /// Prototype layout: a version card beside the name, then 核心功能 | 更新检查 and 项目信息.
     func aboutPage(_ content: NSStackView) {
-        let page = vstack(16, in: content)
-        let hero = NetMateCard(padding: insets(24, 24))
-        hero.content.orientation = .horizontal; hero.content.alignment = .centerY; hero.content.spacing = 20
-        page.addArrangedSubview(hero); fillWidth(hero, page)
-        hero.content.addArrangedSubview(NetMateAppMark(frame: .zero))
-        let names = vstack(2, in: hero.content, fill: false)
-        names.setContentHuggingPriority(.init(1), for: .horizontal)
-        tag("NetMate", in: names, size: 22, weight: .heavy, color: NetMateColors.heading)
-        tag("智能 WiFi 管理工具", in: names, size: 15, color: NetMateColors.secondary)
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "2.0.0"
-        hero.content.addArrangedSubview(NetMateBadge("版本 \(version)", NetMateColors.pillText, NetMateColors.pillFill))
-        // Two equal columns; the features card stretches to the right column's height.
-        let columns = hstack(16, in: page, fill: true)
+        let hero = hstack(36, in: content, fill: true)
+        let card = NetMateCardFace(void: false)
+        card.translatesAutoresizingMaskIntoConstraints = false
+        hero.addArrangedSubview(card)
+        NSLayoutConstraint.activate([card.widthAnchor.constraint(equalToConstant: 320), card.heightAnchor.constraint(equalToConstant: 200)])
+        let face = card.content
+        let top = hstack(12, in: face, fill: true)
+        label("NETMATE", in: top, size: 11.5, color: NetMateColors.faceText2, tracking: 0.12)
+        spacer(in: top)
+        label("v\(version)", in: top, size: 11.5, color: NetMateColors.faceText2, mono: true)
+        face.setCustomSpacing(18, after: top)
+        let chip = NetMateChip(frame: .zero)
+        face.addArrangedSubview(chip)
+        face.setCustomSpacing(14, after: chip)
+        label("NetMate", in: face, size: 30, weight: .bold, color: NetMateColors.faceText, tracking: 0.01)
+        let gap = NSView(); gap.translatesAutoresizingMaskIntoConstraints = false
+        gap.setContentHuggingPriority(.init(1), for: .vertical)
+        gap.setContentCompressionResistancePriority(.init(1), for: .vertical)
+        face.addArrangedSubview(gap)
+        label("TUST CAMPUS NETWORK", in: face, size: 14, color: NetMateColors.faceText, tracking: 0.2, mono: true)
+        let names = vstack(8, in: hero, fill: false)
+        names.setContentHuggingPriority(.init(1), for: .horizontal)
+        tag("NetMate", in: names, size: 30, weight: .bold, color: NetMateColors.heading)
+        tag("智能 WiFi 管理工具", in: names, size: 14, color: NetMateColors.secondary)
+        badge("版本 \(version)", NetMateColors.goldText, border: NetMateColors.gold, in: names)
+        // Two equal columns: 核心功能 | 更新检查 and 项目信息.
+        let columns = hstack(32, in: content, fill: true)
         columns.distribution = .fillEqually; columns.alignment = .top
-        let features = NetMateCard(topAligned: true)
-        features.content.spacing = 9
-        columns.addArrangedSubview(features)
-        cardTitle("核心功能", in: features.content)
+        let left = vstack(0, in: columns, fill: false)
+        let features = section("核心功能", in: left).content
         for item in ["WiFi 自动重连（三阶段优先级切换）", "校园网认证自动登录", "多账户管理", "网络状态监控", "心跳检测与断线重连"] {
-            let line = hstack(10, in: features.content)
-            icon("checkmark.circle.fill", size: 15, color: NetMateColors.excellent, in: line)
-            tag(item, in: line)
+            let line = hairRow(in: features, padding: insets(4, 0), spacing: 10, minHeight: 40)
+            icon("checkmark", size: 13, color: NetMateColors.ok, in: line.content)
+            tag(item, in: line.content, size: 14)
         }
-        let side = vstack(16, in: columns, fill: false)
-        features.heightAnchor.constraint(equalTo: side.heightAnchor).isActive = true
-        let updates = card("更新检查", in: side).content
-        let status = text("", in: updates, size: 13, color: NetMateColors.secondary)
-        let actions = hstack(8, in: updates)
+        let side = vstack(24, in: columns, fill: false)
+        let updates = section("更新检查", in: side).content
+        let updateRow = hairRow(in: updates, padding: insets(4, 0), spacing: 12, minHeight: 42)
+        let status = text("", in: updateRow.content, size: 14, color: NetMateColors.secondary)
+        status.setContentHuggingPriority(.init(1), for: .horizontal)
+        let actions = hstack(8, in: updateRow.content)
         updateLabel = status; updateActions = actions
         updateView()
-        let links = card("项目信息", in: side).content
-        links.spacing = 8
+        let links = section("项目信息", in: side).content
+        let linkRow = hairRow(in: links, padding: insets(4, 0), spacing: 24, minHeight: 42)
         for (title, url) in [("GitHub 仓库", "https://github.com/Twiink/TUST-CampusNetwork-Login"),
                              ("问题反馈", "https://github.com/Twiink/TUST-CampusNetwork-Login/issues")] {
             let link = NSButton(title: title, target: nil, action: nil)
             link.isBordered = false
-            link.attributedTitle = NSAttributedString(string: title, attributes: [.foregroundColor: NetMateColors.primary, .font: NSFont.systemFont(ofSize: 15, weight: .semibold)])
+            link.attributedTitle = NSAttributedString(string: title, attributes: [.foregroundColor: NetMateColors.goldText, .font: NSFont.systemFont(ofSize: 14, weight: .semibold)])
             link.setAccessibilityLabel(title); link.toolTip = url
             bind(link) { if let target = URL(string: url) { _ = NSWorkspace.shared.open(target) } }
-            links.addArrangedSubview(link)
+            linkRow.content.addArrangedSubview(link)
         }
-        text("© 2026 NetMate. All rights reserved.", in: links, size: 13, color: NetMateColors.secondary)
-        button("退出 NetMate", in: links) { [weak self] in self?.request("quit") }.destructive = true
+        let quitRow = hairRow(in: links, padding: insets(4, 0), spacing: 12, minHeight: 42)
+        let copyright = text("© 2026 NetMate. All rights reserved.", in: quitRow.content, size: 12.5, color: NetMateColors.secondary)
+        copyright.setContentHuggingPriority(.init(1), for: .horizontal)
+        button("退出 NetMate", in: quitRow.content) { [weak self] in self?.request("quit") }.destructive = true
     }
     /// About page update row; the agent's update state decides which actions are offered.
     func updateView() {
@@ -1519,27 +1657,25 @@ extension App {
 
 // MARK: 运行日志
 extension App {
-    /// Toolbar and footer controls share one 36 px height and are centred in their row.
-    func logControlHeight(_ view: NSView) { view.heightAnchor.constraint(equalToConstant: 36).isActive = true }
+    /// Toolbar fields share the 34 px control height and are centred in their row.
+    func logControlHeight(_ view: NSView) { view.heightAnchor.constraint(equalToConstant: 34).isActive = true }
     func reloadLogs() { cursor = nil; cursors = []; loadLogs() }
     func logsPage() {
-        let heading = hstack(16)
-        let titles = vstack(6, in: heading, fill: false)
-        titles.setContentHuggingPriority(.init(1), for: .horizontal)
-        _ = pageTitle("运行日志", in: titles)
-        tag("连接、认证与恢复记录，保留最近 7 天", in: titles, size: 13, color: NetMateColors.secondary)
+        let heading = pageTitle("运行日志")
+        let subtitle = tag("连接、认证与恢复记录，保留最近 7 天", in: heading, size: 13, color: NetMateColors.secondary)
+        subtitle.setContentCompressionResistancePriority(.init(1), for: .horizontal)
         spacer(in: heading)
         // The prototype's refresh button carries the accessible name 搜索 / 刷新.
-        button("刷新", in: heading, name: "搜索 / 刷新") { [weak self] in self?.reloadLogs() }.symbol = "arrow.clockwise"
-        let panel = NetMateCard(padding: NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0))
-        panel.content.spacing = 0
+        button("刷新", in: heading, name: "搜索 / 刷新") { [weak self] in self?.reloadLogs() }
+        // No card: toolbar, level filter, the list under an ink rule, and the footer.
+        let panel = NetMateBox(.vertical, spacing: 0)
         pageHost.addSubview(panel)
         layout(heading, panel, gap: 8)
         let c = panel.content
         // Toolbar: keyword, source, recent hours, 筛选; no caption labels, names live in tooltips.
         let toolbar = hstack(12, in: c, fill: true)
         toolbar.alignment = .centerY
-        toolbar.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 16, right: 24)
+        toolbar.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 10, right: 0)
         // A plain text field so XCUITest lists it under `textFields`; Return applies the filter.
         let keyword = inputField(str(query["keyword"]) ?? "", placeholder: "搜索消息或详情", name: "搜索全部保留历史")
         keyword.setContentHuggingPriority(.init(1), for: .horizontal)
@@ -1551,6 +1687,7 @@ extension App {
         var hoursValue = 0
         if let start = (query["startTime"] as? NSNumber)?.int64Value { hoursValue = max(1, Int((nowMs() - start) / 3_600_000)) }
         let hours = inputField("\(hoursValue)", name: "最近小时")
+        hours.font = .monospacedDigitSystemFont(ofSize: 13.5, weight: .regular)
         hours.widthAnchor.constraint(equalToConstant: 110).isActive = true
         hours.toolTip = "最近小时（0=全部）"
         toolbar.addArrangedSubview(hours); logControlHeight(hours)
@@ -1563,32 +1700,30 @@ extension App {
             self.reloadLogs()
         }
         bind(keyword, apply)
-        logControlHeight(button("筛选", in: toolbar, apply))
-        rule(in: c)
-        // Level chips and the count.
+        button("筛选", in: toolbar, apply)
+        // `.seg` level filter and the count.
         let controls = hstack(12, in: c, fill: true)
-        controls.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 16, right: 24)
+        controls.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 12, right: 0)
         let current = str(query["level"]) ?? ""
         let levels = vstack(0, in: controls, fill: false)
-        levels.setContentHuggingPriority(.init(1), for: .horizontal)
         choices(["", "info", "success", "warn", "error", "debug"].map { ($0, $0.isEmpty ? "全部" : levelLabel($0)) },
                 selected: current == "all" ? "" : current, chip: true, columns: 0, in: levels) { [weak self] value in
             self?.query["level"] = value; self?.reloadLogs()
         }
         spacer(in: controls)
-        let count = tag("", in: controls, size: 12, color: NetMateColors.secondary)
+        let count = tag("", in: controls, size: 12.5, color: NetMateColors.secondary)
         count.maximumNumberOfLines = 1; count.cell?.wraps = false
         count.setContentCompressionResistancePriority(.required, for: .horizontal)
         count.setContentHuggingPriority(.required, for: .horizontal)
         logCount = count
-        rule(in: c)
-        // The list.
+        let top = NetMateRule(NetMateColors.ink, thickness: 1.5); c.addArrangedSubview(top); fillWidth(top, c)
+        // The list: one four-column row per entry, split by hairlines.
         let table = NSTableView()
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("entry")); column.title = "日志"
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column); table.headerView = nil
         table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
-        table.delegate = self; table.dataSource = self; table.rowHeight = 64
+        table.delegate = self; table.dataSource = self; table.rowHeight = 34
         table.backgroundColor = .clear; table.gridStyleMask = .solidHorizontalGridLineMask
         table.gridColor = NetMateColors.rule; table.intercellSpacing = NSSize(width: 0, height: 1)
         table.selectionHighlightStyle = .regular; table.style = .plain
@@ -1601,18 +1736,17 @@ extension App {
         c.addArrangedSubview(scroll); fillWidth(scroll, c)
         scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
         let empty = NSTextField(wrappingLabelWithString: "正在读取日志…")
-        empty.alignment = .center; empty.textColor = NetMateColors.caption; empty.font = .systemFont(ofSize: 15)
+        empty.alignment = .center; empty.textColor = NetMateColors.caption; empty.font = .systemFont(ofSize: 14)
         empty.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(empty)
         NSLayoutConstraint.activate([empty.centerXAnchor.constraint(equalTo: scroll.centerXAnchor), empty.centerYAnchor.constraint(equalTo: scroll.centerYAnchor)])
         logEmpty = empty
         self.table = table
         table.sizeLastColumnToFit()
-        rule(in: c)
         // Footer: paging, then the scope and format selects, export and clear.
         let footer = hstack(12, in: c, fill: true)
         footer.alignment = .centerY
-        footer.edgeInsets = NSEdgeInsets(top: 16, left: 24, bottom: 16, right: 24)
+        footer.edgeInsets = NSEdgeInsets(top: 12, left: 0, bottom: 0, right: 0)
         button("上一页", in: footer) { [weak self] in
             guard let self, !self.cursors.isEmpty else { return }
             self.cursor = self.cursors.removeLast(); self.loadLogs()
@@ -1622,12 +1756,12 @@ extension App {
             self.cursors.append(self.cursor); self.cursor = next; self.loadLogs()
         }
         spacer(in: footer)
-        // NetMateSelect's 42 px frame is the 36 px face plus its 3 px open-state ring.
+        // NetMateSelect's 40 px frame is the 34 px face plus its 3 px open-state ring.
         let scope = dropdown(["全部保留日志", "当前筛选结果"], name: "导出范围", upward: true)
-        scope.widthAnchor.constraint(equalToConstant: 166).isActive = true
+        scope.widthAnchor.constraint(greaterThanOrEqualToConstant: 156).isActive = true
         scope.toolTip = "导出范围"; footer.addArrangedSubview(scope)
         let format = dropdown(["可读文本 LOG", "结构化 JSON"], name: "格式", upward: true)
-        format.widthAnchor.constraint(equalToConstant: 166).isActive = true
+        format.widthAnchor.constraint(greaterThanOrEqualToConstant: 156).isActive = true
         format.toolTip = "格式"; footer.addArrangedSubview(format)
         button("导出日志", in: footer) { [weak self] in
             guard let self else { return }
@@ -1685,9 +1819,10 @@ extension App {
         let cell = (tableView.makeView(withIdentifier: NetMateLogCell.reuse, owner: nil) as? NetMateLogCell) ?? NetMateLogCell()
         let entry = entries[row]
         let kind = str(entry["level"]) ?? ""
-        let (color, fill) = NetMateColors.level(kind)
         cell.time.stringValue = formatTime(entry["timestamp"])
-        cell.level.set(levelLabel(kind), color, fill)
+        cell.level.stringValue = levelLabel(kind)
+        cell.level.textColor = NetMateColors.level(kind)
+        cell.level.font = .systemFont(ofSize: 12, weight: kind == "debug" ? .regular : .bold)
         cell.source.stringValue = str(entry["source"]) ?? "应用"
         cell.message.stringValue = (str(entry["message"]) ?? "").replacingOccurrences(of: "\n", with: " ")
         cell.setAccessibilityLabel("\(cell.time.stringValue) \(levelLabel(kind)) \(cell.source.stringValue) \(cell.message.stringValue)")
@@ -1699,8 +1834,8 @@ extension App {
         table.deselectAll(nil)
         let (sheet, b) = makeSheet("日志详情", height: 560)
         let kind = str(entry["level"]) ?? ""
-        let (color, fill) = NetMateColors.level(kind)
-        b.addArrangedSubview(NetMateBadge(levelLabel(kind), color, fill, padding: NSEdgeInsets(top: 1, left: 8, bottom: 1, right: 8), radius: 6))
+        let color = NetMateColors.level(kind)
+        b.addArrangedSubview(NetMateBadge(levelLabel(kind), color, border: kind == "info" || kind == "debug" ? NetMateColors.line : color))
         text(formatTime(entry["timestamp"]), in: b, color: NetMateColors.secondary, mono: true)
         text(str(entry["source"]) ?? "应用", in: b, color: NetMateColors.secondary)
         var detail = str(entry["message"]) ?? ""
@@ -1711,7 +1846,7 @@ extension App {
                 detail += "\n\n\(data)"
             }
         }
-        let body = box(.vertical, in: b, padding: insets(12, 12), fill: NetMateColors.surface2, radius: 9)
+        let body = box(.vertical, in: b, padding: insets(12, 12), fill: NetMateColors.field, stroke: NetMateColors.line, radius: 8)
         text(detail, in: body.content, size: 13, mono: true)
         let actions = hstack(8, in: b)
         button("复制详情", in: actions) {
