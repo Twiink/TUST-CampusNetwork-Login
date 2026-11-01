@@ -513,7 +513,7 @@ pub fn content_scale(width: i32, dpi: u32) -> f64 {
 }
 const WHITE: COLORREF = rgb(0xffffff);
 /// Width of the sidebar rail in 96-DPI units.
-const RAIL: i32 = 194;
+pub const RAIL: i32 = 194;
 /// The gold chip gradient (`#ecd48c` → `#b88f35` at 135°).
 const CHIP: [(f64, u32); 2] = [(0.0, 0xecd48c), (1.0, 0xb88f35)];
 /// The chip's pad outline and contact line: rgba(80, 58, 14, 0.38) over the chip.
