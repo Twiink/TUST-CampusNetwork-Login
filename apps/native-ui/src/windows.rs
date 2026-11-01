@@ -110,7 +110,7 @@ const HOVER_TIMER: usize = 4;
 /// The BUTTON and COMBOBOX window procedures, saved when the first control is subclassed.
 static BUTTON_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 static COMBO_PROC: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Kind {
     Static,
     Button,
@@ -449,6 +449,7 @@ unsafe fn client(h: HWND) -> RECT {
     rect
 }
 unsafe fn make(h: HWND, class: PCWSTR, text: &str, mut c: Control, style: u32) -> HWND {
+    trace(&format!("make kind={:?} id={} text={text}", c.kind, c.id));
     let (dpi, scroll, font) = {
         let s = ui();
         let font = match c.kind {
@@ -1137,6 +1138,7 @@ pub fn run() {
         if trace_file().is_some() {
             std::panic::set_hook(Box::new(|info| trace(&format!("panic: {info}"))));
         }
+        eprintln!("netmate-ui stderr probe");
         trace("run: enter");
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         InitCommonControls();
@@ -1377,6 +1379,7 @@ fn page_group(page: u16) -> u16 {
 }
 /// Rebuilds the sidebar and the current page; drafts keep typed text across rebuilds.
 unsafe fn render(h: HWND) {
+    trace(&format!("render page={}", ui().page));
     let rect = client(h);
     let (page, old) = {
         let mut s = ui();
