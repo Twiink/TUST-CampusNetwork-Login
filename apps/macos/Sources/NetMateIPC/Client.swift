@@ -22,8 +22,17 @@ public final class Client: @unchecked Sendable {
         var socketFD:Int32? = try? connect()
         if socketFD == nil {
             let executable=Bundle.main.executableURL!.deletingLastPathComponent().appendingPathComponent("netmate-agent")
-            let process=Process();process.executableURL=executable;process.arguments=["--background"];try? process.run()
+            let process=Process();process.executableURL=executable;process.arguments=["--background"]
+            var spawnError:String?
+            do { try process.run() } catch { spawnError="\(error)" }
             for _ in 0..<50 {Thread.sleep(forTimeInterval:0.1);socketFD=try? connect();if socketFD != nil{break}}
+            if socketFD == nil {
+                // CI captures the app's stderr; surface why the agent never answered.
+                let exists=FileManager.default.fileExists(atPath:executable.path)
+                let siblings=(try? FileManager.default.contentsOfDirectory(atPath:executable.deletingLastPathComponent().path).joined(separator:",")) ?? "?"
+                let fate=process.isRunning ? "running" : "exited \(process.terminationStatus) \(process.terminationReason.rawValue)"
+                FileHandle.standardError.write(Data("netmate-agent socket missing at \(socketDirectory.path) after 5s; spawn=\(spawnError ?? "ok"); child=\(fate); executable exists=\(exists); MacOS dir=[\(siblings)]\n".utf8))
+            }
         }
         guard let fd=socketFD else {throw IPCError.unavailable};defer{close(fd)};var timeout=timeval(tv_sec:30,tv_usec:0);setsockopt(fd,SOL_SOCKET,SO_RCVTIMEO,&timeout,socklen_t(MemoryLayout<timeval>.size));var command:[String:Any]=["op":op];if let args{command["args"]=args};try writeFrame(fd,command);return try readFrame(fd)}
     public func subscribe(_ receive:@escaping([String:Any])->Void) throws {let fd=try connect();defer{close(fd)};try writeFrame(fd,["op":"subscribe"]);while true{if let value=try readFrame(fd) as? [String:Any]{receive(value)}}}

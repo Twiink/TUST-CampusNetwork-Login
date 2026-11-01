@@ -10,7 +10,7 @@ import org.json.JSONTokener
 import java.io.Writer
 
 /** Indexed, bounded-memory log storage. Only the :network process owns this database. */
-internal class SqliteJournal(context: Context) : SQLiteOpenHelper(context, "native-logs-v1.db", null, 1) {
+internal class SqliteJournal(context: Context, name: String = "native-logs-v1.db") : SQLiteOpenHelper(context, name, null, 1) {
     private var payloadBytes: Long? = null
     private var lastPrune = 0L
     private val sanitizer = LogJournal(java.io.File("."))

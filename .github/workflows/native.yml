@@ -143,6 +143,8 @@ jobs:
         run: |
           mkdir -p dist-native
           xcodebuild -project apps/macos/NetMate.xcodeproj -scheme NativeUITests -destination 'platform=macOS' -resultBundlePath dist-native/macos-ui.xcresult test NETMATE_AGENT_BINARY="$PWD/target/ui-test/release/netmate-agent"
+      - if: ${{ always() }}
+        run: xcrun xcresulttool export diagnostics --path dist-native/macos-ui.xcresult --output-path dist-native/macos-diagnostics
       - name: Import distribution identity
         if: ${{ inputs.release && vars.APPLE_SIGNING_IDENTITY != '' }}
         env:
