@@ -4435,11 +4435,11 @@ unsafe fn on_reply(h: HWND, command: Command, value: Value) {
                 render(h);
             }
         }
-        Command::Logs(query) => {
+        Command::Logs(ref query) => {
             let (count, total) = {
                 let mut s = ui();
                 let generation = value["generation"].as_u64().unwrap_or(0);
-                if s.page != LOGS || s.query != query || generation < s.log_generation {
+                if s.page != LOGS || s.query != *query || generation < s.log_generation {
                     return;
                 }
                 s.log_generation = generation;

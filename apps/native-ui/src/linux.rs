@@ -883,7 +883,7 @@ fn flush(state: &Rc<RefCell<Ui>>) {
         if ui.edits.is_empty() {
             return;
         }
-        let edits: Vec<Edit> = ui.edits.drain(..).collect();
+        let edits: Vec<Edit> = std::mem::take(&mut ui.edits);
         let mut config = ui.config.clone();
         for edit in &edits {
             edit(&mut config);
@@ -1280,6 +1280,8 @@ fn card_number(username: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+/// Note text plus an extra style class (`gold`, `bad` or none).
+type CardNote = (String, &'static str);
 /// Copy for the home account card and the column beside it; the recovery phase, when active,
 /// replaces the status, copy, meta and actions in `account_card`.
 struct Face {
@@ -1296,7 +1298,7 @@ struct Face {
     body: String,
     meta: Vec<(&'static str, String)>,
     /// Note text and an extra style class (`gold`, `bad` or none).
-    notes: Vec<(String, &'static str)>,
+    notes: Vec<CardNote>,
     action: Option<Box<dyn Fn(&gtk::Box)>>,
 }
 /// Pins an overlay child at `(x, y)` with a fixed size, so the deck needs no CSS transforms.
@@ -3505,7 +3507,7 @@ fn on_reply(state: &Rc<RefCell<Ui>>, command: Command, value: Value) {
                 ui.config = value;
                 if matches!(command, Command::SaveConfig(_)) {
                     ui.saving = false;
-                    let prefixes: Vec<String> = ui.clear_on_save.drain(..).collect();
+                    let prefixes: Vec<String> = std::mem::take(&mut ui.clear_on_save);
                     ui.drafts
                         .retain(|key, _| !prefixes.iter().any(|p| key.starts_with(p.as_str())));
                     ui.feedback.set_text("配置已保存并生效");

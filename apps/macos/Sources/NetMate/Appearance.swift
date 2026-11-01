@@ -807,10 +807,10 @@ final class NetMateStripe: NSView {
 /// the shadow.
 final class NetMateDeck: NSView {
     let backs: Int
-    let shadow: Bool
+    let faceShadow: Bool
     static let faceRect = CGRect(x: 0, y: 22, width: 440, height: 276)
     init(backs: Int, shadow: Bool) {
-        self.backs = max(0, min(2, backs)); self.shadow = shadow
+        self.backs = max(0, min(2, backs)); self.faceShadow = shadow
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         for axis in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
@@ -844,7 +844,7 @@ final class NetMateDeck: NSView {
             color.setFill(); shape.fill()
             NetMateColors.line.setStroke(); shape.lineWidth = 1; shape.stroke()
         }
-        guard shadow else { return }
+        guard faceShadow else { return }
         // The spread of -20 shrinks the shadow box; the face covers the box itself.
         ctx.saveGState()
         ctx.setShadow(offset: CGSize(width: 0, height: -20), blur: 34,
