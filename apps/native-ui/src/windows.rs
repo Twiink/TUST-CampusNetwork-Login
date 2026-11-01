@@ -1175,8 +1175,12 @@ pub fn run() {
             WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN | WS_VSCROLL,
             CW_USEDEFAULT,
             CW_USEDEFAULT,
-            scale(1140, system_dpi).min(GetSystemMetrics(SM_CXSCREEN) - scale(32, system_dpi)),
-            scale(820, system_dpi).min(GetSystemMetrics(SM_CYSCREEN) - scale(64, system_dpi)),
+            scale(1140, system_dpi)
+                .min(GetSystemMetrics(SM_CXSCREEN) - scale(32, system_dpi))
+                .max(1),
+            scale(820, system_dpi)
+                .min(GetSystemMetrics(SM_CYSCREEN) - scale(64, system_dpi))
+                .max(1),
             None,
             None,
             Some(instance.into()),

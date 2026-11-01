@@ -6,6 +6,8 @@ import subprocess
 import tempfile
 import time
 
+from pywinauto import findwindows
+
 def main():
     if os.environ.get('CI') != 'true':
         raise SystemExit('Native UI E2E runs in CI; local execution is disabled for this workspace')
@@ -20,10 +22,29 @@ def main():
             screenshots = root / 'dist-native/visual/windows'
             screenshots.mkdir(parents=True, exist_ok=True)
             for cycle in range(100):
-                process = subprocess.Popen([str(binary / 'netmate-ui.exe')], env=env)
-                app = Application(backend='uia').connect(process=process.pid, timeout=15)
-                window = app.window(title='NetMate')
-                window.wait('visible', timeout=15)
+                ui_log = Path(profile) / 'ui-console.log'
+                with open(ui_log, 'ab') as console:
+                    process = subprocess.Popen(
+                        [str(binary / 'netmate-ui.exe')],
+                        env=env,
+                        stdout=console,
+                        stderr=console,
+                        stdin=subprocess.DEVNULL,
+                    )
+                try:
+                    app = Application(backend='uia').connect(process=process.pid, timeout=15)
+                    window = app.window(title='NetMate')
+                    window.wait('visible', timeout=15)
+                except Exception:
+                    report = [f'cycle {cycle}: netmate-ui pid {process.pid} poll={process.poll()}']
+                    report.append('--- netmate-ui console output ---')
+                    report.append(ui_log.read_text(errors='replace') if ui_log.exists() else '(empty)')
+                    report.append('--- windows reported by UIA for the process ---')
+                    try:
+                        report += [str(e) for e in findwindows.find_elements(process=process.pid, backend='uia')]
+                    except Exception as exc:
+                        report.append(f'enumeration failed: {exc!r}')
+                    raise RuntimeError('\n'.join(report)) from None
                 if cycle == 0:
                     for theme, switch, next_switch in [('light', '切换至白天模式', '切换至黑夜模式'), ('dark', '切换至黑夜模式', '切换至白天模式')]:
                         toggle = window.child_window(title=switch, control_type='Button')

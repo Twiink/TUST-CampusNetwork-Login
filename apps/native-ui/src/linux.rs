@@ -1282,6 +1282,8 @@ fn card_number(username: &str) -> String {
 }
 /// Note text plus an extra style class (`gold`, `bad` or none).
 type CardNote = (String, &'static str);
+/// Button callback rendered into the card footer.
+type CardAction = Box<dyn Fn(&gtk::Box)>;
 /// Copy for the home account card and the column beside it; the recovery phase, when active,
 /// replaces the status, copy, meta and actions in `account_card`.
 struct Face {
@@ -1299,7 +1301,7 @@ struct Face {
     meta: Vec<(&'static str, String)>,
     /// Note text and an extra style class (`gold`, `bad` or none).
     notes: Vec<CardNote>,
-    action: Option<Box<dyn Fn(&gtk::Box)>>,
+    action: Option<CardAction>,
 }
 /// Pins an overlay child at `(x, y)` with a fixed size, so the deck needs no CSS transforms.
 fn place(widget: &impl IsA<gtk::Widget>, x: i32, y: i32, width: i32, height: i32) {
