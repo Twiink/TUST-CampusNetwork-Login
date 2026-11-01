@@ -997,6 +997,10 @@ unsafe fn draw(
     color: COLORREF,
     format: DRAW_TEXT_FORMAT,
 ) {
+    // A zero-length buffer hands DrawTextW a dangling pointer, which fast-fails the process.
+    if text.is_empty() {
+        return;
+    }
     let old = SelectObject(dc, HGDIOBJ(font as *mut _));
     let _ = SetTextColor(dc, color);
     let _ = SetBkMode(dc, TRANSPARENT);
