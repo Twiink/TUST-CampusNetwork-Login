@@ -193,7 +193,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
     /// The agent may still be starting; the first config is retried until it answers, so the
     /// window never stays on its loading state.
     func loadInitialConfig(attempt: Int = 0) {
-        request("config", { [weak self] value in
+        request("config", nil, { [weak self] value in
             guard let self else { return }
             self.configReceived(value, saved: false)
             self.startSubscription()
