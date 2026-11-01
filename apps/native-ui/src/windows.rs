@@ -66,6 +66,8 @@ struct Ui {
     dark: bool,
     dpi: u32,
     scroll: i32,
+    /// Wheel delta below one scroll step, kept for precision touchpads.
+    wheel_rest: i32,
     layout_scale: f64,
     fonts: [isize; appearance::FONT_COUNT],
     ground_brush: isize,
@@ -376,7 +378,7 @@ fn flush() {
 }
 fn put_item(field: &'static str, item: Value) {
     mutate(move |config| {
-        let items = config[field].as_array_mut().unwrap();
+        let items = client::list(config, field);
         if let Some(i) = items.iter().position(|old| old["id"] == item["id"]) {
             items[i] = item.clone();
         } else {
@@ -393,7 +395,7 @@ fn remove_account(id: Value) {
         if c["currentAccountId"] == id {
             c["currentAccountId"] = Value::Null;
         }
-        for w in c["wifiRules"].as_array_mut().unwrap() {
+        for w in client::list(c, "wifiRules") {
             if let Some(ids) = w["linkedAccountIds"].as_array_mut() {
                 ids.retain(|linked| linked != &id);
             }
@@ -1121,6 +1123,7 @@ pub fn run() {
             dark,
             dpi: 96,
             scroll: 0,
+            wheel_rest: 0,
             layout_scale: 1.0,
             fonts: [0; appearance::FONT_COUNT],
             ground_brush: 0,
@@ -1180,7 +1183,7 @@ pub fn run() {
             None,
         )
         .unwrap();
-        refresh_fonts(h);
+        delete_fonts(refresh_fonts(h));
         appearance::titlebar(h, dark);
         render(h);
         send(Command::Config);
@@ -1233,23 +1236,30 @@ unsafe fn refresh_brushes() {
         let _ = DeleteObject(HGDIOBJ(brush as *mut _));
     }
 }
-unsafe fn refresh_fonts(h: HWND) {
+/// Swaps in fonts for the window DPI and returns the previous handles. Callers delete
+/// them with `delete_fonts` only after every child that used them has been recreated.
+unsafe fn refresh_fonts(h: HWND) -> Vec<isize> {
     let dpi = GetDpiForWindow(h).max(96);
-    let old = {
-        let mut s = ui();
-        let old = s.fonts;
-        s.dpi = dpi;
-        for (slot, (size, weight, face)) in s.fonts.iter_mut().zip(appearance::FONTS) {
-            *slot = appearance::font(size, weight, dpi, face).0 as isize;
-        }
-        old
-    };
+    let mut s = ui();
+    let old = s.fonts.to_vec();
+    s.dpi = dpi;
+    for (slot, (size, weight, face)) in s.fonts.iter_mut().zip(appearance::FONTS) {
+        *slot = appearance::font(size, weight, dpi, face).0 as isize;
+    }
+    old
+}
+unsafe fn delete_fonts(old: Vec<isize>) {
     for font in old.into_iter().filter(|f| *f != 0) {
         let _ = DeleteObject(HGDIOBJ(font as *mut _));
     }
 }
 /// Moves every child to its place for the current size and scroll offset.
 unsafe fn position_children(h: HWND) {
+    layout_children(h, false)
+}
+/// `scrolled` means only the offset changed: the rail and its fixed controls stay where
+/// they are, so they are neither moved nor repainted.
+unsafe fn layout_children(h: HWND, scrolled: bool) {
     let rect = client(h);
     let (controls, dpi, scroll, max) = {
         let mut s = ui();
@@ -1268,17 +1278,23 @@ unsafe fn position_children(h: HWND) {
         (s.children.clone(), s.dpi, s.scroll, max)
     };
     let _ = SendMessageW(h, WM_SETREDRAW, Some(WPARAM(0)), None);
-    for c in &controls {
+    let moving: Vec<&Control> = controls.iter().filter(|c| !(scrolled && c.fixed)).collect();
+    // One batched move instead of one SetWindowPos per child.
+    let mut batch = BeginDeferWindowPos(moving.len() as i32).ok();
+    for c in &moving {
         let (x, y, width, height) = place(c, rect, dpi, scroll);
-        let _ = SetWindowPos(
-            HWND(c.handle as *mut _),
-            None,
-            x,
-            y,
-            width,
-            height,
-            SWP_NOZORDER | SWP_NOACTIVATE,
-        );
+        let target = HWND(c.handle as *mut _);
+        let flags = SWP_NOZORDER | SWP_NOACTIVATE;
+        batch = match batch {
+            Some(pending) => DeferWindowPos(pending, target, None, x, y, width, height, flags).ok(),
+            None => {
+                let _ = SetWindowPos(target, None, x, y, width, height, flags);
+                None
+            }
+        };
+    }
+    if let Some(pending) = batch {
+        let _ = EndDeferWindowPos(pending);
     }
     let _ = SendMessageW(h, WM_SETREDRAW, Some(WPARAM(1)), None);
     let info = SCROLLINFO {
@@ -1291,9 +1307,18 @@ unsafe fn position_children(h: HWND) {
         ..Default::default()
     };
     SetScrollInfo(h, SB_VERT, &info, true);
+    // Scrolling repaints the content only; the rail (and its software-drawn toggle) is unchanged.
+    let content = RECT {
+        left: if scrolled {
+            scale(appearance::RAIL, dpi)
+        } else {
+            0
+        },
+        ..rect
+    };
     let _ = RedrawWindow(
         Some(h),
-        None,
+        Some(&content),
         None,
         RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN,
     );
@@ -2900,7 +2925,7 @@ unsafe fn accounts(h: HWND, y: i32, config: &Value) -> i32 {
             let account = json!({"id":id,"name":username,"username":username,"serverUrl":text(h, 132).trim(),"isp":draft("account.isp","campus"),"passwordEdit":{"action":"replace","value":secret}});
             ui().clear_on_save.push("account.".into());
             mutate(move |c| {
-                c["accounts"].as_array_mut().unwrap().push(account.clone());
+                client::list(c, "accounts").push(account.clone());
                 if c["currentAccountId"].is_null() {
                     c["currentAccountId"] = json!(id);
                 }
@@ -3025,7 +3050,7 @@ unsafe fn wifis(h: HWND, y: i32, config: &Value) -> i32 {
             move |_| {
                 let id = toggle_id.clone();
                 mutate(move |c| {
-                    for w in c["wifiRules"].as_array_mut().unwrap() {
+                    for w in client::list(c, "wifiRules") {
                         if w["id"] == id {
                             w["autoConnect"] = json!(w["autoConnect"] != true);
                         }
@@ -3251,7 +3276,7 @@ unsafe fn add_wifi(h: HWND) {
         "linkedAccountIds": if auth { vec![account] } else { vec![] },
     });
     ui().clear_on_save.push("wifi.".into());
-    mutate(move |c| c["wifiRules"].as_array_mut().unwrap().push(rule.clone()));
+    mutate(move |c| client::list(c, "wifiRules").push(rule.clone()));
 }
 fn password(secret: String, clear: bool) -> Value {
     if clear {
@@ -4094,10 +4119,14 @@ unsafe fn about_page(h: HWND) {
     );
     hairline(x, y + 50, COL);
 }
-/// The update block: status text above the actions the agent's update state allows.
-/// Returns the bottom edge.
-unsafe fn update_view(h: HWND, x: i32, y: i32, width: i32) -> i32 {
-    let update = ui().update.clone();
+/// The update status label; a progress reply only rewrites its text.
+const UPDATE_TEXT: u16 = 960;
+/// Status lines that fit the label height measured for any other short status.
+fn single_line(text: &str) -> bool {
+    text.chars().count() <= 24 && !text.contains('\n')
+}
+/// The status line and action set the update block shows for `update`.
+fn update_message(update: &Value) -> (String, Vec<(&'static str, Command, bool)>) {
     let phase = update["state"].as_str().unwrap_or("");
     let available = update["release"]["version"].as_str();
     let checking = update["checking"] == true;
@@ -4134,7 +4163,21 @@ unsafe fn update_view(h: HWND, x: i32, y: i32, width: i32) -> i32 {
         Command::UpdateCheck,
         checking || phase == "downloading",
     ));
-    let top = para(h, x, y, width, &message, look(Font::Small, Ink::Secondary)) + 10;
+    (message, actions)
+}
+/// The update block: status text above the actions the agent's update state allows.
+/// Returns the bottom edge.
+unsafe fn update_view(h: HWND, x: i32, y: i32, width: i32) -> i32 {
+    let update = ui().update.clone();
+    let (message, actions) = update_message(&update);
+    let height = measure(&message, Font::Small, width);
+    let top = label(
+        h,
+        UPDATE_TEXT,
+        (x, y, width, height),
+        &message,
+        look(Font::Small, Ink::Secondary),
+    ) + 10;
     let mut left = x;
     for (title, command, disabled) in actions {
         let w = width_of(title, Font::Medium) + 30;
@@ -4167,9 +4210,7 @@ unsafe fn on_theme(h: HWND) {
         s.dark
     };
     start_toggle(h, dark);
-    if let Err(error) = crate::theme::save(dark) {
-        feedback(h, &error.to_string());
-    }
+    crate::theme::save_later(dark, client::report);
     refresh_brushes();
     appearance::titlebar(h, dark);
     // The page is repainted, not rebuilt, so typed text survives the switch.
@@ -4319,14 +4360,23 @@ unsafe fn on_state(h: HWND, v: Value) {
         send(Command::Logs(query));
     }
 }
-/// Replies carry no command on failure, so pending flags are reset here and the config is re-read.
-unsafe fn on_error(h: HWND, error: &str) {
+/// Only the failed command's pending flag is reset; a lost subscription changes no flag.
+unsafe fn on_error(h: HWND, command: Option<Command>, error: &str) {
     let (saving, scanning, checking, page) = {
         let mut s = ui();
-        let flags = (s.saving, s.scanning, s.update["checking"] == true, s.page);
-        s.saving = false;
-        s.scanning = false;
-        s.clear_on_save.clear();
+        let flags = (
+            s.saving && matches!(command, Some(Command::SaveConfig(_))),
+            s.scanning && matches!(command, Some(Command::Scan)),
+            s.update["checking"] == true && matches!(command, Some(Command::UpdateCheck)),
+            s.page,
+        );
+        if flags.0 {
+            s.saving = false;
+            s.clear_on_save.clear();
+        }
+        if flags.1 {
+            s.scanning = false;
+        }
         if flags.2 {
             s.update["checking"] = json!(false);
             s.update["error"] = json!(error);
@@ -4342,6 +4392,7 @@ unsafe fn on_error(h: HWND, error: &str) {
     }
 }
 unsafe fn on_reply(h: HWND, command: Command, value: Value) {
+    let previous_update = ui().update.clone();
     match command {
         Command::UiReady { .. } => {}
         Command::Snapshot => on_state(h, value),
@@ -4457,11 +4508,25 @@ unsafe fn on_reply(h: HWND, command: Command, value: Value) {
             | Command::UpdateCancel
     ) && ui().page == ABOUT
     {
-        let mut s = ui();
-        // Polls the download once a second while the About page shows it.
-        s.poll_update = s.update["state"] == "downloading";
-        drop(s);
-        render(h);
+        let (before, after) = {
+            let mut s = ui();
+            // Polls the download once a second while the About page shows it.
+            s.poll_update = s.update["state"] == "downloading";
+            (previous_update, s.update.clone())
+        };
+        // A progress tick keeps the same actions and a one-line status; only the text changes.
+        let (old_text, old_actions) = update_message(&before);
+        let (new_text, new_actions) = update_message(&after);
+        let same_actions = old_actions
+            .iter()
+            .map(|a| (a.0, a.2))
+            .eq(new_actions.iter().map(|a| (a.0, a.2)));
+        if same_actions && old_text != new_text && single_line(&old_text) && single_line(&new_text)
+        {
+            set_text(h, UPDATE_TEXT, &new_text);
+        } else if !same_actions || old_text != new_text {
+            render(h);
+        }
     }
 }
 unsafe fn find(handle: HWND) -> Option<Control> {
@@ -4621,6 +4686,9 @@ unsafe fn list_notify(h: HWND, l: LPARAM) -> LRESULT {
     let header = &*(l.0 as *const NMHDR);
     if header.code == LVN_GETDISPINFOW {
         let info = &mut *(l.0 as *mut NMLVDISPINFOW);
+        if !info.item.mask.contains(LVIF_TEXT) {
+            return LRESULT(0);
+        }
         let s = ui();
         if let Some(row) = s.rows.get(info.item.iItem.max(0) as usize) {
             let value = match info.item.iSubItem {
@@ -4715,6 +4783,10 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
             LRESULT(0)
         }
         WM_SIZE | WM_EXITSIZEMOVE => {
+            // A minimized client is 0 wide; re-flowing for it would rebuild the page twice.
+            if message == WM_SIZE && w.0 as u32 == SIZE_MINIMIZED {
+                return LRESULT(0);
+            }
             if message == WM_EXITSIZEMOVE {
                 ui().sizing = false;
             }
@@ -4732,8 +4804,10 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
             LRESULT(0)
         }
         WM_DPICHANGED => {
-            refresh_fonts(h);
+            let old = refresh_fonts(h);
             let r = &*(l.0 as *const RECT);
+            // The move sends WM_SIZE; `sizing` defers its re-flow to the render below.
+            let resizing = std::mem::replace(&mut ui().sizing, true);
             let _ = SetWindowPos(
                 h,
                 None,
@@ -4743,7 +4817,9 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
                 r.bottom - r.top,
                 SWP_NOZORDER | SWP_NOACTIVATE,
             );
+            ui().sizing = resizing;
             render(h);
+            delete_fonts(old);
             LRESULT(0)
         }
         WM_VSCROLL | WM_MOUSEWHEEL => {
@@ -4754,7 +4830,11 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
             };
             let _ = GetScrollInfo(h, SB_VERT, &mut info);
             let delta = if message == WM_MOUSEWHEEL {
-                -((w.0 >> 16) as i16 as i32) / 120 * 72
+                // Precision touchpads send fractions of a 120 notch; keep the remainder.
+                let mut s = ui();
+                let total = s.wheel_rest - ((w.0 >> 16) as i16 as i32) * 72;
+                s.wheel_rest = total % 120;
+                total / 120
             } else {
                 match w.0 as u16 as i32 {
                     x if x == SB_LINEUP.0 => -36,
@@ -4769,7 +4849,7 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
                 let mut s = ui();
                 s.scroll = (s.scroll + delta).clamp(0, (info.nMax - info.nPage as i32 + 1).max(0));
             }
-            position_children(h);
+            layout_children(h, true);
             LRESULT(0)
         }
         WM_TIMER => {
@@ -4834,7 +4914,7 @@ unsafe extern "system" fn proc(h: HWND, message: u32, w: WPARAM, l: LPARAM) -> L
         REPLY => {
             match *Box::from_raw(l.0 as *mut Event) {
                 Event::State(v) => on_state(h, v),
-                Event::Error(e) => on_error(h, &e),
+                Event::Error(command, e) => on_error(h, command, &e),
                 Event::Reply(command, value) => on_reply(h, command, value),
             }
             LRESULT(0)

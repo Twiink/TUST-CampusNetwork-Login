@@ -188,21 +188,36 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
         ])
         pageHost.setContentHuggingPriority(.init(1), for: .vertical)
         render(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
-        request("config") { [weak self] value in
+        loadInitialConfig()
+    }
+    /// The agent may still be starting; the first config is retried until it answers, so the
+    /// window never stays on its loading state.
+    func loadInitialConfig(attempt: Int = 0) {
+        request("config", { [weak self] value in
             guard let self else { return }
             self.configReceived(value, saved: false)
             self.startSubscription()
-        }
+        }, failed: { [weak self] _ in
+            let delay = min(5.0, 0.5 * Double(attempt + 1))
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.loadInitialConfig(attempt: attempt + 1) }
+        })
     }
 
     func startSubscription() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        // A dedicated thread: the subscription blocks for the life of the window.
+        Thread.detachNewThread { [weak self] in
+            var reconnecting = false
             while let self {
                 do {
                     // The initial config request has bootstrapped the agent. On a restart,
                     // request a fresh snapshot before subscribing to its new socket.
                     let first = try self.client.request("snapshot")
                     DispatchQueue.main.async { if let value = first as? JSON { self.applyState(value) } }
+                    // A restarted agent may hold a newer revision than the open form.
+                    if reconnecting, let fresh = try? self.client.request("config") {
+                        DispatchQueue.main.async { if !self.saving { self.configReceived(fresh, saved: false) } }
+                    }
+                    reconnecting = true
                     try self.client.subscribe { value in DispatchQueue.main.async { self.applyState(value) } }
                 } catch {
                     DispatchQueue.main.async { self.feedback.stringValue = "后台连接中断，正在重连" }
@@ -230,7 +245,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTableViewD
     func windowWillClose(_ notification: Notification) {
         if let closing = notification.object as? NSWindow, closing !== window { window.endSheet(closing); closing.contentView = nil } else { NSApp.terminate(nil) }
     }
-    func closeSheet(_ sheet: NSWindow) { window.endSheet(sheet); sheet.contentView = nil; sheet.close() }
+    /// Called from a button inside the sheet: the views (and the running action) are released
+    /// after the action returns, not while it still executes.
+    func closeSheet(_ sheet: NSWindow) {
+        window.endSheet(sheet); sheet.orderOut(nil)
+        DispatchQueue.main.async { sheet.contentView = nil; sheet.close() }
+    }
 
     // MARK: IPC
 
@@ -1430,6 +1450,8 @@ extension App {
 extension App {
     func makeSheet(_ title: String, height: CGFloat = 620) -> (NSWindow, NSStackView) {
         let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: height), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        // The app holds the sheet; AppKit must not release it on close as well.
+        sheet.isReleasedWhenClosed = false
         sheet.title = title; sheet.delegate = self
         let background = NetMateBackground()
         sheet.contentView = background

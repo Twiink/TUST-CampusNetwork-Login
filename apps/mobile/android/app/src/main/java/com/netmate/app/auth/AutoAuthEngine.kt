@@ -60,7 +60,7 @@ object AutoAuthEngine {
     }
 
     fun snapshot(context: Context, wifi: WifiEnvironment.Snapshot = WifiEnvironment.snapshot(context)): JSONObject {
-        val profile = AutoAuthStore.loadProfile(context)
+        val profile = AutoAuthStore.profileOrNull(context)
         val requires = profile?.let { AutoAuthPolicy.decide(it.copy(enabled = true, authPaused = false), wifi.ssid, wifi.ipv4, wifi.captive, wifi.security, wifi.bssid).requiresAuth } ?: false
         val reachable = wifi.connected && (internetKey == wifi.key || (wifi.validated && !wifi.captive && loggedOutKey != wifi.key))
         val authenticated = wifi.connected && (authenticatedKey == wifi.key || reachable)
@@ -86,6 +86,9 @@ object AutoAuthEngine {
     @Synchronized fun checkAsync(context: Context, trigger: String): Future<AutoAuthResult?> {
         val key = if (trigger == TRIGGER_MANUAL) TRIGGER_MANUAL else "automatic"
         pendingChecks[key]?.takeIf { !it.isDone }?.let { return it }
+        // A user login takes over from background recovery: its verification wait checks the
+        // generation every second, so the serial executor reaches this check promptly.
+        if (trigger == TRIGGER_MANUAL && recovering) { reconnectGeneration.incrementAndGet(); retryTask?.cancel(false); retryTask = null }
         return executor.submit<AutoAuthResult?> {
             try { check(context.applicationContext, trigger) }
             catch (_: Exception) { NetMateLogs.log(context, "warn", "认证检查失败，请检查网络与权限", "auth"); null }

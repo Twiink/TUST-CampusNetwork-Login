@@ -21,7 +21,7 @@ class BootReceiver : BroadcastReceiver() {
             NetMateLogs.log(context, "debug", "开机完成，检查后台服务配置", "boot")
 
             // 自动认证的 JobScheduler 兜底不依赖开机自启开关，只要开启了自动认证就恢复
-            if (AutoAuthStore.loadProfile(context)?.enabled == true) {
+            if (AutoAuthStore.profileOrNull(context)?.enabled == true) {
                 AutoAuthWorker.schedule(context)
             }
 

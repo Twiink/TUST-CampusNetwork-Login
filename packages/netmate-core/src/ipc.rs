@@ -51,7 +51,33 @@ pub async fn connect() -> Result<Stream> {
     }
     #[cfg(windows)]
     {
-        Ok(tokio::net::windows::named_pipe::ClientOptions::new().open(endpoint()?)?)
+        // Every server instance may be serving another client; Windows reports that as busy.
+        // Between one accept and the next instance there may also briefly be none.
+        use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PIPE_BUSY};
+        let name = endpoint()?;
+        let started = tokio::time::Instant::now();
+        loop {
+            match tokio::net::windows::named_pipe::ClientOptions::new().open(&name) {
+                Ok(client) => return Ok(client),
+                Err(error) => {
+                    let waited = started.elapsed();
+                    let retry = match error.raw_os_error() {
+                        Some(code) if code == ERROR_PIPE_BUSY.0 as i32 => {
+                            waited < std::time::Duration::from_secs(2)
+                        }
+                        // A missing agent must still fail fast so the UI can start it.
+                        Some(code) if code == ERROR_FILE_NOT_FOUND.0 as i32 => {
+                            waited < std::time::Duration::from_millis(200)
+                        }
+                        _ => false,
+                    };
+                    if !retry {
+                        return Err(error.into());
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await
+                }
+            }
+        }
     }
 }
 pub async fn request(command: Command) -> Result<serde_json::Value> {
@@ -128,14 +154,16 @@ impl Listener {
         })
     }
     pub async fn accept(&self) -> Result<tokio::net::windows::named_pipe::NamedPipeServer> {
-        let server = self
-            .next
-            .lock()
-            .unwrap()
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("IPC listener unavailable"))?;
+        // A failed connect or instance creation leaves `next` empty; recreate it here
+        // instead of failing every later accept. Only one instance listens at a time,
+        // so no client can attach to an instance nobody is waiting on.
+        let taken = self.next.lock().unwrap().take();
+        let server = match taken {
+            Some(server) => server,
+            None => pipe(false)?,
+        };
         server.connect().await?;
-        *self.next.lock().unwrap() = Some(pipe(false)?);
+        *self.next.lock().unwrap() = pipe(false).ok();
         Ok(server)
     }
 }

@@ -26,6 +26,8 @@ struct Ui {
     saving: bool,
     edits: Vec<Edit>,
     update: Value,
+    /// A status poll is scheduled; at most one runs at a time.
+    update_poll: bool,
     update_label: gtk::Label,
     update_actions: gtk::Box,
     scroll: Option<gtk::ScrolledWindow>,
@@ -137,6 +139,7 @@ pub fn run() {
             saving: false,
             edits: vec![],
             update: json!({}),
+            update_poll: false,
             update_label: gtk::Label::new(None),
             update_actions: gtk::Box::new(gtk::Orientation::Horizontal, 8),
             scroll: None,
@@ -238,9 +241,7 @@ pub fn run() {
                 anim.borrow_mut().night = dark;
                 animate_toggle(&anim, &area);
             }
-            if let Err(error) = crate::theme::save(dark) {
-                ui.feedback.set_text(&error.to_string());
-            }
+            crate::theme::save_later(dark, client::report);
         });
         let foot = gtk::Box::new(gtk::Orientation::Vertical, 8);
         foot.add_css_class("rail-foot");
@@ -256,7 +257,7 @@ pub fn run() {
                 while let Ok(event) = rx.recv().await {
                     match event {
                         Event::State(v) => apply_state(&state, v),
-                        Event::Error(e) => on_error(&state, &e),
+                        Event::Error(command, e) => on_error(&state, command, &e),
                         Event::Reply(command, value) => on_reply(&state, command, value),
                     }
                 }
@@ -268,11 +269,23 @@ pub fn run() {
         app.add_action(&quit);
         let ready = Rc::new(std::cell::Cell::new(false));
         let weak = Rc::downgrade(&state);
+        // Reports the first painted frame with a config once; the handler then goes away.
+        let painting = Rc::new(RefCell::new(
+            None::<(gtk::gdk::FrameClock, glib::SignalHandlerId)>,
+        ));
         window.connect_map(move |window| {
+            if ready.get() {
+                return;
+            }
+            // A remapped surface may get a new clock; move the handler onto it.
+            if let Some((old, id)) = painting.borrow_mut().take() {
+                old.disconnect(id);
+            }
             if let Some(clock) = window.frame_clock() {
                 let ready = ready.clone();
                 let weak = weak.clone();
-                clock.connect_after_paint(move |_| {
+                let slot = painting.clone();
+                let id = clock.connect_after_paint(move |_| {
                     if let Some(state) = weak.upgrade()
                         && !ready.get()
                         && !state.borrow().config.is_null()
@@ -284,8 +297,15 @@ pub fn run() {
                                 pid: std::process::id(),
                             },
                         );
+                        let slot = slot.clone();
+                        glib::idle_add_local_once(move || {
+                            if let Some((clock, id)) = slot.borrow_mut().take() {
+                                clock.disconnect(id);
+                            }
+                        });
                     }
                 });
+                *painting.borrow_mut() = Some((clock, id));
             }
         });
         send(&state, Command::Config);
@@ -2358,7 +2378,7 @@ fn accounts(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
         let account = json!({"id":id,"name":username,"username":username,"serverUrl":server.text().trim(),"isp":draft(&s,"account.isp","campus"),"passwordEdit":{"action":"replace","value":secret}});
         s.borrow_mut().clear_on_save.push("account.".into());
         mutate(&s, move |c| {
-            c["accounts"].as_array_mut().unwrap().push(account.clone());
+            client::list(c, "accounts").push(account.clone());
             if c["currentAccountId"].is_null() {
                 c["currentAccountId"] = json!(id);
             }
@@ -2378,7 +2398,7 @@ fn remove_account(state: &Rc<RefCell<Ui>>, id: Value) {
         if c["currentAccountId"] == id {
             c["currentAccountId"] = Value::Null;
         }
-        for w in c["wifiRules"].as_array_mut().unwrap() {
+        for w in client::list(c, "wifiRules") {
             if let Some(ids) = w["linkedAccountIds"].as_array_mut() {
                 ids.retain(|linked| linked != &id);
             }
@@ -2481,7 +2501,7 @@ fn wifis(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
             move || {
                 let id = toggle_id.clone();
                 mutate(&s, move |c| {
-                    for w in c["wifiRules"].as_array_mut().unwrap() {
+                    for w in client::list(c, "wifiRules") {
                         if w["id"] == id {
                             w["autoConnect"] = json!(w["autoConnect"] != true);
                         }
@@ -2702,9 +2722,7 @@ fn wifis(state: &Rc<RefCell<Ui>>, content: &gtk::Box, config: &Value) {
             "linkedAccountIds": if auth { vec![account] } else { vec![] },
         });
         s.borrow_mut().clear_on_save.push("wifi.".into());
-        mutate(&s, move |c| {
-            c["wifiRules"].as_array_mut().unwrap().push(rule.clone())
-        });
+        mutate(&s, move |c| client::list(c, "wifiRules").push(rule.clone()));
     });
     add.set_sensitive(!(auth && accounts.is_empty()));
 }
@@ -2759,7 +2777,7 @@ fn dialog(state: &Rc<RefCell<Ui>>, title: &str) -> (gtk::Window, gtk::Box) {
 }
 fn put_item(state: &Rc<RefCell<Ui>>, field: &'static str, item: Value) {
     mutate(state, move |config| {
-        let items = config[field].as_array_mut().unwrap();
+        let items = client::list(config, field);
         if let Some(i) = items.iter().position(|old| old["id"] == item["id"]) {
             items[i] = item.clone();
         } else {
@@ -3020,6 +3038,9 @@ fn update_view(state: &Rc<RefCell<Ui>>) {
     };
     clear(&actions);
     let phase = update["state"].as_str().unwrap_or("");
+    if phase == "downloading" {
+        poll_update(state);
+    }
     let available = update["release"]["version"].as_str();
     let checking = update["checking"] == true;
     let message = if checking {
@@ -3070,14 +3091,18 @@ fn update_command(state: &Rc<RefCell<Ui>>, command: Command) {
     }
 }
 /// Polls the download while the About page shows it, as the old update panel did.
+/// Each status reply re-renders the view, which schedules the next poll.
 fn poll_update(state: &Rc<RefCell<Ui>>) {
+    if std::mem::replace(&mut state.borrow_mut().update_poll, true) {
+        return;
+    }
     let weak = Rc::downgrade(state);
     glib::timeout_add_local_once(Duration::from_secs(1), move || {
-        if let Some(state) = weak.upgrade()
-            && state.borrow().page == "关于"
-            && state.borrow().update["state"] == "downloading"
-        {
-            send(&state, Command::UpdateStatus);
+        if let Some(state) = weak.upgrade() {
+            state.borrow_mut().update_poll = false;
+            if state.borrow().page == "关于" && state.borrow().update["state"] == "downloading" {
+                send(&state, Command::UpdateStatus);
+            }
         }
     });
 }
@@ -3436,15 +3461,23 @@ fn apply_state(state: &Rc<RefCell<Ui>>, v: Value) {
         send(state, Command::Logs(query));
     }
 }
-/// Replies carry no command on failure, so pending flags are reset here and the config is re-read.
-fn on_error(state: &Rc<RefCell<Ui>>, error: &str) {
+/// Only the failed command's pending flag is reset; a lost subscription changes no flag.
+fn on_error(state: &Rc<RefCell<Ui>>, command: Option<Command>, error: &str) {
     let (saving, scanning, checking) = {
         let mut ui = state.borrow_mut();
         ui.feedback.set_text(error);
-        let flags = (ui.saving, ui.scanning, ui.update["checking"] == true);
-        ui.saving = false;
-        ui.scanning = false;
-        ui.clear_on_save.clear();
+        let flags = (
+            ui.saving && matches!(command, Some(Command::SaveConfig(_))),
+            ui.scanning && matches!(command, Some(Command::Scan)),
+            ui.update["checking"] == true && matches!(command, Some(Command::UpdateCheck)),
+        );
+        if flags.0 {
+            ui.saving = false;
+            ui.clear_on_save.clear();
+        }
+        if flags.1 {
+            ui.scanning = false;
+        }
         if flags.2 {
             ui.update["checking"] = json!(false);
             ui.update["error"] = json!(error);
@@ -3581,6 +3614,5 @@ fn on_reply(state: &Rc<RefCell<Ui>>, command: Command, value: Value) {
     ) && state.borrow().page == "关于"
     {
         update_view(state);
-        poll_update(state);
     }
 }

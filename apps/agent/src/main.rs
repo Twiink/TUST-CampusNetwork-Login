@@ -125,7 +125,10 @@ async fn run() -> Result<()> {
                 let permit = permits.clone().acquire_owned().await.unwrap();
                 let mut stream = match listener.accept().await {
                     Ok(s) => s,
-                    Err(_) => continue,
+                    Err(_) => {
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        continue;
+                    }
                 };
                 let calls = calls.clone();
                 let mut state = receiver.clone();

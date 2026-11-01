@@ -250,22 +250,31 @@ internal class BrandCard(private val density: Float) : Drawable() {
 internal class NetMateIcon(private val kind: String, private val color: Int, private val size: Int, private val rotation: Float = 0f) : Drawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2f; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
     private fun Path.arc(cx: Float, cy: Float, r: Float, start: Float, sweep: Float) = arcTo(cx - r, cy - r, cx + r, cy + r, start, sweep, true)
+    /** The outline in viewBox units; it never changes, so it is built on the first draw only. */
+    private var outline: Path? = null
     override fun draw(canvas: Canvas) {
         val save = canvas.save(); canvas.translate(bounds.left.toFloat(), bounds.top.toFloat()); canvas.scale(bounds.width()/24f, bounds.height()/24f)
         if(rotation != 0f) canvas.rotate(rotation, 12f, 12f)
-        paint.color = color; val p = Path()
+        paint.color = color
+        when(kind) {
+            "运行状态", "wifi" -> canvas.drawCircle(12f, 20f, 1f, paint)
+            "search" -> canvas.drawCircle(11f, 11f, 7f, paint)
+        }
+        canvas.drawPath(outline ?: path().also { outline = it }, paint); canvas.restoreToCount(save)
+    }
+    private fun path(): Path {
+        val p = Path()
         when(kind) {
             "运行状态", "wifi" -> {
                 p.arc(12f, 21f, 11f, -129.8f, 79.6f); p.arc(12f, 21f, 6f, -125.4f, 70.8f)
                 if(kind == "运行状态") p.arc(12f, 21f, 16f, -131.4f, 82.8f)
-                canvas.drawCircle(12f, 20f, 1f, paint)
             }
             "配置设置" -> {
                 for((x, a, b) in listOf(Triple(4f, 14f, 10f), Triple(12f, 12f, 8f), Triple(20f, 16f, 12f))) { p.moveTo(x, 21f); p.lineTo(x, a); p.moveTo(x, b); p.lineTo(x, 3f) }
                 p.moveTo(1f, 14f); p.lineTo(7f, 14f); p.moveTo(9f, 8f); p.lineTo(15f, 8f); p.moveTo(17f, 16f); p.lineTo(23f, 16f)
             }
             "refresh" -> { p.arc(12f, 12f, 9f, 0f, 315f); p.lineTo(21f, 8f); p.moveTo(21f, 3f); p.lineTo(21f, 8f); p.lineTo(16f, 8f) }
-            "search" -> { canvas.drawCircle(11f, 11f, 7f, paint); p.moveTo(20f, 20f); p.lineTo(16.5f, 16.5f) }
+            "search" -> { p.moveTo(20f, 20f); p.lineTo(16.5f, 16.5f) }
             "check" -> { p.moveTo(20f, 6f); p.lineTo(9f, 17f); p.lineTo(4f, 12f) }
             "chevron" -> { p.moveTo(6f, 9f); p.lineTo(12f, 15f); p.lineTo(18f, 9f) }
             else -> {
@@ -273,7 +282,7 @@ internal class NetMateIcon(private val kind: String, private val color: Int, pri
                 p.moveTo(14f, 2f); p.lineTo(14f, 8f); p.lineTo(20f, 8f); p.moveTo(8f, 13f); p.lineTo(16f, 13f); p.moveTo(8f, 17f); p.lineTo(13f, 17f)
             }
         }
-        canvas.drawPath(p, paint); canvas.restoreToCount(save)
+        return p
     }
     override fun getIntrinsicWidth() = size; override fun getIntrinsicHeight() = size
     override fun setAlpha(alpha: Int) { paint.alpha = alpha }

@@ -74,7 +74,7 @@ class BackgroundService : Service() {
     private val periodicCheck = object : Runnable {
         override fun run() {
             // 「启用心跳检测」关闭时不定时检测，只由网络事件与 WorkManager 兜底触发
-            if (AutoAuthStore.loadProfile(this@BackgroundService)?.heartbeatEnabled != false) {
+            if (AutoAuthStore.profileOrNull(this@BackgroundService)?.heartbeatEnabled != false) {
                 requestCheck("interval")
             }
             scheduleHeartbeat()
@@ -132,15 +132,21 @@ class BackgroundService : Service() {
             return START_NOT_STICKY
         }
 
-        intervalMs = ((AutoAuthStore.loadProfile(this)?.heartbeatIntervalSeconds ?: 30) * 1000L).coerceIn(MIN_INTERVAL_MS, 300_000L)
-
+        // Android requires startForeground soon after startForegroundService; nothing may run first.
         startInForeground(createNotification())
+        // Suggestion sync makes several system calls and a disk commit; keep it off the
+        // main thread so the UI's Binder connection to this process is served promptly.
+        // It runs on every start: opening the app is the documented way to retry it.
+        AutoAuthEngine.runConnection {
+            runCatching { AutoAuthStore.loadProfile(this)?.let { com.netmate.app.auth.WifiSuggestions.reconcile(this, it) } }.onFailure {
+                com.netmate.app.logging.NetMateLogs.log(this, "warn", "WiFi 建议未能恢复，请打开应用重试同步", "wifi")
+            }
+        }
+        // Each app start re-sends START; the network watch and heartbeat are already live.
+        if (isRunning) return START_STICKY
         isRunning = true
         com.netmate.app.logging.NetMateLogs.log(this, "info", "后台服务已启动", "service")
 
-        runCatching { AutoAuthStore.loadProfile(this)?.let { com.netmate.app.auth.WifiSuggestions.reconcile(this, it) } }.onFailure {
-            com.netmate.app.logging.NetMateLogs.log(this, "warn", "WiFi 建议未能恢复，请打开应用重试同步", "wifi")
-        }
         startNetworkWatch()
         scheduleHeartbeat()
 
@@ -154,7 +160,7 @@ class BackgroundService : Service() {
 
     private fun scheduleHeartbeat() {
         handler.removeCallbacks(periodicCheck)
-        val profile = AutoAuthStore.loadProfile(this)
+        val profile = AutoAuthStore.profileOrNull(this)
         intervalMs = ((profile?.heartbeatIntervalSeconds ?: 30) * 1000L).coerceIn(MIN_INTERVAL_MS, 300_000L)
         if (profile?.heartbeatEnabled != false) handler.postDelayed(periodicCheck, intervalMs)
     }
@@ -259,16 +265,20 @@ class BackgroundService : Service() {
                 }
             }
 
+            /** Last (captive, validated) pair per network; signal and bandwidth updates repeat it. */
+            private val reachability = java.util.concurrent.ConcurrentHashMap<Network, Pair<Boolean, Boolean>>()
+
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-                val needsCheck =
-                    capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL) ||
-                        !capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                if (needsCheck) {
+                val captive = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)
+                val validated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                if (reachability.put(network, captive to validated) == captive to validated) return
+                if (captive || !validated) {
                     handler.post { scheduleNetworkEventCheck() }
                 }
             }
 
             override fun onLost(network: Network) {
+                reachability.remove(network)
                 handler.post {
                     // 切换 WiFi 时旧网络的 onLost 可能晚于新网络的 onAvailable，仍有 WiFi 时不算断开
                     if (LocalAddresses.wifiNetworks(connectivityManager).any { it != network }) {
@@ -290,10 +300,16 @@ class BackgroundService : Service() {
         connectivityManager.registerNetworkCallback(request, callback)
         networkCallback = callback
 
-        val snapshot = com.netmate.app.auth.WifiEnvironment.snapshot(this)
-        wifiConnected = snapshot.connected
-        currentSsid = snapshot.ssid
-        refreshNotification()
+        // The snapshot makes several system calls; read it off the main thread.
+        AutoAuthEngine.runConnection {
+            val snapshot = com.netmate.app.auth.WifiEnvironment.snapshot(this)
+            handler.post {
+                if (networkCallback !== callback) return@post
+                wifiConnected = snapshot.connected
+                if (currentSsid == null) currentSsid = snapshot.ssid
+                refreshNotification()
+            }
+        }
     }
 
     /** 合并短时间内的多次网络事件，只检查一次 */

@@ -58,12 +58,16 @@ class MainActivity : Activity() {
     // Home
     private var homeBody:LinearLayout?=null
     private var homeSignature=""
+    /** Value and grade labels of the signal and speed cells, patched in place as they fluctuate. */
+    private var liveMetrics:List<Pair<TextView,TextView?>> = emptyList()
     private var countdown:TextView?=null
     private var countdownAt=0L
     // Settings
     private var scroller:ScrollView?=null
     private var restoreScroll=0
     private var saving=false
+    /** The config sent by the running save_config, so later edits can build on it. */
+    private var inFlight:JSONObject?=null
     private var pendingRefresh=false
     private val pending=mutableListOf<(JSONObject)->Unit>()
     private val debounces=mutableMapOf<String,Runnable>()
@@ -149,8 +153,12 @@ class MainActivity : Activity() {
     override fun onSaveInstanceState(state:Bundle){state.putString("page",page);super.onSaveInstanceState(state)}
     override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(visible&&page=="设置")rerender()}
     /** Bottom rail: graphite bar with a white hairline on top; the selected tab is a rail-2 block with a gold icon. */
+    /** The page the bottom bar was last built for; theme switches repaint it through its painters. */
+    private var navigationPage:String?=null
     private fun navigation(){
-        val nav=findViewById<LinearLayout>(R.id.navigation);nav.removeAllViews();nav.setTag(R.id.painter,null);nav.themed{background=appearance.tabBar()}
+        val nav=findViewById<LinearLayout>(R.id.navigation)
+        if(navigationPage==page&&nav.childCount>0)return
+        navigationPage=page;nav.removeAllViews();nav.setTag(R.id.painter,null);nav.themed{background=appearance.tabBar()}
         for((key,title)in listOf("运行状态" to "运行状态","设置" to "配置设置","日志" to "运行日志")){
             val active=page==key
             nav.addView(Button(this).apply{
@@ -172,13 +180,20 @@ class MainActivity : Activity() {
         }
         content.viewTreeObserver.addOnDrawListener(listener);content.invalidate()
     }
-    override fun onStart(){super.onStart();visible=true;generation++;try{startForegroundService(Intent(this,BackgroundService::class.java).setAction(BackgroundService.ACTION_START))}catch(e:Exception){feedback.text="后台服务未启动：${e.message}"};bound=bindService(Intent(this,NetworkService::class.java),connection,Context.BIND_AUTO_CREATE)}
+    // Binding first queues NetworkService ahead of the foreground service's start work on the
+    // :network main thread, so the config reply that gates the first frame is not delayed.
+    override fun onStart(){super.onStart();visible=true;generation++;bound=bindService(Intent(this,NetworkService::class.java),connection,Context.BIND_AUTO_CREATE);try{startForegroundService(Intent(this,BackgroundService::class.java).setAction(BackgroundService.ACTION_START))}catch(e:Exception){feedback.text="后台服务未启动：${e.message}"}}
     override fun onStop(){
         // The toggle only animates during a switch; a switch still running ends at its final frame.
         findViewById<DayNightToggle>(R.id.appearance_toggle).stop()
-        dialogs.toList().forEach{it.dismiss()};dialogs.clear();activeDialog?.dismiss();activeDialog=null;visible=false;generation++;handler.removeCallbacksAndMessages(null)
+        dialogs.toList().forEach{it.dismiss()};dialogs.clear();activeDialog?.dismiss();activeDialog=null
+        // Debounced number edits and edits queued behind a running save are sent before the
+        // connection goes away; the service applies them even though no reply is shown.
+        debounces.values.toList().forEach{handler.removeCallbacks(it);it.run()};debounces.clear()
+        flushOnLeave()
+        visible=false;generation++;handler.removeCallbacksAndMessages(null)
         runCatching{remote?.unsubscribe(events)};if(bound)unbindService(connection);bound=false;remote=null
-        clearPage();saving=false;pending.clear();pendingRefresh=false;debounces.clear();scanning=false;updateBusy=false
+        clearPage();saving=false;inFlight=null;pending.clear();pendingRefresh=false;debounces.clear();scanning=false;updateBusy=false
         logAdapter?.items=emptyList();logAdapter=null;config=JSONObject();status=JSONObject();content.removeAllViews();super.onStop()
     }
     private fun call(op:String,args:JSONObject=JSONObject(),silent:Boolean=false,failed:(String)->Unit={},done:(Any)->Unit={}){
@@ -210,7 +225,9 @@ class MainActivity : Activity() {
     private fun <T:View> T.themed(paint:T.()->Unit):T{val previous=getTag(R.id.painter) as? Runnable;setTag(R.id.painter,Runnable{previous?.run();paint()});paint();return this}
     private fun repaint(view:View){(view.getTag(R.id.painter) as? Runnable)?.run();if(view is ViewGroup)for(i in 0 until view.childCount)repaint(view.getChildAt(i))}
     private fun applyAppearance(animate:Boolean=false){
-        val root=findViewById<View>(R.id.root);root.background=appearance.background()
+        // The window draws the page ground; a root background of the same colour would make the
+        // software renderer fill the whole screen twice per frame.
+        val root=findViewById<View>(R.id.root);root.background=null;window.setBackgroundDrawable(appearance.background())
         // Both bars are graphite rails in either theme, so the status and navigation bar icons stay light.
         val flags=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
         window.insetsController?.setSystemBarsAppearance(0,flags)
@@ -347,7 +364,7 @@ class MainActivity : Activity() {
         override fun onWindowFocusChanged(hasWindowFocus:Boolean){super.onWindowFocusChanged(hasWindowFocus);if(hasWindowFocus&&expanded){expanded=false;paintFace()}}
     }
     private fun clearPage(){
-        homeBody=null;homeSignature="";countdown=null;scroller=null;nearbyCard=null;wifiForm=null;updateCard=null
+        homeBody=null;homeSignature="";liveMetrics=emptyList();countdown=null;scroller=null;nearbyCard=null;wifiForm=null;updateCard=null
         emptyLogs=null;logStatus=null;logChips=null;exportPanel=null;handler.removeCallbacks(tick);handler.removeCallbacks(pollUpdate)
     }
     private fun column(scroll:Boolean=true):LinearLayout{
@@ -384,6 +401,28 @@ class MainActivity : Activity() {
         return rule?.optJSONArray("linkedAccountIds").strings().firstNotNullOfOrNull{id->accounts.firstOrNull{it.str("id")==id}}
             ?: accounts.firstOrNull{it.str("id")==config.str("currentAccountId")}
     }
+    private data class Metrics(val signal:Int,val signalGrade:String,val speed:Int,val speedGrade:String)
+    private fun metricFacts(network:JSONObject):Metrics{
+        val signal=if(network.isNull("signal"))-1 else network.optInt("signal",-1)
+        val speed=if(network.isNull("linkSpeed"))-1 else network.optInt("linkSpeed",-1)
+        return Metrics(signal,when{signal>=75->"优秀";signal>=50->"良好";signal>=25->"一般";else->"较差"},
+            speed,when{speed>=500->"优秀";speed>=200->"良好";speed>=100->"一般";speed>=50->"较差";else->"很差"})
+    }
+    /** Same text and colours the strip would be built with; the known/unknown switch rebuilds instead. */
+    private fun patchMetrics(network:JSONObject){
+        val (signal,signalGrade,speed,speedGrade)=metricFacts(network)
+        val values=listOf((if(signal<0)"未知" else "$signal%") to signalGrade.takeIf{signal>=0},(if(speed<0)"未知" else "$speed Mbps") to speedGrade.takeIf{speed>=0})
+        liveMetrics.zip(values).forEach{(views,value)->
+            val (shown,graded)=views
+            if(shown.text.toString()!=value.first)shown.text=value.first
+            val grade=value.second
+            if(graded!=null&&grade!=null&&graded.text.toString()!=grade){
+                graded.text=grade
+                val color=when(grade){"优秀","良好"->{->appearance.success};"一般","较差"->{->appearance.warning};else->{->appearance.danger}}
+                graded.setTag(R.id.painter,null);graded.themed{setTextColor(color())}
+            }
+        }
+    }
     private fun updateStatus(){
         val body=homeBody ?: return
         val network=status.optJSONObject("network") ?: JSONObject();val progress=status.optJSONObject("progress") ?: JSONObject()
@@ -398,9 +437,11 @@ class MainActivity : Activity() {
             account==null->"account"
             else->"full"
         }
-        val signature=listOf(branch,network,status.optBoolean("authenticated"),status.optBoolean("internetReachable"),status.optBoolean("authenticating"),status.optBoolean("paused"),status.optBoolean("requiresAuth"),progress,rule,account?.str("username"),account?.str("serverUrl"),config.optBoolean("authPaused"),array("wifiRules"),config.optBoolean("heartbeatEnabled",true),config.optInt("heartbeatIntervalSeconds",30)).joinToString("\u0001")
-        if(signature==homeSignature)return
-        homeSignature=signature;body.removeAllViews();countdown=null;handler.removeCallbacks(tick)
+        // Signal and link speed change on every scan; they are patched below, not rebuilt.
+        val stable=JSONObject(network.toString()).apply{put("signal",!network.isNull("signal")&&network.optInt("signal",-1)>=0);put("linkSpeed",!network.isNull("linkSpeed")&&network.optInt("linkSpeed",-1)>=0)}
+        val signature=listOf(branch,stable,status.optBoolean("authenticated"),status.optBoolean("internetReachable"),status.optBoolean("authenticating"),status.optBoolean("paused"),status.optBoolean("requiresAuth"),progress,rule,account?.str("username"),account?.str("serverUrl"),config.optBoolean("authPaused"),array("wifiRules"),config.optBoolean("heartbeatEnabled",true),config.optInt("heartbeatIntervalSeconds",30)).joinToString("\u0001")
+        if(signature==homeSignature){patchMetrics(network);return}
+        homeSignature=signature;body.removeAllViews();liveMetrics=emptyList();countdown=null;handler.removeCallbacks(tick)
         if(status.optBoolean("paused")||config.optBoolean("authPaused"))pauseBanner(body){call("login")}
         accountCard(body,branch,network,progress,rule,account)
         if(branch=="loading")return
@@ -579,20 +620,19 @@ class MainActivity : Activity() {
             cell.secondary(label,11.5f).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END};return cell
         }
         fun gradeColor(word:String):()->Int={when(word){"优秀","良好"->appearance.success;"一般","较差"->appearance.warning;else->appearance.danger}}
-        fun value(cell:LinearLayout,main:String,grade:String?,color:()->Int={appearance.text}){
+        fun value(cell:LinearLayout,main:String,grade:String?,color:()->Int={appearance.text}):Pair<TextView,TextView?>{
             val line=cell.box(false,margins(top=2)).apply{gravity=Gravity.BOTTOM}
-            line.text(main,18f,700,color).apply{fontFeatureSettings="tnum";maxLines=1}
-            if(grade!=null)line.text(grade,11.5f,400,gradeColor(grade)).apply{maxLines=1;layoutParams=LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(6);bottomMargin=dp(3)}}
+            val shown=line.text(main,18f,700,color).apply{fontFeatureSettings="tnum";maxLines=1}
+            val graded=if(grade!=null)line.text(grade,11.5f,400,gradeColor(grade)).apply{maxLines=1;layoutParams=LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(6);bottomMargin=dp(3)}} else null
+            return shown to graded
         }
-        val signal=if(network.isNull("signal"))-1 else network.optInt("signal",-1)
-        val signalGrade=when{signal>=75->"优秀";signal>=50->"良好";signal>=25->"一般";else->"较差"}
-        val speed=if(network.isNull("linkSpeed"))-1 else network.optInt("linkSpeed",-1)
-        val speedGrade=when{speed>=500->"优秀";speed>=200->"良好";speed>=100->"一般";speed>=50->"较差";else->"很差"}
+        val (signal,signalGrade,speed,speedGrade)=metricFacts(network)
         val frequency=if(network.isNull("frequency"))0 else network.optInt("frequency")
         val reachable=status.optBoolean("internetReachable")
         val top=row(true)
-        value(cell(top,"信号强度"),if(signal<0)"未知" else "$signal%",if(signal<0)null else signalGrade)
-        value(cell(top,"连接速度"),if(speed<0)"未知" else "$speed Mbps",if(speed<0)null else speedGrade)
+        liveMetrics=listOf(
+            value(cell(top,"信号强度"),if(signal<0)"未知" else "$signal%",if(signal<0)null else signalGrade),
+            value(cell(top,"连接速度"),if(speed<0)"未知" else "$speed Mbps",if(speed<0)null else speedGrade))
         value(cell(top,"频段"),when{frequency>=5925->"6GHz";frequency>=4900->"5GHz";frequency>0->"2.4GHz";else->"未知"},null)
         val bottom=row(false)
         value(cell(bottom,"互联网"),if(reachable)"可达" else "不可达",null){if(reachable)appearance.success else appearance.danger}
@@ -652,11 +692,24 @@ class MainActivity : Activity() {
         if(saving||pending.isEmpty())return
         val next=JSONObject(config.toString());val edits=pending.toList();pending.clear()
         try{edits.forEach{it(next)}}catch(e:Exception){feedback.text=e.message;return}
-        saving=true
-        call("save_config",next,failed={saving=false;pendingRefresh=false;call("config",silent=true){config=it as JSONObject;if(page=="设置")rerender()}}){
-            config=it as JSONObject;saving=false;feedback.text="已保存并应用"
+        saving=true;inFlight=next
+        call("save_config",next,failed={saving=false;inFlight=null;pendingRefresh=false;call("config",silent=true){config=it as JSONObject;if(page=="设置")rerender()}}){
+            config=it as JSONObject;saving=false;inFlight=null;feedback.text="已保存并应用"
             if(pending.isNotEmpty())flush() else if(pendingRefresh){pendingRefresh=false;if(page=="设置")rerender()}
         }
+    }
+    /**
+     * Leaving the screen drops replies, so a chained save cannot follow a running one. Queued
+     * edits are applied to the revision the running save will produce and sent in one request.
+     */
+    private fun flushOnLeave(){
+        if(pending.isEmpty()||!config.has("revision"))return
+        val base=inFlight.takeIf{saving}
+        val next=JSONObject((base ?: config).toString());val edits=pending.toList();pending.clear()
+        if(runCatching{edits.forEach{it(next)}}.isFailure)return
+        // The running save, if it succeeds, advances the revision by one.
+        if(base!=null)next.put("revision",next.optLong("revision")+1)
+        call("save_config",next,silent=true)
     }
     private fun debounce(key:String,action:()->Unit){debounces[key]?.let{handler.removeCallbacks(it)};val task=Runnable{debounces.remove(key);action()};debounces[key]=task;handler.postDelayed(task,600)}
     private fun settings(){
@@ -1070,23 +1123,28 @@ class MainActivity : Activity() {
             val level=meta.text("",12f,700).apply{maxLines=1;layoutParams=LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(10);marginEnd=dp(10)}}
             val source=meta.text("",12f).apply{typeface=Typeface.MONOSPACE;layoutParams=LinearLayout.LayoutParams(0,-2,1f);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END}
             val message=row.text("",13.5f).apply{setLineSpacing(dp(3).toFloat(),1f);maxLines=3;ellipsize=android.text.TextUtils.TruncateAt.END}
-            return LogHolder(row,time,level,source,message)
+            return LogHolder(row,time,level,source,message).also{holder->row.setOnClickListener{holder.entry?.let(::showDetails)}}
+        }
+        private fun showDetails(entry:JSONObject){
+            val details=entry.toString(2)
+            AlertDialog.Builder(this@MainActivity).setTitle("日志详情").setMessage(details).setPositiveButton("复制"){_,_->
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("NetMate 日志",details));feedback.text="已复制"
+            }.setNegativeButton("关闭",null).show().also(::track)
         }
         override fun onBindViewHolder(holder:LogHolder,position:Int){
-            val entry=items[position];val level=entry.optString("level")
-            holder.row.background=appearance.pressable(appearance.bottomLine(),0f,appearance.alpha(appearance.text,0x14))
+            val entry=items[position];val level=entry.optString("level");holder.entry=entry
+            // The row ground depends on the theme only; a theme switch rebinds every row.
+            if(holder.dark!=appearance.dark){holder.dark=appearance.dark;holder.row.background=appearance.pressable(appearance.bottomLine(),0f,appearance.alpha(appearance.text,0x14))}
             holder.time.setTextColor(appearance.secondary);holder.source.setTextColor(appearance.secondary);holder.message.setTextColor(appearance.text)
             holder.time.text=dateFormat.format(java.util.Date(entry.optLong("timestamp")))
             holder.level.text=logLevels.firstOrNull{it.first==level}?.second ?: level;holder.level.setTextColor(levelColor(level));holder.level.typeface=appearance.weight(if(level=="debug")400 else 700)
             holder.source.text=entry.str("source").ifBlank{"应用"};holder.message.text=entry.optString("message")
             holder.row.contentDescription="${holder.level.text}，${holder.source.text}，${holder.message.text}"
-            holder.row.setOnClickListener{
-                val details=entry.toString(2)
-                AlertDialog.Builder(this@MainActivity).setTitle("日志详情").setMessage(details).setPositiveButton("复制"){_,_->
-                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("NetMate 日志",details));feedback.text="已复制"
-                }.setNegativeButton("关闭",null).show().also(::track)
-            }
         }
     }
-    private class LogHolder(val row:LinearLayout,val time:TextView,val level:TextView,val source:TextView,val message:TextView):RecyclerView.ViewHolder(row)
+    private class LogHolder(val row:LinearLayout,val time:TextView,val level:TextView,val source:TextView,val message:TextView):RecyclerView.ViewHolder(row){
+        var entry:JSONObject?=null
+        /** Theme the row ground was built for; null until the first bind. */
+        var dark:Boolean?=null
+    }
 }

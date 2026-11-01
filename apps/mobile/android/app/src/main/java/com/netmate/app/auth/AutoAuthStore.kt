@@ -28,6 +28,8 @@ object AutoAuthStore {
 
     @Volatile
     private var cachedProfile: AutoAuthProfile? = null
+    /** Decrypted profile JSON; every write passes through [saveProfile], which refreshes it. */
+    @Volatile private var cachedJson: String? = null
 
     @Synchronized
     fun saveProfile(context: Context, json: String, beforeCommit: (AutoAuthProfile) -> Unit = {}): AutoAuthProfile {
@@ -38,10 +40,12 @@ object AutoAuthStore {
         beforeCommit(profile)
         check(prefs(context).edit().putString(KEY_PROFILE, encrypt(json)).commit()) { "Configuration persistence failed" }
         cachedProfile = profile
+        cachedJson = json
         return profile
     }
 
-    @Synchronized fun rawJson(context: Context): String? = prefs(context).getString(KEY_PROFILE, null)?.let(::decrypt)
+    @Synchronized fun rawJson(context: Context): String? =
+        cachedJson ?: prefs(context).getString(KEY_PROFILE, null)?.let(::decrypt)?.also { cachedJson = it }
 
     @Synchronized
     fun loadProfile(context: Context): AutoAuthProfile? {
@@ -55,17 +59,23 @@ object AutoAuthStore {
         }
     }
 
+    /**
+     * Background callers (heartbeat, boot, status) treat an undecryptable profile as absent
+     * instead of crashing the process; the UI path still reports it through [loadProfile].
+     */
+    fun profileOrNull(context: Context): AutoAuthProfile? = try { loadProfile(context) } catch (_: IllegalStateException) { null }
+
     @Synchronized fun pause(context: Context) {
         val stored = prefs(context).getString(KEY_PROFILE, null) ?: return
         val previous = loadProfile(context) ?: return
         if (previous.authPaused) return
-        val json = JSONObject(decrypt(stored)).put("authPaused", true).put("revision", previous.revision + 1).toString()
+        val json = JSONObject(rawJson(context) ?: decrypt(stored)).put("authPaused", true).put("revision", previous.revision + 1).toString()
         saveProfile(context, json)
     }
     @Synchronized fun resume(context: Context) {
         val previous = loadProfile(context) ?: return
         if (!previous.authPaused) return
-        val json = JSONObject(decrypt(prefs(context).getString(KEY_PROFILE, null)!!)).put("authPaused", false).put("revision", previous.revision + 1)
+        val json = JSONObject(rawJson(context)!!).put("authPaused", false).put("revision", previous.revision + 1)
         saveProfile(context, json.toString())
     }
     fun networkIdentity(wifi: WifiEnvironment.Snapshot): String = org.json.JSONArray(listOf(wifi.ssid, WifiSecurity.bssid(wifi.bssid), WifiSecurity.normalize(wifi.security), wifi.ipv4)).toString()
@@ -127,7 +137,15 @@ object AutoAuthStore {
         return String(cipher.doFinal(Base64.decode(body, Base64.NO_WRAP)), Charsets.UTF_8)
     }
 
+    /** Loading AndroidKeyStore costs a Binder round trip; the key handle is reusable. */
+    @Volatile private var cachedKey: SecretKey? = null
+
     private fun secretKey(): SecretKey {
+        cachedKey?.let { return it }
+        return loadOrCreateKey().also { cachedKey = it }
+    }
+
+    private fun loadOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
 

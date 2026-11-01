@@ -13,15 +13,20 @@ class LogJournal(
     private val retentionMs: Long = 7L * 24 * 60 * 60 * 1000,
 ) {
     companion object {
+        // Compiled once: every log line and status message passes through these.
         private val portalPattern = Regex("""(?i)https?://[^\s<>"']*/eportal/portal/(?:login|logout)(?:\?[^\s<>"']*)?""")
+        private val assignmentPattern = Regex("""(?i)((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\s*["']?\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s&\n]+)""")
+        private val phrasePattern = Regex("""(?i)(\b(?:password|passwd|psk)\s+)(?:"[^"\n]*"|'[^'\n]*'|[^\s\n]+)""")
+        private val userInfoPattern = Regex("""(?i)(https?://)[^\s/@]+:[^\s/@]+@""")
+        private val secretKey = Regex("(?i)password|passwd|user_password|userPassword|wifiPassword|preSharedKey|keyMaterial|psk|authorization|cookie|token|access_token")
         fun safe(text: String): String = text
-            .replace(Regex("""(?i)https?://[^\s<>"']*/eportal/portal/(?:login|logout)(?:\?[^\s<>"']*)?"""), "[门户请求地址]")
-            .replace(Regex("""(?i)((?:user_password|password|passwd|psk|keyMaterial|access_token|token)\s*["']?\s*[=:]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s&\n]+)"""), "$1[REDACTED]")
-            .replace(Regex("""(?i)(\b(?:password|passwd|psk)\s+)(?:"[^"\n]*"|'[^'\n]*'|[^\s\n]+)"""), "$1[REDACTED]")
-            .replace(Regex("""(?i)(https?://)[^\s/@]+:[^\s/@]+@"""), "$1[REDACTED]@")
+            .replace(portalPattern, "[门户请求地址]")
+            .replace(assignmentPattern, "$1[REDACTED]")
+            .replace(phrasePattern, "$1[REDACTED]")
+            .replace(userInfoPattern, "$1[REDACTED]@")
     }
     fun safeValue(value: Any?): Any? = when (value) {
-        is JSONObject -> JSONObject().apply { value.keys().forEach { key -> put(key, if (key.matches(Regex("(?i)password|passwd|user_password|userPassword|wifiPassword|preSharedKey|keyMaterial|psk|authorization|cookie|token|access_token"))) "[REDACTED]" else safeValue(value.opt(key))) } }
+        is JSONObject -> JSONObject().apply { value.keys().forEach { key -> put(key, if (key.matches(secretKey)) "[REDACTED]" else safeValue(value.opt(key))) } }
         is org.json.JSONArray -> org.json.JSONArray((0 until value.length()).map { safeValue(value.opt(it)) })
         is String -> safe(value)
         else -> value
