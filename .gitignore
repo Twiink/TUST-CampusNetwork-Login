@@ -137,10 +137,14 @@ packages/native/*/*.node
 # Isolated E2E builds and diagnostics
 dist-e2e/
 .maestro/
+.playwright-mcp/
 android-e2e-apks/
 release-smoke/
 release-assets/
 previous-release/
+
+# Agent tooling local state
+.impeccable/
 
 # Native distribution and generated native IDE projects
 /dist-native/
