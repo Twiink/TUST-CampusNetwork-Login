@@ -120,7 +120,6 @@ release.keystore
 CLAUDE.md
 GEMINI.md
 AGENTS.md
-!/AGENTS.md
 
 # ZCode
 .zcode/
