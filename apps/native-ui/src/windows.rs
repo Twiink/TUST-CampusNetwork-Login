@@ -1099,6 +1099,26 @@ unsafe fn anchor(h: HWND, y: i32, name: &str) {
         },
     );
 }
+/// CI diagnostics: GUI-subsystem processes have no console, so panics and startup
+/// checkpoints go to a trace file when NETMATE_UI_TRACE is set.
+fn trace_file() -> Option<std::path::PathBuf> {
+    std::env::var_os("NETMATE_UI_TRACE")?;
+    Some(std::env::temp_dir().join("netmate-ui-trace.log"))
+}
+
+fn trace(stage: &str) {
+    use std::io::Write;
+    if let Some(path) = trace_file() {
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{stage}");
+        }
+    }
+}
+
 pub fn run() {
     unsafe {
         if let Ok(existing) = FindWindowW(w!("NetMateNativeUi"), None) {
@@ -1106,9 +1126,14 @@ pub fn run() {
             let _ = SetForegroundWindow(existing);
             return;
         }
+        if trace_file().is_some() {
+            std::panic::set_hook(Box::new(|info| trace(&format!("panic: {info}"))));
+        }
+        trace("run: enter");
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         InitCommonControls();
         let (tx, rx) = client::start();
+        trace("run: client started");
         let dark = crate::theme::saved_dark().unwrap_or_else(|| appearance::system_dark());
         UI.set(Mutex::new(Ui {
             tx,
@@ -1187,10 +1212,12 @@ pub fn run() {
             None,
         )
         .unwrap();
+        trace("run: window created");
         delete_fonts(refresh_fonts(h));
         appearance::titlebar(h, dark);
         render(h);
         send(Command::Config);
+        trace("run: home rendered");
         // Countdown pills tick once a second while the status page is open.
         SetTimer(Some(h), 1, 1000, None);
         let raw = h.0 as isize;
@@ -1211,6 +1238,7 @@ pub fn run() {
             }
         });
         let mut message = MSG::default();
+        trace("run: message loop");
         while GetMessageW(&mut message, None, 0, 0).as_bool() {
             if (WM_MOUSEFIRST..=WM_MOUSELAST).contains(&message.message) {
                 let tips = ui().tips;

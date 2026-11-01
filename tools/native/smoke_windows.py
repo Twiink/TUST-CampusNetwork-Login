@@ -14,8 +14,9 @@ def main():
     from pywinauto import Application
     root = Path(__file__).resolve().parents[2]
     binary = root / 'target/release'
+    trace = Path(tempfile.gettempdir()) / 'netmate-ui-trace.log'
     with tempfile.TemporaryDirectory(prefix='netmate-native-ui-') as profile:
-        env = dict(os.environ, NETMATE_DATA_DIR=profile)
+        env = dict(os.environ, NETMATE_DATA_DIR=profile, NETMATE_UI_TRACE='1')
         agent = subprocess.Popen([str(binary / 'netmate-agent.exe'), '--background'], env=env)
         try:
             time.sleep(1)
@@ -37,6 +38,8 @@ def main():
                     window.wait('visible', timeout=15)
                 except Exception:
                     report = [f'cycle {cycle}: netmate-ui pid {process.pid} poll={process.poll()}']
+                    report.append('--- netmate-ui startup trace ---')
+                    report.append(trace.read_text(errors='replace') if trace.exists() else '(missing)')
                     report.append('--- netmate-ui console output ---')
                     report.append(ui_log.read_text(errors='replace') if ui_log.exists() else '(empty)')
                     report.append('--- windows reported by UIA for the process ---')
